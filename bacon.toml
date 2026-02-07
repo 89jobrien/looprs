@@ -1,0 +1,12 @@
+# Local dev jobs for bacon (not used in CI).
+
+default_job = "check"
+
+[jobs.check]
+command = ["cargo", "check"]
+
+[jobs.clippy]
+command = ["cargo", "clippy"]
+
+[jobs.test]
+command = ["cargo", "test"]
