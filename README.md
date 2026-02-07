@@ -13,6 +13,7 @@ rustup component add rust-analyzer
 ### Bacon
 
 `bacon` provides fast local feedback loops using the jobs in `bacon.toml`.
+CI uses `cargo test` and `cargo clippy` directly; bacon is for local dev only.
 
 Install:
 
