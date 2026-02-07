@@ -1,0 +1,17 @@
+[package]
+name = "looprs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0"
+colored = "2.1"
+dotenvy = "0.15"
+glob = "0.3"
+regex = "1.11"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rustyline = "14.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+tokio = { version = "1.38", features = ["macros", "rt-multi-thread"] }
