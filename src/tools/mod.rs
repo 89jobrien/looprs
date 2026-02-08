@@ -1,4 +1,5 @@
 pub mod error;
+mod availability;
 mod bash;
 mod edit;
 mod glob;

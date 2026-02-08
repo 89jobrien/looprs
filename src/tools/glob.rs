@@ -38,7 +38,6 @@ pub(super) fn tool_glob(args: &Value, ctx: &ToolContext) -> Result<String, ToolE
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::fs;
 
     #[test]
     fn glob_finds_files() {
