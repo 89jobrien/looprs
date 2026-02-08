@@ -7,8 +7,10 @@ mod tools;
 pub mod jj;
 pub mod bd;
 pub mod context;
+pub mod events;
 
 pub use crate::agent::Agent;
 pub use crate::config::ApiConfig;
 pub use crate::config_file::ProviderConfig;
 pub use crate::context::SessionContext;
+pub use crate::events::{Event, EventContext, EventManager};

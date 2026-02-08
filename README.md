@@ -117,6 +117,35 @@ Example command:
 
 The framework is ready to extend. Define hooks, commands, skills - all **without changing looprs core**.
 
+### Event System
+
+Looprs fires events throughout the session lifecycle for hooks to listen to:
+
+```
+SessionStart        → Session initialized, context available
+UserPromptSubmit    → User message received, before processing
+InferenceComplete   → LLM response complete
+PreToolUse          → Tool about to execute (approval gate)
+PostToolUse         → Tool executed successfully
+OnError             → Error occurred
+OnWarning           → Warning issued
+SessionEnd          → Session closing
+```
+
+Register event handlers in your code:
+
+```rust
+agent.events.on(Event::SessionStart, |event, ctx| {
+    println!("Session started with context: {:?}", ctx.session_context);
+});
+
+agent.events.on(Event::PreToolUse, |event, ctx| {
+    println!("About to execute tool: {}", ctx.tool_name.as_ref().unwrap_or(&"unknown".to_string()));
+});
+```
+
+Later phases will add hook file loading (YAML) to execute shell commands or LLM injections on events.
+
 ## Multi-Provider LLM
 
 Looprs works with any major LLM:
@@ -138,15 +167,16 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 - [x] Fast search: grep + ripgrep, glob + fd
 - [x] Extensibility framework (commands, skills, agents, rules, hooks, file refs)
 - [x] Provider configuration (env vars + config file)
+- [x] jj (jujutsu) integration - repo state + recent commits
+- [x] bd (beads.db) integration - open issues
+- [x] SessionContext collection - auto-detect on startup
+- [x] **Event system** (SessionStart, SessionEnd, PreToolUse, PostToolUse, OnError, OnWarning)
 
-### Phase 2: Context & Workflow Integration
-- [ ] **Hook system** - SessionStart, SessionEnd, PreToolUse, PostToolUse, OnError, OnWarning
-  - Inject context before LLM calls (repo map, status, issues, kanban state)
-  - Approval gates for automated actions
-  - Pre-defined prompts and setup system
-- [ ] **jj integration** - Read repo state, query branches, diff, log
-- [ ] **bd integration** - List issues, query tasks, sync with hooks
-- [ ] **Kanban board** - SQLite → bd issues bridge, real-time sync
+### Phase 2: Hook Execution (In Progress)
+- [ ] **Hook file loading** - Parse YAML from `.looprs/hooks/`
+- [ ] **Hook execution** - Fire hooks on events, execute shell commands
+- [ ] **Context injection** - Inject hook results into LLM prompts
+- [ ] **Approval gates** - User approval for automated actions
 
 ### Phase 3: Extensibility Parsers
 - [ ] Command parser for `/` prefix

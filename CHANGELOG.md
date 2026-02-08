@@ -32,12 +32,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `SessionContext::collect()` - Gathers jj status, recent commits, open issues
   - `format_for_prompt()` - Human-readable formatted context for injection
   - Display context on session start (when available)
+- **Event system**: Session lifecycle and execution events
+  - `Event` enum with 8 event types (SessionStart, SessionEnd, UserPromptSubmit, PreToolUse, PostToolUse, InferenceComplete, OnError, OnWarning)
+  - `EventContext` for passing data through events (session context, user message, tool name, error info)
+  - `EventManager` for registering and firing event handlers
+  - Events fire at key points in REPL cycle and agent execution
+  - Ready for hook file loading in Phase 2
 
 ### Changed
 - Agent now uses provider abstraction (`dyn LLMProvider`) instead of hardcoded Anthropic logic
 - CLI now displays provider name and model in header (e.g., "anthropic/claude-3-opus")
 - Tool definitions now derive Debug for better error messages
 - Main REPL now collects and displays SessionContext at startup
+- Main REPL fires SessionStart event on init, SessionEnd on exit
+- Agent fires UserPromptSubmit, InferenceComplete, PreToolUse, PostToolUse, OnError events
+- Agent now has public EventManager for registering handlers
 
 ### Technical
 - Created `src/providers/` module with:
@@ -57,6 +66,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `SessionContext` struct aggregating jj + bd + kanban data
   - Prompt formatting for context injection
   - Optional fields for graceful degradation
+- Created `src/events.rs` module for event system:
+  - `Event` enum (8 variants for lifecycle + execution events)
+  - `EventContext` struct with builder pattern (session_context, user_message, tool_name, tool_output, error, warning, metadata)
+  - `EventManager` with HashMap-based handler registry
+  - Full test coverage for event firing and multiple handlers
 
 ## [0.1.1] - 2026-02-07
 

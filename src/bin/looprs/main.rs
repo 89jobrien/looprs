@@ -4,7 +4,7 @@ use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use std::env;
 
-use looprs::{Agent, SessionContext};
+use looprs::{Agent, SessionContext, Event, EventContext};
 use looprs::providers::create_provider;
 
 mod cli;
@@ -30,6 +30,14 @@ async fn main() -> Result<()> {
         format!("{}/{}", provider_name, model).cyan(),
         env::current_dir()?.display().to_string().dimmed()
     );
+    
+    // Fire SessionStart event
+    let session_context_str = context
+        .format_for_prompt()
+        .unwrap_or_default();
+    let event_ctx = EventContext::new()
+        .with_session_context(session_context_str);
+    agent.events.fire(Event::SessionStart, &event_ctx);
     
     // Display context if available
     if !context.is_empty() {
@@ -76,6 +84,10 @@ async fn main() -> Result<()> {
             }
         }
     }
+
+    // Fire SessionEnd event
+    let event_ctx = EventContext::new();
+    agent.events.fire(Event::SessionEnd, &event_ctx);
 
     Ok(())
 }

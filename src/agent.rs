@@ -3,6 +3,7 @@ use colored::*;
 
 use crate::api::ContentBlock;
 use crate::api::Message;
+use crate::events::{Event, EventContext, EventManager};
 use crate::providers::LLMProvider;
 use crate::providers::InferenceRequest;
 use crate::tools::{execute_tool, get_tool_definitions, ToolContext};
@@ -11,6 +12,7 @@ pub struct Agent {
     provider: Box<dyn LLMProvider>,
     messages: Vec<Message>,
     tool_ctx: ToolContext,
+    pub events: EventManager,
 }
 
 impl Agent {
@@ -19,6 +21,7 @@ impl Agent {
             provider,
             messages: Vec::new(),
             tool_ctx: ToolContext::new()?,
+            events: EventManager::new(),
         })
     }
 
@@ -31,6 +34,28 @@ impl Agent {
     }
 
     pub async fn run_turn(&mut self) -> Result<()> {
+        // Fire UserPromptSubmit event
+        let user_msg = self
+            .messages
+            .last()
+            .and_then(|m| {
+                if m.role == "user" {
+                    m.content.first().and_then(|cb| {
+                        if let ContentBlock::Text { text } = cb {
+                            Some(text.clone())
+                        } else {
+                            None
+                        }
+                    })
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default();
+
+        let event_ctx = EventContext::new().with_user_message(user_msg);
+        self.events.fire(Event::UserPromptSubmit, &event_ctx);
+
         let system_prompt = format!(
             "You are a concise coding assistant. Current working directory: {}",
             self.tool_ctx.working_dir.display()
@@ -46,6 +71,10 @@ impl Agent {
             };
 
             let response = self.provider.infer(req).await?;
+
+            // Fire InferenceComplete event
+            let event_ctx = EventContext::new();
+            self.events.fire(Event::InferenceComplete, &event_ctx);
 
             let mut assistant_blocks = Vec::new();
             let mut tools_to_execute = Vec::new();
@@ -90,16 +119,30 @@ impl Agent {
             let mut tool_results = Vec::new();
 
             for (id, name, input) in tools_to_execute {
+                // Fire PreToolUse event
+                let event_ctx = EventContext::new().with_tool_name(name.clone());
+                self.events.fire(Event::PreToolUse, &event_ctx);
+
                 let result = execute_tool(&name, &input, &self.tool_ctx);
 
                 let content = match result {
-                    Ok(output) => {
+                    Ok(ref output) => {
                         println!("  {} {}", "└─".green(), "OK".green());
-                        output
+                        // Fire PostToolUse event on success
+                        let event_ctx = EventContext::new()
+                            .with_tool_name(name.clone())
+                            .with_tool_output(output.clone());
+                        self.events.fire(Event::PostToolUse, &event_ctx);
+                        output.clone()
                     }
                     Err(e) => {
                         let err_msg = format!("error: {e}");
                         println!("  {} {}", "└─".red(), err_msg.red());
+                        // Fire OnError event
+                        let event_ctx = EventContext::new()
+                            .with_tool_name(name.clone())
+                            .with_error(err_msg.clone());
+                        self.events.fire(Event::OnError, &event_ctx);
                         err_msg
                     }
                 };
