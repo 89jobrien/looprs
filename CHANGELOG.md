@@ -38,6 +38,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `EventManager` for registering and firing event handlers
   - Events fire at key points in REPL cycle and agent execution
   - Ready for hook file loading in Phase 2
+- **Session observations** (Incremental Learning System)
+  - Auto-capture all tool executions (bash, read, write, grep, glob, edit)
+  - `Observation` struct with tool_name, input, output, timestamp, session_id
+  - `ObservationManager` for capturing and persisting observations
+  - On PostToolUse: automatically capture tool usage
+  - On SessionEnd: save observations to bd as issues (tag: observation)
+  - On SessionStart: load recent observations and display in REPL
+  - Graceful degradation if bd not available
+  - Foundation for Claude-mem style learning across sessions
 
 ### Changed
 - Agent now uses provider abstraction (`dyn LLMProvider`) instead of hardcoded Anthropic logic
@@ -45,8 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tool definitions now derive Debug for better error messages
 - Main REPL now collects and displays SessionContext at startup
 - Main REPL fires SessionStart event on init, SessionEnd on exit
+- Main REPL displays recent observations before prompt
+- Main REPL saves observations to bd on exit
 - Agent fires UserPromptSubmit, InferenceComplete, PreToolUse, PostToolUse, OnError events
 - Agent now has public EventManager for registering handlers
+- Agent now has public ObservationManager for accessing captured observations
 
 ### Technical
 - Created `src/providers/` module with:
@@ -68,6 +80,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Optional fields for graceful degradation
 - Created `src/events.rs` module for event system:
   - `Event` enum (8 variants for lifecycle + execution events)
+  - `EventContext` struct with builder pattern
+  - `EventManager` with HashMap-based handler registry
+- Created `src/observation.rs` module for session observations:
+  - `Observation` struct with Unix timestamp-based IDs
+  - Serialization to bd issue format
+  - Optional context/summary field
+- Created `src/observation_manager.rs` module for observation management:
+  - `ObservationManager` struct for capturing and persisting
+  - Auto-save to bd with proper tagging
+  - `load_recent_observations()` for SessionStart injection
   - `EventContext` struct with builder pattern (session_context, user_message, tool_name, tool_output, error, warning, metadata)
   - `EventManager` with HashMap-based handler registry
   - Full test coverage for event firing and multiple handlers

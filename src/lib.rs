@@ -8,9 +8,13 @@ pub mod jj;
 pub mod bd;
 pub mod context;
 pub mod events;
+pub mod observation;
+pub mod observation_manager;
 
 pub use crate::agent::Agent;
 pub use crate::config::ApiConfig;
 pub use crate::config_file::ProviderConfig;
 pub use crate::context::SessionContext;
 pub use crate::events::{Event, EventContext, EventManager};
+pub use crate::observation::Observation;
+pub use crate::observation_manager::ObservationManager;

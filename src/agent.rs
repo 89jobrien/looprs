@@ -4,6 +4,7 @@ use colored::*;
 use crate::api::ContentBlock;
 use crate::api::Message;
 use crate::events::{Event, EventContext, EventManager};
+use crate::observation_manager::ObservationManager;
 use crate::providers::LLMProvider;
 use crate::providers::InferenceRequest;
 use crate::tools::{execute_tool, get_tool_definitions, ToolContext};
@@ -13,6 +14,7 @@ pub struct Agent {
     messages: Vec<Message>,
     tool_ctx: ToolContext,
     pub events: EventManager,
+    pub observations: ObservationManager,
 }
 
 impl Agent {
@@ -22,6 +24,7 @@ impl Agent {
             messages: Vec::new(),
             tool_ctx: ToolContext::new()?,
             events: EventManager::new(),
+            observations: ObservationManager::new(),
         })
     }
 
@@ -128,6 +131,12 @@ impl Agent {
                 let content = match result {
                     Ok(ref output) => {
                         println!("  {} {}", "└─".green(), "OK".green());
+                        // Capture observation
+                        self.observations.capture(
+                            name.clone(),
+                            input.clone(),
+                            output.clone(),
+                        );
                         // Fire PostToolUse event on success
                         let event_ctx = EventContext::new()
                             .with_tool_name(name.clone())

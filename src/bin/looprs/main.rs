@@ -5,6 +5,7 @@ use rustyline::DefaultEditor;
 use std::env;
 
 use looprs::{Agent, SessionContext, Event, EventContext};
+use looprs::observation_manager::load_recent_observations;
 use looprs::providers::create_provider;
 
 mod cli;
@@ -43,6 +44,14 @@ async fn main() -> Result<()> {
     if !context.is_empty() {
         if let Some(formatted) = context.format_for_prompt() {
             println!("{}\n{}", "─".dimmed(), formatted.dimmed());
+        }
+    }
+    
+    // Display recent observations if available
+    if let Some(observations) = load_recent_observations(5) {
+        println!("\n{}", "Recent observations:".dimmed());
+        for (i, obs) in observations.iter().enumerate() {
+            println!("  {} {}", (i + 1).to_string().cyan(), obs.dimmed());
         }
     }
     
@@ -85,9 +94,16 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Fire SessionEnd event
+    // Fire SessionEnd event and save observations
     let event_ctx = EventContext::new();
     agent.events.fire(Event::SessionEnd, &event_ctx);
+    
+    // Save observations to bd
+    if let Err(e) = agent.observations.save_to_bd() {
+        eprintln!("Warning: Failed to save observations: {}", e);
+    } else if agent.observations.count() > 0 {
+        println!("\n{} Saved {} observations to bd", "✓".green(), agent.observations.count());
+    }
 
     Ok(())
 }

@@ -146,6 +146,46 @@ agent.events.on(Event::PreToolUse, |event, ctx| {
 
 Later phases will add hook file loading (YAML) to execute shell commands or LLM injections on events.
 
+### Session Observations (Incremental Learning)
+
+Looprs automatically captures what you do in sessions and stores observations for future reference:
+
+```
+User runs: cargo test
+  ↓
+Tool execution captured: bash cargo test → output
+  ↓
+Session ends (Ctrl-C)
+  ↓
+Observation saved to bd: "Observation: cargo test"
+  ↓
+Next session starts
+  ↓
+Recent observations displayed: "Observation: cargo test"
+  ↓
+AI can now reference past patterns
+```
+
+**How it works:**
+- Every tool execution (bash, read, grep, etc.) is automatically captured
+- On SessionEnd, observations are saved to bd as issues (tag: observation)
+- On SessionStart, recent observations are loaded and displayed
+- The AI can then reference "what we did last session" for continuity
+
+**Example session output:**
+```
+>> looprs | anthropic/claude-3-sonnet | /home/dev/looprs
+
+Repository Status
+- Branch: main
+- Commit: 119b0ba
+
+Recent observations:
+  1. Observation: cargo test - test result ok
+  2. Observation: Fixed parser edge case
+  3. Observation: Updated README
+```
+
 ## Multi-Provider LLM
 
 Looprs works with any major LLM:
@@ -171,11 +211,12 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 - [x] bd (beads.db) integration - open issues
 - [x] SessionContext collection - auto-detect on startup
 - [x] **Event system** (SessionStart, SessionEnd, PreToolUse, PostToolUse, OnError, OnWarning)
+- [x] **Session observations** - Auto-capture tool use, store in bd
 
-### Phase 2: Hook Execution (In Progress)
+### Phase 2: Hook Execution (Next)
 - [ ] **Hook file loading** - Parse YAML from `.looprs/hooks/`
 - [ ] **Hook execution** - Fire hooks on events, execute shell commands
-- [ ] **Context injection** - Inject hook results into LLM prompts
+- [ ] **Context injection** - Inject observations into LLM prompts
 - [ ] **Approval gates** - User approval for automated actions
 
 ### Phase 3: Extensibility Parsers
