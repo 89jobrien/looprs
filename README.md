@@ -1,5 +1,42 @@
 # looprs
 
+A concise coding assistant REPL powered by language models. Looprs provides an interactive command-line interface for quick coding tasks, refactoring, and development assistance.
+
+## Getting Started
+
+### Prerequisites
+
+- Rust 1.88 or later
+- An API key for your language model service (set via `LOOPRS_API_KEY` environment variable)
+
+### Installation
+
+Clone the repository and build the project:
+
+```bash
+git clone https://github.com/89jobrien/looprs.git
+cd looprs
+cargo build --release
+```
+
+The binary will be available at `target/release/looprs`.
+
+### Running
+
+Set your API key and run:
+
+```bash
+export LOOPRS_API_KEY="your-api-key-here"
+./target/release/looprs
+```
+
+Or install globally:
+
+```bash
+cargo install --path .
+looprs
+```
+
 ## Development
 
 ### Rust-analyzer
