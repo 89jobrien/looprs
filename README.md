@@ -144,7 +144,50 @@ agent.events.on(Event::PreToolUse, |event, ctx| {
 });
 ```
 
-Later phases will add hook file loading (YAML) to execute shell commands or LLM injections on events.
+### Hooks (Event-Driven Actions)
+
+Define YAML hooks to run shell commands or inject context on events. Hooks live in `~/.looprs/hooks/` and execute automatically.
+
+**Example hook file: `~/.looprs/hooks/SessionStart.yaml`**
+
+```yaml
+name: show_status
+trigger: SessionStart
+condition: has_tool:jj  # optional: only run if tool exists
+actions:
+  - type: command
+    command: "jj log -r 'main::' | head -3"
+    inject_as: recent_commits  # inject output into EventContext
+  
+  - type: message
+    text: "Session started with context injected"
+
+  - type: conditional
+    condition: on_branch:main
+    then:
+      - type: message
+        text: "You're on main branch"
+```
+
+**Event hooks:**
+- `~/.looprs/hooks/SessionStart.yaml` - runs on session init
+- `~/.looprs/hooks/PostToolUse.yaml` - runs after each tool execution
+- `~/.looprs/hooks/SessionEnd.yaml` - runs on session exit
+- etc. for all 8 event types
+
+**Action types:**
+- `command` - Execute shell command, optionally inject output into context
+- `message` - Print message to console
+- `conditional` - Run sub-actions if condition passes
+
+**Conditions:**
+- `on_branch:main` - Only execute if on specified branch (currently accepts "main" or "*")
+- `has_tool:jj` - Only execute if tool is available in PATH
+
+**Graceful degradation:**
+- If `.looprs/hooks/` doesn't exist → no hooks run (works fine)
+- If hook execution fails → warning printed, session continues
+- If tool isn't available → condition fails silently, hook skipped
 
 ### Session Observations (Incremental Learning)
 

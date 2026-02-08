@@ -3,8 +3,9 @@ use colored::*;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use std::env;
+use std::path::PathBuf;
 
-use looprs::{Agent, SessionContext, Event, EventContext};
+use looprs::{Agent, SessionContext, Event, EventContext, HookRegistry};
 use looprs::observation_manager::load_recent_observations;
 use looprs::providers::create_provider;
 
@@ -19,6 +20,15 @@ async fn main() -> Result<()> {
     let provider_name = provider.name().to_string();
     
     let mut agent = Agent::new(provider)?;
+    
+    // Load hooks from .looprs/hooks/ directory
+    let hooks_dir = PathBuf::from(env::home_dir().unwrap_or_default())
+        .join(".looprs")
+        .join("hooks");
+    if let Ok(hooks) = HookRegistry::load_from_directory(&hooks_dir) {
+        agent = agent.with_hooks(hooks);
+    }
+    
     let mut rl = DefaultEditor::new()?;
 
     // Collect session context (jj status, bd issues, etc.)
@@ -32,13 +42,14 @@ async fn main() -> Result<()> {
         env::current_dir()?.display().to_string().dimmed()
     );
     
-    // Fire SessionStart event
+    // Fire SessionStart event (this will also execute hooks)
     let session_context_str = context
         .format_for_prompt()
         .unwrap_or_default();
     let event_ctx = EventContext::new()
         .with_session_context(session_context_str);
     agent.events.fire(Event::SessionStart, &event_ctx);
+    agent.execute_hooks_for_event(&Event::SessionStart, &event_ctx);
     
     // Display context if available
     if !context.is_empty() {
@@ -97,6 +108,7 @@ async fn main() -> Result<()> {
     // Fire SessionEnd event and save observations
     let event_ctx = EventContext::new();
     agent.events.fire(Event::SessionEnd, &event_ctx);
+    agent.execute_hooks_for_event(&Event::SessionEnd, &event_ctx);
     
     // Save observations to bd
     if let Err(e) = agent.observations.save_to_bd() {

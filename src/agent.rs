@@ -5,6 +5,8 @@ use crate::api::ContentBlock;
 use crate::api::Message;
 use crate::events::{Event, EventContext, EventManager};
 use crate::observation_manager::ObservationManager;
+use crate::hooks::HookRegistry;
+use crate::hooks::HookExecutor;
 use crate::providers::LLMProvider;
 use crate::providers::InferenceRequest;
 use crate::tools::{execute_tool, get_tool_definitions, ToolContext};
@@ -15,6 +17,7 @@ pub struct Agent {
     tool_ctx: ToolContext,
     pub events: EventManager,
     pub observations: ObservationManager,
+    pub hooks: HookRegistry,
 }
 
 impl Agent {
@@ -25,7 +28,13 @@ impl Agent {
             tool_ctx: ToolContext::new()?,
             events: EventManager::new(),
             observations: ObservationManager::new(),
+            hooks: HookRegistry::new(),
         })
+    }
+
+    pub fn with_hooks(mut self, hooks: HookRegistry) -> Self {
+        self.hooks = hooks;
+        self
     }
 
     pub fn add_user_message(&mut self, text: impl Into<String>) {
@@ -34,6 +43,16 @@ impl Agent {
 
     pub fn clear_history(&mut self) {
         self.messages.clear();
+    }
+
+    pub fn execute_hooks_for_event(&self, event: &Event, context: &EventContext) {
+        if let Some(hooks) = self.hooks.hooks_for_event(event) {
+            for hook in hooks {
+                if let Ok(_results) = HookExecutor::execute_hook(hook, context) {
+                    // Hook executed (results could be injected into context in future)
+                }
+            }
+        }
     }
 
     pub async fn run_turn(&mut self) -> Result<()> {
@@ -58,6 +77,7 @@ impl Agent {
 
         let event_ctx = EventContext::new().with_user_message(user_msg);
         self.events.fire(Event::UserPromptSubmit, &event_ctx);
+        self.execute_hooks_for_event(&Event::UserPromptSubmit, &event_ctx);
 
         let system_prompt = format!(
             "You are a concise coding assistant. Current working directory: {}",
@@ -78,6 +98,7 @@ impl Agent {
             // Fire InferenceComplete event
             let event_ctx = EventContext::new();
             self.events.fire(Event::InferenceComplete, &event_ctx);
+            self.execute_hooks_for_event(&Event::InferenceComplete, &event_ctx);
 
             let mut assistant_blocks = Vec::new();
             let mut tools_to_execute = Vec::new();
@@ -125,6 +146,7 @@ impl Agent {
                 // Fire PreToolUse event
                 let event_ctx = EventContext::new().with_tool_name(name.clone());
                 self.events.fire(Event::PreToolUse, &event_ctx);
+                self.execute_hooks_for_event(&Event::PreToolUse, &event_ctx);
 
                 let result = execute_tool(&name, &input, &self.tool_ctx);
 
@@ -142,6 +164,7 @@ impl Agent {
                             .with_tool_name(name.clone())
                             .with_tool_output(output.clone());
                         self.events.fire(Event::PostToolUse, &event_ctx);
+                        self.execute_hooks_for_event(&Event::PostToolUse, &event_ctx);
                         output.clone()
                     }
                     Err(e) => {
@@ -152,6 +175,7 @@ impl Agent {
                             .with_tool_name(name.clone())
                             .with_error(err_msg.clone());
                         self.events.fire(Event::OnError, &event_ctx);
+                        self.execute_hooks_for_event(&Event::OnError, &event_ctx);
                         err_msg
                     }
                 };

@@ -47,9 +47,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - On SessionStart: load recent observations and display in REPL
   - Graceful degradation if bd not available
   - Foundation for Claude-mem style learning across sessions
+- **Hook file loading** (Event-driven automation)
+   - `Hook` struct with trigger event, condition, and action list
+   - `HookRegistry` for loading YAML hooks from `~/.looprs/hooks/`
+   - YAML parsing with serde_yaml (graceful error handling)
+   - `HookExecutor` for running hook actions on events
+   - Action types: Command (shell execution), Message (console output), Conditional (branching)
+   - Condition types: `on_branch:X` (check git/jj branch), `has_tool:X` (check PATH)
+   - Hook execution on all event types (SessionStart, PostToolUse, SessionEnd, etc.)
+   - Graceful degradation: missing hooks dir, bad YAML, failed commands all handled silently
+   - Example hook: `~/.looprs/hooks/SessionStart.yaml` with message action
 
 ### Changed
 - Agent now uses provider abstraction (`dyn LLMProvider`) instead of hardcoded Anthropic logic
+- Main REPL loads hooks from `~/.looprs/hooks/` on startup
+- Main REPL executes hooks on SessionStart/SessionEnd
+- Agent now has public HookRegistry and execute_hooks_for_event() method
+- Agent executes hooks on all event types (UserPromptSubmit, PostToolUse, etc.)
 - CLI now displays provider name and model in header (e.g., "anthropic/claude-3-opus")
 - Tool definitions now derive Debug for better error messages
 - Main REPL now collects and displays SessionContext at startup
@@ -94,6 +108,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `EventManager` with HashMap-based handler registry
   - Full test coverage for event firing and multiple handlers
 
+- Created `src/hooks/mod.rs` - Hook types and registry
+   - `Hook` struct with name, trigger, condition, actions
+   - `Action` enum (Command, Message, Conditional)
+   - `HookRegistry` with load_from_directory() and hooks_for_event()
+   - HashMap-based indexing by event type
+- Created `src/hooks/parser.rs` - YAML parsing
+   - `parse_hook()` reads and deserializes YAML hook files
+   - Serde integration with `#[derive(Serialize, Deserialize)]`
+   - Error handling for invalid YAML (returns Err, logged to stderr)
+- Created `src/hooks/executor.rs` - Hook execution
+   - `HookExecutor` with execute_hook() method
+   - `HookResult` struct with output and injection key
+   - `run_command()` for shell execution via `sh -c`
+   - `eval_condition()` for simple condition evaluation (on_branch, has_tool)
+   - `check_tool_available()` using `which` command
+- Added `serde_yaml` dependency (v0.9) to Cargo.toml
+- Updated `src/lib.rs` to export hooks modules and types
+- Updated `src/agent.rs` to load hooks and execute on events
+- Updated `src/bin/looprs/main.rs` to load hooks from home directory on startup
 ## [0.1.1] - 2026-02-07
 
 ### Added
