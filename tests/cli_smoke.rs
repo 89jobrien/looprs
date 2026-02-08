@@ -1,21 +1,28 @@
 use looprs::ApiConfig;
+use std::sync::{Mutex, OnceLock};
+
+static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 struct EnvGuard {
+    _lock: std::sync::MutexGuard<'static, ()>,
     openrouter_api_key: Option<String>,
     anthropic_api_key: Option<String>,
 }
 
 impl EnvGuard {
     fn clear_keys() -> Self {
+        let lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
         let openrouter_api_key = std::env::var("OPENROUTER_API_KEY").ok();
         let anthropic_api_key = std::env::var("ANTHROPIC_API_KEY").ok();
 
+        // SAFETY: env mutation is guarded by ENV_LOCK, ensuring exclusive access.
         unsafe {
             std::env::remove_var("OPENROUTER_API_KEY");
             std::env::remove_var("ANTHROPIC_API_KEY");
         }
 
         Self {
+            _lock: lock,
             openrouter_api_key,
             anthropic_api_key,
         }
@@ -24,22 +31,17 @@ impl EnvGuard {
 
 impl Drop for EnvGuard {
     fn drop(&mut self) {
-        match &self.openrouter_api_key {
-            Some(value) => unsafe {
-                std::env::set_var("OPENROUTER_API_KEY", value);
-            },
-            None => unsafe {
-                std::env::remove_var("OPENROUTER_API_KEY");
-            },
-        }
+        // SAFETY: env mutation is guarded by ENV_LOCK, ensuring exclusive access.
+        unsafe {
+            match &self.openrouter_api_key {
+                Some(value) => std::env::set_var("OPENROUTER_API_KEY", value),
+                None => std::env::remove_var("OPENROUTER_API_KEY"),
+            }
 
-        match &self.anthropic_api_key {
-            Some(value) => unsafe {
-                std::env::set_var("ANTHROPIC_API_KEY", value);
-            },
-            None => unsafe {
-                std::env::remove_var("ANTHROPIC_API_KEY");
-            },
+            match &self.anthropic_api_key {
+                Some(value) => std::env::set_var("ANTHROPIC_API_KEY", value),
+                None => std::env::remove_var("ANTHROPIC_API_KEY"),
+            }
         }
     }
 }
