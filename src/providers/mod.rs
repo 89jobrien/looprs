@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 pub mod anthropic;
+pub mod local;
+pub mod openai;
 
 use crate::api::{ContentBlock, Message, ToolDefinition};
 
@@ -56,10 +58,10 @@ pub trait LLMProvider: Send + Sync {
 /// Priority order:
 /// 1. PROVIDER env var (explicit choice)
 /// 2. ANTHROPIC_API_KEY -> Anthropic
-/// 3. OPENAI_API_KEY -> OpenAI (will be implemented)
-/// 4. OPENROUTER_API_KEY -> OpenRouter (will be implemented)
+/// 3. OPENAI_API_KEY -> OpenAI
+/// 4. OPENROUTER_API_KEY -> OpenRouter (placeholder)
 /// 5. Try local Ollama
-pub fn create_provider() -> Result<Box<dyn LLMProvider>> {
+pub async fn create_provider() -> Result<Box<dyn LLMProvider>> {
     // Check explicit provider choice
     if let Ok(provider_name) = env::var("PROVIDER") {
         match provider_name.to_lowercase().as_str() {
@@ -69,10 +71,12 @@ pub fn create_provider() -> Result<Box<dyn LLMProvider>> {
                 return Ok(Box::new(anthropic::AnthropicProvider::new(key)?));
             }
             "openai" => {
-                anyhow::bail!("OpenAI provider not yet implemented");
+                let key = env::var("OPENAI_API_KEY")
+                    .map_err(|_| anyhow::anyhow!("PROVIDER=openai but OPENAI_API_KEY not set"))?;
+                return Ok(Box::new(openai::OpenAIProvider::new(key)?));
             }
             "local" | "ollama" => {
-                anyhow::bail!("Local provider not yet implemented");
+                return Ok(Box::new(local::LocalProvider::new()?));
             }
             "openrouter" => {
                 anyhow::bail!("OpenRouter provider not yet implemented");
@@ -89,21 +93,25 @@ pub fn create_provider() -> Result<Box<dyn LLMProvider>> {
     }
 
     // Try OpenAI
-    if env::var("OPENAI_API_KEY").is_ok() {
-        anyhow::bail!("OpenAI provider not yet implemented. Set ANTHROPIC_API_KEY instead.");
+    if let Ok(key) = env::var("OPENAI_API_KEY") {
+        return Ok(Box::new(openai::OpenAIProvider::new(key)?));
     }
 
     // Try OpenRouter
     if env::var("OPENROUTER_API_KEY").is_ok() {
-        anyhow::bail!("OpenRouter provider not yet implemented. Set ANTHROPIC_API_KEY instead.");
+        anyhow::bail!("OpenRouter provider not yet implemented. Set ANTHROPIC_API_KEY or OPENAI_API_KEY instead.");
     }
 
     // Try local Ollama
+    if local::LocalProvider::is_available().await {
+        return Ok(Box::new(local::LocalProvider::new()?));
+    }
+
     anyhow::bail!(
         "No LLM provider configured. Please set one of:\n\
          - ANTHROPIC_API_KEY (Anthropic)\n\
-         - OPENAI_API_KEY (OpenAI, not yet implemented)\n\
-         - OPENROUTER_API_KEY (OpenRouter, not yet implemented)\n\
-         Or run local Ollama on localhost:11434"
+         - OPENAI_API_KEY (OpenAI)\n\
+         Or run local Ollama on localhost:11434\n\
+         Or set PROVIDER env var to 'local' to force Ollama"
     );
 }
