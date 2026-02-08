@@ -95,3 +95,25 @@ prek run --all-files
 Hooks run:
 - `cargo test`
 - `cargo clippy`
+
+## Roadmap
+
+### Current Tools
+- **read** - Read files with line number pagination
+- **write** - Create or overwrite files (auto-creates parent directories)
+- **edit** - Replace text in files (with safety checks for ambiguous patterns)
+- **glob** - Find files by name patterns
+- **grep** - Search file contents with regex
+- **bash** - Execute shell commands
+
+### Planned Improvements
+- [ ] Replace `grep` with `rg` (ripgrep) - 10-100x faster pattern matching
+- [ ] Add `fd` - Fast alternative to `find` for locating files
+- [ ] Performance benchmarks for agent operations
+- [ ] Better error recovery and user feedback
+- [ ] Support for multiple language models (Claude, GPT, etc.)
+- [ ] Session persistence and conversation history
+- [ ] Custom tool plugins system
+
+### Why These Tools?
+These tools are selected for **speed and correctness**. We avoid UI-focused tools (fzf, lsd) in favor of tools that make the agent's operations faster and more reliable.
