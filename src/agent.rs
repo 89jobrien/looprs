@@ -1,28 +1,22 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use colored::*;
-use serde_json::Value;
-use std::time::Duration;
 
-use crate::api::{ApiRequest, ContentBlock, Message};
-use crate::config::{ApiConfig, API_TIMEOUT_SECS};
+use crate::api::ContentBlock;
+use crate::api::Message;
+use crate::providers::LLMProvider;
+use crate::providers::InferenceRequest;
 use crate::tools::{execute_tool, get_tool_definitions, ToolContext};
 
 pub struct Agent {
-    client: reqwest::Client,
-    config: ApiConfig,
+    provider: Box<dyn LLMProvider>,
     messages: Vec<Message>,
     tool_ctx: ToolContext,
 }
 
 impl Agent {
-    pub fn new(config: ApiConfig) -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(API_TIMEOUT_SECS))
-            .build()?;
-
+    pub fn new(provider: Box<dyn LLMProvider>) -> Result<Self> {
         Ok(Self {
-            client,
-            config,
+            provider,
             messages: Vec::new(),
             tool_ctx: ToolContext::new()?,
         })
@@ -43,54 +37,30 @@ impl Agent {
         );
 
         loop {
-            let req_body = ApiRequest {
-                model: self.config.model.clone(),
-                max_tokens: 8192,
-                system: system_prompt.clone(),
+            let req = InferenceRequest {
+                model: self.provider.model().to_string(),
                 messages: self.messages.clone(),
                 tools: get_tool_definitions(),
+                max_tokens: 8192,
+                system: system_prompt.clone(),
             };
 
-            let res = self
-                .client
-                .post(&self.config.url)
-                .header("x-api-key", &self.config.key)
-                .header("anthropic-version", "2023-06-01")
-                .header("Authorization", format!("Bearer {}", &self.config.key))
-                .header("Content-Type", "application/json")
-                .json(&req_body)
-                .send()
-                .await?;
-
-            if !res.status().is_success() {
-                let status = res.status();
-                let err_text = res.text().await?;
-                anyhow::bail!("API Error {status}: {err_text}");
-            }
-
-            let response_json: Value = res.json().await?;
-
-            let content_arr = response_json["content"]
-                .as_array()
-                .context("Unexpected API response: missing 'content' array")?;
+            let response = self.provider.infer(req).await?;
 
             let mut assistant_blocks = Vec::new();
             let mut tools_to_execute = Vec::new();
 
-            for block in content_arr {
-                match block["type"].as_str() {
-                    Some("text") => {
-                        let text = block["text"].as_str().unwrap_or("");
+            for block in response.content {
+                match block {
+                    ContentBlock::Text { ref text } => {
                         println!("\n{} {}", "●".blue().bold(), text.blue());
-                        assistant_blocks.push(ContentBlock::Text {
-                            text: text.to_string(),
-                        });
+                        assistant_blocks.push(block);
                     }
-                    Some("tool_use") => {
-                        let id = block["id"].as_str().unwrap().to_string();
-                        let name = block["name"].as_str().unwrap().to_string();
-                        let input = block["input"].clone();
-
+                    ContentBlock::ToolUse {
+                        ref id,
+                        ref name,
+                        ref input,
+                    } => {
                         let preview = serde_json::to_string(&input)
                             .unwrap_or_default()
                             .chars()
@@ -104,13 +74,8 @@ impl Agent {
                             preview.dimmed()
                         );
 
-                        assistant_blocks.push(ContentBlock::ToolUse {
-                            id: id.clone(),
-                            name: name.clone(),
-                            input: input.clone(),
-                        });
-
-                        tools_to_execute.push((id, name, input));
+                        assistant_blocks.push(block.clone());
+                        tools_to_execute.push((id.clone(), name.clone(), input.clone()));
                     }
                     _ => {}
                 }

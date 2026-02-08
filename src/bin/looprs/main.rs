@@ -4,22 +4,27 @@ use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use std::env;
 
-use looprs::{Agent, ApiConfig};
+use looprs::{Agent};
+use looprs::providers::create_provider;
 
 mod cli;
 use cli::{parse_input, CliCommand};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let config = ApiConfig::from_env()?;
-    let mut agent = Agent::new(config.clone())?;
+    let provider = create_provider().await?;
+    
+    let model = provider.model().to_string();
+    let provider_name = provider.name().to_string();
+    
+    let mut agent = Agent::new(provider)?;
     let mut rl = DefaultEditor::new()?;
 
     println!(
         "{} {} | {} | {}",
         ">>".bold(),
         "looprs".bold(),
-        config.model.cyan(),
+        format!("{}/{}", provider_name, model).cyan(),
         env::current_dir()?.display().to_string().dimmed()
     );
     println!("{}", "Commands: /q (quit), /c (clear history)".dimmed());
