@@ -4,16 +4,10 @@ use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use std::env;
 
-mod agent;
-mod api;
-mod cli;
-mod config;
-mod errors;
-mod tools;
+use looprs::{Agent, ApiConfig};
 
-use crate::agent::Agent;
-use crate::cli::{parse_input, CliCommand};
-use crate::config::ApiConfig;
+mod cli;
+use cli::{parse_input, CliCommand};
 
 #[tokio::main]
 async fn main() -> Result<()> {
