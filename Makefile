@@ -21,8 +21,7 @@ help:
 	@echo "  make all         Run check, fmt-check, lint, and test"
 	@echo ""
 	@echo "Setup commands:"
-	@echo "  make setup       Install dev dependencies (bacon, prek)"
-	@echo "  make hooks       Install pre-commit hooks"
+	@echo "  make setup       Install dev dependencies (bacon)"
 	@echo ""
 
 build:
@@ -68,13 +67,7 @@ all: check fmt-check lint test
 setup:
 	@echo "Installing dev dependencies..."
 	@command -v bacon >/dev/null 2>&1 || cargo install --locked bacon
-	@command -v prek >/dev/null 2>&1 || cargo install --locked prek
 	@echo "✓ Dev dependencies installed"
-
-hooks: setup
-	@echo "Installing pre-commit hooks..."
-	prek install
-	@echo "✓ Pre-commit hooks installed"
 
 verify-rust:
 	@$(CARGO) --version | grep -q "$(RUST_VERSION)" || (echo "Rust $(RUST_VERSION)+ required"; exit 1)
