@@ -1,1 +1,6 @@
 /target
+*.local.md
+*.local.json
+.ctx/
+thoughts/
+
