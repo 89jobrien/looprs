@@ -54,64 +54,70 @@ pub trait LLMProvider: Send + Sync {
     }
 }
 
-/// Create a provider based on environment variables
-/// Priority order:
-/// 1. PROVIDER env var (explicit choice)
-/// 2. ANTHROPIC_API_KEY -> Anthropic
-/// 3. OPENAI_API_KEY -> OpenAI
-/// 4. OPENROUTER_API_KEY -> OpenRouter (placeholder)
-/// 5. Try local Ollama
+/// Create a provider based on configuration priority:
+/// 1. Environment variables (highest priority)
+/// 2. .looprs/provider.json config file
+/// 3. Auto-detection from available API keys
+/// 4. Try local Ollama
+/// 5. Error if none found
 pub async fn create_provider() -> Result<Box<dyn LLMProvider>> {
-    // Check explicit provider choice
+    // Load config file if available
+    let config_file = crate::config_file::ProviderConfig::load().ok();
+
+    // Step 1: Check explicit PROVIDER env var (highest priority)
     if let Ok(provider_name) = env::var("PROVIDER") {
-        match provider_name.to_lowercase().as_str() {
-            "anthropic" => {
-                let key = env::var("ANTHROPIC_API_KEY")
-                    .map_err(|_| anyhow::anyhow!("PROVIDER=anthropic but ANTHROPIC_API_KEY not set"))?;
-                return Ok(Box::new(anthropic::AnthropicProvider::new(key)?));
-            }
-            "openai" => {
-                let key = env::var("OPENAI_API_KEY")
-                    .map_err(|_| anyhow::anyhow!("PROVIDER=openai but OPENAI_API_KEY not set"))?;
-                return Ok(Box::new(openai::OpenAIProvider::new(key)?));
-            }
-            "local" | "ollama" => {
-                return Ok(Box::new(local::LocalProvider::new()?));
-            }
-            "openrouter" => {
-                anyhow::bail!("OpenRouter provider not yet implemented");
-            }
-            other => {
-                anyhow::bail!("Unknown provider: {}", other);
-            }
+        return create_provider_by_name(&provider_name).await;
+    }
+
+    // Step 2: Check config file provider setting
+    if let Some(ref config) = config_file {
+        if let Some(provider_name) = &config.provider {
+            return create_provider_by_name(provider_name).await;
         }
     }
 
-    // Try Anthropic first (most common)
-    if let Ok(key) = env::var("ANTHROPIC_API_KEY") {
+    // Step 3: Try providers in priority order based on available API keys
+    if env::var("ANTHROPIC_API_KEY").is_ok() {
+        let key = env::var("ANTHROPIC_API_KEY")?;
         return Ok(Box::new(anthropic::AnthropicProvider::new(key)?));
     }
 
-    // Try OpenAI
-    if let Ok(key) = env::var("OPENAI_API_KEY") {
+    if env::var("OPENAI_API_KEY").is_ok() {
+        let key = env::var("OPENAI_API_KEY")?;
         return Ok(Box::new(openai::OpenAIProvider::new(key)?));
     }
 
-    // Try OpenRouter
-    if env::var("OPENROUTER_API_KEY").is_ok() {
-        anyhow::bail!("OpenRouter provider not yet implemented. Set ANTHROPIC_API_KEY or OPENAI_API_KEY instead.");
-    }
-
-    // Try local Ollama
+    // Step 4: Try local Ollama
     if local::LocalProvider::is_available().await {
         return Ok(Box::new(local::LocalProvider::new()?));
     }
 
+    // Step 5: Error if none found
     anyhow::bail!(
         "No LLM provider configured. Please set one of:\n\
          - ANTHROPIC_API_KEY (Anthropic)\n\
          - OPENAI_API_KEY (OpenAI)\n\
          Or run local Ollama on localhost:11434\n\
+         Or create .looprs/provider.json with settings\n\
          Or set PROVIDER env var to 'local' to force Ollama"
     );
+}
+
+/// Create a provider by explicit name
+async fn create_provider_by_name(name: &str) -> Result<Box<dyn LLMProvider>> {
+    match name.to_lowercase().as_str() {
+        "anthropic" => {
+            let key = env::var("ANTHROPIC_API_KEY")
+                .map_err(|_| anyhow::anyhow!("PROVIDER=anthropic but ANTHROPIC_API_KEY not set"))?;
+            Ok(Box::new(anthropic::AnthropicProvider::new(key)?))
+        }
+        "openai" => {
+            let key = env::var("OPENAI_API_KEY")
+                .map_err(|_| anyhow::anyhow!("PROVIDER=openai but OPENAI_API_KEY not set"))?;
+            Ok(Box::new(openai::OpenAIProvider::new(key)?))
+        }
+        "local" | "ollama" => Ok(Box::new(local::LocalProvider::new()?)),
+        "openrouter" => Err(anyhow::anyhow!("OpenRouter provider not yet implemented")),
+        other => Err(anyhow::anyhow!("Unknown provider: {}", other)),
+    }
 }
