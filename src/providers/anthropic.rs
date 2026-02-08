@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
 
 use crate::api::ContentBlock;
@@ -18,8 +18,7 @@ impl AnthropicProvider {
             .timeout(Duration::from_secs(120))
             .build()?;
 
-        let model = std::env::var("MODEL")
-            .unwrap_or_else(|_| "claude-3-opus-20240229".to_string());
+        let model = std::env::var("MODEL").unwrap_or_else(|_| "claude-3-opus-20240229".to_string());
 
         Ok(Self { client, key, model })
     }

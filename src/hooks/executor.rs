@@ -45,16 +45,11 @@ impl HookExecutor {
         context: &EventContext,
     ) -> anyhow::Result<Option<(String, Option<String>)>> {
         match action {
-            Action::Command {
-                command,
-                inject_as,
-            } => {
+            Action::Command { command, inject_as } => {
                 let output = Self::run_command(command)?;
                 Ok(Some((output, inject_as.clone())))
             }
-            Action::Message { text } => {
-                Ok(Some((text.clone(), None)))
-            }
+            Action::Message { text } => Ok(Some((text.clone(), None))),
             Action::Conditional {
                 condition,
                 then: actions,
@@ -71,13 +66,10 @@ impl HookExecutor {
 
     /// Run a shell command and capture output
     fn run_command(command_str: &str) -> anyhow::Result<String> {
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(command_str)
-            .output()?;
+        let output = Command::new("sh").arg("-c").arg(command_str).output()?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        
+
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             eprintln!("Hook command failed: {}", stderr);
@@ -147,8 +139,8 @@ mod tests {
 
     #[test]
     fn test_check_tool_unavailable() {
-        let has_nonexistent = HookExecutor::check_tool_available("totally_nonexistent_tool_xyz")
-            .unwrap_or(false);
+        let has_nonexistent =
+            HookExecutor::check_tool_available("totally_nonexistent_tool_xyz").unwrap_or(false);
         assert!(!has_nonexistent);
     }
 }

@@ -12,8 +12,8 @@ pub fn parse_hook(path: &Path) -> anyhow::Result<Hook> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_parse_simple_hook() {

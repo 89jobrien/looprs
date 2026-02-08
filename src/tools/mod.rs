@@ -1,14 +1,14 @@
-pub mod error;
 mod availability;
 mod bash;
 mod edit;
+pub mod error;
 mod glob;
 mod grep;
 mod read;
 mod write;
 
 use anyhow::Result;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::env;
 use std::path::{Path, PathBuf};
 

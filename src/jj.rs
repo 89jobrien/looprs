@@ -80,9 +80,7 @@ fn get_branch() -> Option<String> {
         return None;
     }
 
-    let branch = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .to_string();
+    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     if branch.is_empty() {
         None
@@ -94,7 +92,14 @@ fn get_branch() -> Option<String> {
 /// Get current commit ID from jj
 fn get_current_commit() -> Option<String> {
     let output = Command::new("jj")
-        .args(&["log", "-r", "@", "--no-pager", "-T", r#"{change_id.short()}"#])
+        .args(&[
+            "log",
+            "-r",
+            "@",
+            "--no-pager",
+            "-T",
+            r#"{change_id.short()}"#,
+        ])
         .output()
         .ok()?;
 
@@ -102,9 +107,7 @@ fn get_current_commit() -> Option<String> {
         return None;
     }
 
-    let commit = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .to_string();
+    let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     if commit.is_empty() {
         None
@@ -124,9 +127,7 @@ fn get_current_description() -> Option<String> {
         return None;
     }
 
-    let description = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .to_string();
+    let description = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
     if description.is_empty() {
         None

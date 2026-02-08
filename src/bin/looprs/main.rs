@@ -1,26 +1,26 @@
 use anyhow::Result;
 use colored::*;
-use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
+use rustyline::error::ReadlineError;
 use std::env;
 use std::path::PathBuf;
 
-use looprs::{Agent, SessionContext, Event, EventContext, HookRegistry};
 use looprs::observation_manager::load_recent_observations;
 use looprs::providers::create_provider;
+use looprs::{Agent, Event, EventContext, HookRegistry, SessionContext};
 
 mod cli;
-use cli::{parse_input, CliCommand};
+use cli::{CliCommand, parse_input};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let provider = create_provider().await?;
-    
+
     let model = provider.model().to_string();
     let provider_name = provider.name().to_string();
-    
+
     let mut agent = Agent::new(provider)?;
-    
+
     // Load hooks from .looprs/hooks/ directory
     let hooks_dir = PathBuf::from(env::home_dir().unwrap_or_default())
         .join(".looprs")
@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     if let Ok(hooks) = HookRegistry::load_from_directory(&hooks_dir) {
         agent = agent.with_hooks(hooks);
     }
-    
+
     let mut rl = DefaultEditor::new()?;
 
     // Collect session context (jj status, bd issues, etc.)
@@ -41,23 +41,20 @@ async fn main() -> Result<()> {
         format!("{}/{}", provider_name, model).cyan(),
         env::current_dir()?.display().to_string().dimmed()
     );
-    
+
     // Fire SessionStart event (this will also execute hooks)
-    let session_context_str = context
-        .format_for_prompt()
-        .unwrap_or_default();
-    let event_ctx = EventContext::new()
-        .with_session_context(session_context_str);
+    let session_context_str = context.format_for_prompt().unwrap_or_default();
+    let event_ctx = EventContext::new().with_session_context(session_context_str);
     agent.events.fire(Event::SessionStart, &event_ctx);
     agent.execute_hooks_for_event(&Event::SessionStart, &event_ctx);
-    
+
     // Display context if available
     if !context.is_empty() {
         if let Some(formatted) = context.format_for_prompt() {
             println!("{}\n{}", "─".dimmed(), formatted.dimmed());
         }
     }
-    
+
     // Display recent observations if available
     if let Some(observations) = load_recent_observations(5) {
         println!("\n{}", "Recent observations:".dimmed());
@@ -65,7 +62,7 @@ async fn main() -> Result<()> {
             println!("  {} {}", (i + 1).to_string().cyan(), obs.dimmed());
         }
     }
-    
+
     println!("{}", "Commands: /q (quit), /c (clear history)".dimmed());
 
     loop {
@@ -109,12 +106,16 @@ async fn main() -> Result<()> {
     let event_ctx = EventContext::new();
     agent.events.fire(Event::SessionEnd, &event_ctx);
     agent.execute_hooks_for_event(&Event::SessionEnd, &event_ctx);
-    
+
     // Save observations to bd
     if let Err(e) = agent.observations.save_to_bd() {
         eprintln!("Warning: Failed to save observations: {}", e);
     } else if agent.observations.count() > 0 {
-        println!("\n{} Saved {} observations to bd", "✓".green(), agent.observations.count());
+        println!(
+            "\n{} Saved {} observations to bd",
+            "✓".green(),
+            agent.observations.count()
+        );
     }
 
     Ok(())

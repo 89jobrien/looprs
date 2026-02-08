@@ -1,12 +1,12 @@
-use super::error::ToolError;
 use super::ToolContext;
+use super::error::ToolError;
 use regex::Regex;
 use serde_json::Value;
 use std::fs;
 use std::process::Command;
 
-use crate::config::MAX_GREP_HITS;
 use super::availability;
+use crate::config::MAX_GREP_HITS;
 
 /// Try to use ripgrep (rg) if available, fall back to pure regex implementation
 pub(super) fn tool_grep(args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {

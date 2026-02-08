@@ -4,12 +4,12 @@ use colored::*;
 use crate::api::ContentBlock;
 use crate::api::Message;
 use crate::events::{Event, EventContext, EventManager};
-use crate::observation_manager::ObservationManager;
-use crate::hooks::HookRegistry;
 use crate::hooks::HookExecutor;
-use crate::providers::LLMProvider;
+use crate::hooks::HookRegistry;
+use crate::observation_manager::ObservationManager;
 use crate::providers::InferenceRequest;
-use crate::tools::{execute_tool, get_tool_definitions, ToolContext};
+use crate::providers::LLMProvider;
+use crate::tools::{ToolContext, execute_tool, get_tool_definitions};
 
 pub struct Agent {
     provider: Box<dyn LLMProvider>,
@@ -154,11 +154,8 @@ impl Agent {
                     Ok(ref output) => {
                         println!("  {} {}", "└─".green(), "OK".green());
                         // Capture observation
-                        self.observations.capture(
-                            name.clone(),
-                            input.clone(),
-                            output.clone(),
-                        );
+                        self.observations
+                            .capture(name.clone(), input.clone(), output.clone());
                         // Fire PostToolUse event on success
                         let event_ctx = EventContext::new()
                             .with_tool_name(name.clone())

@@ -20,8 +20,8 @@ pub fn parse_input(line: &str) -> Option<CliCommand> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_input;
     use super::CliCommand;
+    use super::parse_input;
 
     #[test]
     fn parse_quit_commands() {
@@ -38,10 +38,7 @@ mod tests {
 
     #[test]
     fn parse_message_commands() {
-        assert!(matches!(
-            parse_input("hello"),
-            Some(CliCommand::Message(_))
-        ));
+        assert!(matches!(parse_input("hello"), Some(CliCommand::Message(_))));
     }
 
     #[test]

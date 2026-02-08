@@ -1,5 +1,5 @@
-use super::error::ToolError;
 use super::ToolContext;
+use super::error::ToolError;
 use serde_json::Value;
 use std::fs;
 
@@ -14,8 +14,8 @@ pub(super) fn tool_edit(args: &Value, ctx: &ToolContext) -> Result<String, ToolE
     let all = args["all"].as_bool().unwrap_or(false);
 
     let full_path = ctx.resolve_path(path);
-    let text = fs::read_to_string(&full_path)
-        .map_err(|_| ToolError::FileNotFound(path.to_string()))?;
+    let text =
+        fs::read_to_string(&full_path).map_err(|_| ToolError::FileNotFound(path.to_string()))?;
 
     if !text.contains(old) {
         return Err(ToolError::PatternNotFound(old.to_string()));

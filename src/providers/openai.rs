@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
 
 use crate::api::ContentBlock;
@@ -34,11 +34,7 @@ impl OpenAIProvider {
                         "text": text
                     }));
                 }
-                ContentBlock::ToolUse {
-                    id,
-                    name,
-                    input,
-                } => {
+                ContentBlock::ToolUse { id, name, input } => {
                     content.push(json!({
                         "type": "tool_use",
                         "id": id,
@@ -123,9 +119,7 @@ impl LLMProvider for OpenAIProvider {
             .and_then(|arr| arr.first())
             .context("No choices in response")?;
 
-        let message = choice
-            .get("message")
-            .context("No message in choice")?;
+        let message = choice.get("message").context("No message in choice")?;
 
         let mut blocks = Vec::new();
 
@@ -139,8 +133,7 @@ impl LLMProvider for OpenAIProvider {
 
         if let Some(tool_calls) = message.get("tool_calls").and_then(|v| v.as_array()) {
             for tool_call in tool_calls {
-                if let (Some(id), Some(function)) =
-                    (tool_call.get("id"), tool_call.get("function"))
+                if let (Some(id), Some(function)) = (tool_call.get("id"), tool_call.get("function"))
                 {
                     if let (Some(name), Some(args)) =
                         (function.get("name"), function.get("arguments"))

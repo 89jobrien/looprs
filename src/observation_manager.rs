@@ -1,7 +1,7 @@
 use anyhow::Result;
-use std::time::{SystemTime, UNIX_EPOCH};
 use serde_json::Value;
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::observation::Observation;
 
@@ -55,9 +55,7 @@ impl ObservationManager {
         }
 
         // Check if bd is available
-        let bd_check = Command::new("bd")
-            .args(&["--version"])
-            .output();
+        let bd_check = Command::new("bd").args(&["--version"]).output();
 
         if bd_check.is_err() {
             // bd not installed, silently skip
@@ -86,8 +84,10 @@ impl ObservationManager {
                     // Saved successfully
                 }
                 Ok(output) => {
-                    eprintln!("Warning: Failed to save observation: {}", 
-                        String::from_utf8_lossy(&output.stderr));
+                    eprintln!(
+                        "Warning: Failed to save observation: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    );
                 }
                 Err(e) => {
                     eprintln!("Warning: Error saving observation to bd: {}", e);
@@ -113,9 +113,7 @@ impl Default for ObservationManager {
 /// Load recent observations from bd
 pub fn load_recent_observations(limit: usize) -> Option<Vec<String>> {
     // Check if bd is available
-    let bd_check = Command::new("bd")
-        .args(&["--version"])
-        .output();
+    let bd_check = Command::new("bd").args(&["--version"]).output();
 
     if bd_check.is_err() {
         return None;
@@ -204,11 +202,7 @@ mod tests {
     #[test]
     fn test_observation_manager_clear() {
         let mut mgr = ObservationManager::new();
-        mgr.capture(
-            "bash".to_string(),
-            serde_json::json!({}),
-            "out".to_string(),
-        );
+        mgr.capture("bash".to_string(), serde_json::json!({}), "out".to_string());
         assert_eq!(mgr.count(), 1);
 
         mgr.clear();

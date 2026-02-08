@@ -1,22 +1,22 @@
 mod agent;
 mod api;
+pub mod bd;
 mod config;
 mod config_file;
-pub mod providers;
-mod tools;
-pub mod jj;
-pub mod bd;
 pub mod context;
 pub mod events;
+pub mod hooks;
+pub mod jj;
 pub mod observation;
 pub mod observation_manager;
-pub mod hooks;
+pub mod providers;
+mod tools;
 
 pub use crate::agent::Agent;
 pub use crate::config::ApiConfig;
 pub use crate::config_file::ProviderConfig;
 pub use crate::context::SessionContext;
 pub use crate::events::{Event, EventContext, EventManager};
+pub use crate::hooks::{Hook, HookExecutor, HookRegistry};
 pub use crate::observation::Observation;
 pub use crate::observation_manager::ObservationManager;
-pub use crate::hooks::{Hook, HookRegistry, HookExecutor};

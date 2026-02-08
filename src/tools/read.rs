@@ -1,5 +1,5 @@
-use super::error::ToolError;
 use super::ToolContext;
+use super::error::ToolError;
 use serde_json::Value;
 use std::fs;
 
@@ -11,8 +11,8 @@ pub(super) fn tool_read(args: &Value, ctx: &ToolContext) -> Result<String, ToolE
     let limit = args["limit"].as_u64();
 
     let full_path = ctx.resolve_path(path);
-    let content = fs::read_to_string(&full_path)
-        .map_err(|_| ToolError::FileNotFound(path.to_string()))?;
+    let content =
+        fs::read_to_string(&full_path).map_err(|_| ToolError::FileNotFound(path.to_string()))?;
 
     let lines: Vec<&str> = content.lines().collect();
 

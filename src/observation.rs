@@ -1,6 +1,6 @@
-use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// A captured observation from tool usage in a session
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,12 +21,7 @@ pub struct Observation {
 
 impl Observation {
     /// Create a new observation
-    pub fn new(
-        tool_name: String,
-        input: Value,
-        output: String,
-        session_id: String,
-    ) -> Self {
+    pub fn new(tool_name: String, input: Value, output: String, session_id: String) -> Self {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -58,7 +53,9 @@ impl Observation {
         };
 
         // Convert timestamp to readable format
-        let time_str = match SystemTime::UNIX_EPOCH.checked_add(std::time::Duration::from_secs(self.timestamp)) {
+        let time_str = match SystemTime::UNIX_EPOCH
+            .checked_add(std::time::Duration::from_secs(self.timestamp))
+        {
             Some(t) => format!("{:?}", t),
             None => format!("{} (unix timestamp)", self.timestamp),
         };

@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
 
 use crate::api::ContentBlock;
@@ -40,11 +40,7 @@ impl LocalProvider {
             Err(_) => return false,
         };
 
-        match client
-            .get(&format!("{}/api/tags", host))
-            .send()
-            .await
-        {
+        match client.get(&format!("{}/api/tags", host)).send().await {
             Ok(res) => res.status().is_success(),
             Err(_) => false,
         }
@@ -59,10 +55,7 @@ impl LocalProvider {
                     content.push_str(text);
                 }
                 ContentBlock::ToolUse { id, name, input } => {
-                    content.push_str(&format!(
-                        "\n[TOOL_USE id={} name={}]\n{}",
-                        id, name, input
-                    ));
+                    content.push_str(&format!("\n[TOOL_USE id={} name={}]\n{}", id, name, input));
                 }
                 ContentBlock::ToolResult {
                     tool_use_id,
