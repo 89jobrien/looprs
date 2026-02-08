@@ -54,7 +54,7 @@ pub struct ApiRequest {
     pub tools: Vec<ToolDefinition>,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 pub struct ToolDefinition {
     pub name: String,
     pub description: String,
