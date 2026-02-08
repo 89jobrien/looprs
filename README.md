@@ -9,6 +9,20 @@ A concise coding assistant REPL powered by language models. Looprs provides an i
 - Rust 1.88 or later
 - An API key for your language model service (set via `LOOPRS_API_KEY` environment variable)
 
+### Optional: Performance Tools
+
+For faster searching and file discovery, install these modern tools:
+
+```bash
+# ripgrep - 10-100x faster than standard grep
+cargo install ripgrep
+
+# fd - Fast alternative to find
+cargo install fd-find
+```
+
+These tools are **optional** - looprs works without them using pure Rust implementations. When installed, the grep and glob tools automatically use them for dramatically faster performance.
+
 ### Installation
 
 Clone the repository and build the project:
@@ -102,13 +116,13 @@ Hooks run:
 - **read** - Read files with line number pagination
 - **write** - Create or overwrite files (auto-creates parent directories)
 - **edit** - Replace text in files (with safety checks for ambiguous patterns)
-- **glob** - Find files by name patterns
-- **grep** - Search file contents with regex
+- **glob** - Find files by name patterns (10-100x faster with `fd` installed)
+- **grep** - Search file contents with regex (10-100x faster with `rg` installed)
 - **bash** - Execute shell commands
 
 ### Planned Improvements
-- [ ] Replace `grep` with `rg` (ripgrep) - 10-100x faster pattern matching
-- [ ] Add `fd` - Fast alternative to `find` for locating files
+- [x] Replace `grep` with `rg` (ripgrep) - **DONE** - grep tool uses rg internally when available
+- [x] Add `fd` support - **DONE** - glob tool uses fd internally when available
 - [ ] Performance benchmarks for agent operations
 - [ ] Better error recovery and user feedback
 - [ ] Support for multiple language models (Claude, GPT, etc.)
@@ -117,3 +131,14 @@ Hooks run:
 
 ### Why These Tools?
 These tools are selected for **speed and correctness**. We avoid UI-focused tools (fzf, lsd) in favor of tools that make the agent's operations faster and more reliable.
+
+### Performance & Graceful Degradation
+
+The grep and glob tools are designed with **progressive enhancement**:
+
+- **With `rg` and `fd` installed**: 10-100x faster searching and file discovery
+- **Without these tools**: Falls back to pure Rust implementations automatically
+- **No configuration needed**: Detection is automatic - install the tools and you get the speedup
+- **Zero breaking changes**: API and output format remain identical
+
+This design ensures looprs performs optimally in any environment while remaining dependency-free.
