@@ -1,0 +1,116 @@
+name: Bump Version
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get commit messages
+        id: commits
+        run: |
+          # Get all commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [ -z "$LAST_TAG" ]; then
+            # No tags yet, check from first commit
+            COMMITS=$(git log --pretty=%B)
+          else
+            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=%B)
+          fi
+          
+          echo "commits<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          # Determine version bump
+          if echo "$COMMITS" | grep -q "^feat!:" || echo "$COMMITS" | grep -q "^[a-z]*!:"; then
+            echo "bump=major" >> $GITHUB_OUTPUT
+          elif echo "$COMMITS" | grep -q "^feat:"; then
+            echo "bump=minor" >> $GITHUB_OUTPUT
+          else
+            echo "bump=patch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Bump version in Cargo.toml
+        id: version
+        run: |
+          BUMP_TYPE="${{ steps.commits.outputs.bump }}"
+          
+          # Parse current version
+          CURRENT=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\([^"]*\)".*/\1/')
+          
+          # Split version into parts
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          
+          case "$BUMP_TYPE" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+          
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          
+          # Update Cargo.toml
+          sed -i "s/^version = .*/version = \"$NEW_VERSION\"/" Cargo.toml
+          
+          echo "old_version=$CURRENT" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update CHANGELOG
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          DATE=$(date +"%Y-%m-%d")
+          
+          # Replace [Unreleased] with new version
+          sed -i "s/## \[Unreleased\]/## [$NEW_VERSION] - $DATE\n\n## [Unreleased]/" CHANGELOG.md
+
+      - name: Commit and tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          
+          git add Cargo.toml CHANGELOG.md
+          git commit -m "chore: bump version to $NEW_VERSION"
+          git tag "v$NEW_VERSION"
+          git push origin main --tags
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.new_version }}
+          name: ${{ steps.version.outputs.new_version }}
+          body: |
+            See CHANGELOG.md for details.
+            
+            Bump type: ${{ steps.commits.outputs.bump }}
+            Previous version: ${{ steps.version.outputs.old_version }}
