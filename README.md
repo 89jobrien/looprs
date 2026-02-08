@@ -73,6 +73,26 @@ The `.looprs/` directory defines your agent:
 └── rules/                 # Constraints and guidelines (Markdown)
 ```
 
+### SessionStart Context
+
+When you start looprs, it automatically collects:
+
+```
+# Repository Status (jj)
+- Branch: main
+- Commit: abc123
+- Description: Implement feature X
+
+# Recent Commits (from jj)
+- Fix: edge case in parser
+- Feat: add new command syntax
+- Docs: update README
+
+# Open Issues (from bd)
+- [#42] Parser refactor: high priority
+- [#51] Add tests for X: normal priority
+```
+
 Example hook that injects context:
 
 ```yaml

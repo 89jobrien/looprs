@@ -4,7 +4,11 @@ mod config;
 mod config_file;
 pub mod providers;
 mod tools;
+pub mod jj;
+pub mod bd;
+pub mod context;
 
 pub use crate::agent::Agent;
 pub use crate::config::ApiConfig;
 pub use crate::config_file::ProviderConfig;
+pub use crate::context::SessionContext;

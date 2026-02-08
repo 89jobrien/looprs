@@ -4,7 +4,7 @@ use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use std::env;
 
-use looprs::{Agent};
+use looprs::{Agent, SessionContext};
 use looprs::providers::create_provider;
 
 mod cli;
@@ -20,6 +20,9 @@ async fn main() -> Result<()> {
     let mut agent = Agent::new(provider)?;
     let mut rl = DefaultEditor::new()?;
 
+    // Collect session context (jj status, bd issues, etc.)
+    let context = SessionContext::collect();
+
     println!(
         "{} {} | {} | {}",
         ">>".bold(),
@@ -27,6 +30,14 @@ async fn main() -> Result<()> {
         format!("{}/{}", provider_name, model).cyan(),
         env::current_dir()?.display().to_string().dimmed()
     );
+    
+    // Display context if available
+    if !context.is_empty() {
+        if let Some(formatted) = context.format_for_prompt() {
+            println!("{}\n{}", "─".dimmed(), formatted.dimmed());
+        }
+    }
+    
     println!("{}", "Commands: /q (quit), /c (clear history)".dimmed());
 
     loop {
