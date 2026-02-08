@@ -255,12 +255,13 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 - [x] SessionContext collection - auto-detect on startup
 - [x] **Event system** (SessionStart, SessionEnd, PreToolUse, PostToolUse, OnError, OnWarning)
 - [x] **Session observations** - Auto-capture tool use, store in bd
+- [x] **Hook file loading** - Parse YAML from `.looprs/hooks/`
+- [x] **Hook execution** - Fire hooks on events, execute shell commands
 
-### Phase 2: Hook Execution (Next)
-- [ ] **Hook file loading** - Parse YAML from `.looprs/hooks/`
-- [ ] **Hook execution** - Fire hooks on events, execute shell commands
-- [ ] **Context injection** - Inject observations into LLM prompts
+### Phase 2b: Context Injection (Next)
+- [ ] **Context injection** - Inject hook outputs into LLM prompts
 - [ ] **Approval gates** - User approval for automated actions
+- [ ] **Hook output storage** - Persist hook results for debugging
 
 ### Phase 3: Extensibility Parsers
 - [ ] Command parser for `/` prefix
