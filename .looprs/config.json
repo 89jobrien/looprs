@@ -1,0 +1,76 @@
+{
+  "version": "1.0.0",
+  "project": "looprs",
+  "description": "Extensibility configuration for looprs agent",
+  
+  "extensions": {
+    "commands_enabled": true,
+    "skills_enabled": true,
+    "agents_enabled": true,
+    "rules_enabled": true,
+    "hooks_enabled": true
+  },
+  
+  "defaults": {
+    "agent": "base-agent",
+    "max_context_tokens": 8192,
+    "temperature": 0.7,
+    "timeout_seconds": 120
+  },
+  
+  "file_references": {
+    "prefix": "@",
+    "max_size_mb": 10,
+    "allowed_extensions": [
+      "rs", "py", "ts", "js", "go", "java",
+      "md", "txt", "json", "yaml", "toml"
+    ]
+  },
+  
+  "commands": {
+    "prefix": "/",
+    "case_sensitive": false,
+    "separator": "::",
+    "max_depth": 3
+  },
+  
+  "skills": {
+    "prefix": "$",
+    "case_sensitive": false,
+    "progressive_disclosure": true,
+    "auto_load_prerequisites": true
+  },
+  
+  "agents": {
+    "orchestration": "sequential",
+    "max_parallel": 3,
+    "context_sharing": true
+  },
+  
+  "rules": {
+    "enforce_on": ["code-review", "refactoring"],
+    "warn_on": ["testing", "performance"],
+    "strict_mode": false
+  },
+  
+  "hooks": {
+    "enabled": true,
+    "max_execution_time_ms": 5000,
+    "concurrent_hooks": false
+  },
+  
+  "logging": {
+    "level": "info",
+    "log_commands": true,
+    "log_errors": true,
+    "log_performance": true
+  },
+  
+  "paths": {
+    "commands": ".looprs/commands",
+    "skills": ".looprs/skills",
+    "agents": ".looprs/agents",
+    "rules": ".looprs/rules",
+    "hooks": ".looprs/hooks"
+  }
+}
