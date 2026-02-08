@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
                 break;
             }
             Err(e) => {
-                eprintln!("Input error: {:?}", e);
+                eprintln!("Input error: {e:?}");
                 break;
             }
         }
