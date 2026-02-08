@@ -62,14 +62,32 @@ The `.looprs/` directory defines your agent:
 .looprs/
 ├── provider.json          # Provider settings
 ├── config.json            # Global config
+├── hooks/                 # Event hooks (context injection, automation)
+│   ├── SessionStart       # Inject repo map, jj status, bd list, kanban
+│   ├── UserPromptSubmit   # Enrich context before LLM
+│   ├── PreToolUse         # Approval gates
+│   └── PostToolUse        # Sync to bd, kanban, etc.
 ├── commands/              # Custom commands (/)
 ├── skills/                # Skills with progressive disclosure ($)
 ├── agents/                # Agent role definitions (YAML)
-├── rules/                 # Constraints and guidelines (Markdown)
-└── hooks/                 # Event handlers (pre/post actions)
+└── rules/                 # Constraints and guidelines (Markdown)
 ```
 
-Example command that you'd define:
+Example hook that injects context:
+
+```yaml
+# .looprs/hooks/SessionStart
+events: [SessionStart]
+actions:
+  - exec: jj log --no-pager -r 'main::' | head -5
+    inject_as: recent_commits
+  - exec: bd list --open
+    inject_as: open_issues
+  - exec: kanban_board --json
+    inject_as: board_state
+```
+
+Example command:
 
 ```
 /code:refactor
@@ -77,16 +95,7 @@ Example command that you'd define:
   Template: Refactor this code for readability: {selection}
 ```
 
-Example skill:
-
-```
-$testing
-  Level 1: Basic unit test generation
-  Level 2: Parametrized tests
-  Level 3: Property-based testing
-```
-
-The framework is ready to extend. Hook up a parser, wire in the command dispatcher, and you can add unlimited functionality **without changing looprs core**.
+The framework is ready to extend. Define hooks, commands, skills - all **without changing looprs core**.
 
 ## Multi-Provider LLM
 
@@ -110,15 +119,27 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 - [x] Extensibility framework (commands, skills, agents, rules, hooks, file refs)
 - [x] Provider configuration (env vars + config file)
 
-### Coming
+### Phase 2: Context & Workflow Integration
+- [ ] **Hook system** - SessionStart, SessionEnd, PreToolUse, PostToolUse, OnError, OnWarning
+  - Inject context before LLM calls (repo map, status, issues, kanban state)
+  - Approval gates for automated actions
+  - Pre-defined prompts and setup system
+- [ ] **jj integration** - Read repo state, query branches, diff, log
+- [ ] **bd integration** - List issues, query tasks, sync with hooks
+- [ ] **Kanban board** - SQLite → bd issues bridge, real-time sync
+
+### Phase 3: Extensibility Parsers
 - [ ] Command parser for `/` prefix
 - [ ] Skill loader with level tracking
 - [ ] Agent dispatcher (YAML-based roles)
 - [ ] Rule evaluator (constraint checking)
-- [ ] Hook system (event-driven actions)
 - [ ] File reference resolver (`@` prefix)
-- [ ] Session persistence
-- [ ] Plugin system
+
+### Phase 4: Advanced Features
+- [ ] Session persistence (conversation history)
+- [ ] Plugin system (custom tools/commands)
+- [ ] Performance profiling
+- [ ] Concurrent hook execution
 
 ## Dev
 
