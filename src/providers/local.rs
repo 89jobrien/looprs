@@ -40,7 +40,7 @@ impl LocalProvider {
             Err(_) => return false,
         };
 
-        match client.get(&format!("{}/api/tags", host)).send().await {
+        match client.get(format!("{host}/api/tags")).send().await {
             Ok(res) => res.status().is_success(),
             Err(_) => false,
         }
@@ -55,15 +55,14 @@ impl LocalProvider {
                     content.push_str(text);
                 }
                 ContentBlock::ToolUse { id, name, input } => {
-                    content.push_str(&format!("\n[TOOL_USE id={} name={}]\n{}", id, name, input));
+                    content.push_str(&format!("\n[TOOL_USE id={id} name={name}]\n{input}"));
                 }
                 ContentBlock::ToolResult {
                     tool_use_id,
                     content: result_content,
                 } => {
                     content.push_str(&format!(
-                        "\n[TOOL_RESULT id={}]\n{}",
-                        tool_use_id, result_content
+                        "\n[TOOL_RESULT id={tool_use_id}]\n{result_content}"
                     ));
                 }
             }
@@ -94,7 +93,7 @@ impl LLMProvider for LocalProvider {
 
         let res = self
             .client
-            .post(&format!("{}/api/chat", self.host))
+            .post(format!("{}/api/chat", self.host))
             .header("Content-Type", "application/json")
             .json(&body)
             .send()

@@ -3,7 +3,6 @@ use colored::*;
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 use std::env;
-use std::path::PathBuf;
 
 use looprs::observation_manager::load_recent_observations;
 use looprs::providers::create_provider;
@@ -22,7 +21,8 @@ async fn main() -> Result<()> {
     let mut agent = Agent::new(provider)?;
 
     // Load hooks from .looprs/hooks/ directory
-    let hooks_dir = PathBuf::from(env::home_dir().unwrap_or_default())
+    let hooks_dir = env::home_dir()
+        .unwrap_or_default()
         .join(".looprs")
         .join("hooks");
     if let Ok(hooks) = HookRegistry::load_from_directory(&hooks_dir) {
@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
         "{} {} | {} | {}",
         ">>".bold(),
         "looprs".bold(),
-        format!("{}/{}", provider_name, model).cyan(),
+        format!("{provider_name}/{model}").cyan(),
         env::current_dir()?.display().to_string().dimmed()
     );
 
@@ -109,7 +109,7 @@ async fn main() -> Result<()> {
 
     // Save observations to bd
     if let Err(e) = agent.observations.save_to_bd() {
-        eprintln!("Warning: Failed to save observations: {}", e);
+        eprintln!("Warning: Failed to save observations: {e}");
     } else if agent.observations.count() > 0 {
         println!(
             "\n{} Saved {} observations to bd",

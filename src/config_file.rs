@@ -6,6 +6,7 @@ use std::path::Path;
 /// Per-provider configuration settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct ProviderSettings {
     /// Model name/ID (overrides MODEL env var if set)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -24,20 +25,10 @@ pub struct ProviderSettings {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-impl Default for ProviderSettings {
-    fn default() -> Self {
-        Self {
-            model: None,
-            max_tokens: None,
-            timeout_secs: None,
-            extra: Default::default(),
-        }
-    }
-}
-
 /// Provider configuration file schema
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct ProviderConfig {
     /// Active provider (overrides env var detection)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -58,18 +49,6 @@ pub struct ProviderConfig {
     /// Default settings applied to all providers
     #[serde(skip_serializing_if = "Option::is_none")]
     pub defaults: Option<ProviderSettings>,
-}
-
-impl Default for ProviderConfig {
-    fn default() -> Self {
-        Self {
-            provider: None,
-            anthropic: None,
-            openai: None,
-            local: None,
-            defaults: None,
-        }
-    }
 }
 
 impl ProviderConfig {

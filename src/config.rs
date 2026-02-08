@@ -3,6 +3,7 @@ use std::env;
 
 pub const DEFAULT_MODEL: &str = "claude-3-opus-20240229";
 pub const MAX_GREP_HITS: usize = 50;
+#[allow(dead_code)]
 pub const API_TIMEOUT_SECS: u64 = 120;
 
 #[derive(Clone)]

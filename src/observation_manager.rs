@@ -19,7 +19,7 @@ impl ObservationManager {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        let session_id = format!("sess-{}", timestamp);
+        let session_id = format!("sess-{timestamp}");
 
         ObservationManager {
             session_id,
@@ -55,7 +55,7 @@ impl ObservationManager {
         }
 
         // Check if bd is available
-        let bd_check = Command::new("bd").args(&["--version"]).output();
+        let bd_check = Command::new("bd").args(["--version"]).output();
 
         if bd_check.is_err() {
             // bd not installed, silently skip
@@ -68,7 +68,7 @@ impl ObservationManager {
             let description = obs.to_bd_description();
 
             let output = Command::new("bd")
-                .args(&[
+                .args([
                     "create",
                     &title,
                     "--description",
@@ -90,7 +90,7 @@ impl ObservationManager {
                     );
                 }
                 Err(e) => {
-                    eprintln!("Warning: Error saving observation to bd: {}", e);
+                    eprintln!("Warning: Error saving observation to bd: {e}");
                 }
             }
         }
@@ -113,7 +113,7 @@ impl Default for ObservationManager {
 /// Load recent observations from bd
 pub fn load_recent_observations(limit: usize) -> Option<Vec<String>> {
     // Check if bd is available
-    let bd_check = Command::new("bd").args(&["--version"]).output();
+    let bd_check = Command::new("bd").args(["--version"]).output();
 
     if bd_check.is_err() {
         return None;
@@ -121,7 +121,7 @@ pub fn load_recent_observations(limit: usize) -> Option<Vec<String>> {
 
     // Query bd for recent observations
     let output = Command::new("bd")
-        .args(&[
+        .args([
             "list",
             "--tag",
             "observation",

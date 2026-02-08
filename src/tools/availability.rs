@@ -10,12 +10,24 @@ pub fn is_rg_available() -> bool {
 }
 
 /// Check if fd binary is available in PATH
+#[allow(dead_code)]
 pub fn is_fd_available() -> bool {
     Command::new("fd")
         .arg("--version")
         .output()
         .map(|output| output.status.success())
         .unwrap_or(false)
+}
+
+#[allow(dead_code)]
+trait BoolHelper {
+    fn is_bool(&self) -> bool;
+}
+
+impl BoolHelper for bool {
+    fn is_bool(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]
@@ -35,15 +47,5 @@ mod tests {
         // Ensure these don't crash even with missing binaries
         assert!(is_rg_available().is_bool() || !is_rg_available().is_bool());
         assert!(is_fd_available().is_bool() || !is_fd_available().is_bool());
-    }
-}
-
-trait BoolHelper {
-    fn is_bool(&self) -> bool;
-}
-
-impl BoolHelper for bool {
-    fn is_bool(&self) -> bool {
-        true
     }
 }

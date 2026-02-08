@@ -142,7 +142,7 @@ impl EventManager {
     {
         self.handlers
             .entry(event)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(Box::new(handler));
     }
 

@@ -72,7 +72,7 @@ impl HookExecutor {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("Hook command failed: {}", stderr);
+            eprintln!("Hook command failed: {stderr}");
         }
 
         Ok(stdout.trim().to_string())
@@ -89,7 +89,7 @@ impl HookExecutor {
 
         if condition.starts_with("has_tool:") {
             let tool = condition.strip_prefix("has_tool:").unwrap_or("");
-            return Ok(Self::check_tool_available(tool)?);
+            return Self::check_tool_available(tool);
         }
 
         // If we don't recognize the condition, assume it passes (graceful degradation)
@@ -100,7 +100,7 @@ impl HookExecutor {
     fn check_tool_available(tool: &str) -> anyhow::Result<bool> {
         let output = Command::new("sh")
             .arg("-c")
-            .arg(&format!("which {} 2>/dev/null", tool))
+            .arg(format!("which {tool} 2>/dev/null"))
             .output()?;
 
         Ok(output.status.success())

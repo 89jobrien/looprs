@@ -18,7 +18,7 @@ pub fn list_open_issues() -> Option<Vec<BdIssue>> {
     }
 
     let output = Command::new("bd")
-        .args(&["list", "--open", "--json"])
+        .args(["list", "--open", "--json"])
         .output()
         .ok()?;
 

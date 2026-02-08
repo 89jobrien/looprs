@@ -118,6 +118,6 @@ async fn create_provider_by_name(name: &str) -> Result<Box<dyn LLMProvider>> {
         }
         "local" | "ollama" => Ok(Box::new(local::LocalProvider::new()?)),
         "openrouter" => Err(anyhow::anyhow!("OpenRouter provider not yet implemented")),
-        other => Err(anyhow::anyhow!("Unknown provider: {}", other)),
+        other => Err(anyhow::anyhow!("Unknown provider: {other}")),
     }
 }

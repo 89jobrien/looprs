@@ -33,7 +33,7 @@ pub fn get_recent_commits(count: usize) -> Option<Vec<String>> {
     }
 
     let output = Command::new("jj")
-        .args(&[
+        .args([
             "log",
             "-r",
             &format!("main::{}", if count > 0 { ".." } else { "main" }),
@@ -72,7 +72,7 @@ fn is_jj_repo() -> bool {
 /// Get current branch name from jj
 fn get_branch() -> Option<String> {
     let output = Command::new("jj")
-        .args(&["branch", "list", "-q"])
+        .args(["branch", "list", "-q"])
         .output()
         .ok()?;
 
@@ -92,7 +92,7 @@ fn get_branch() -> Option<String> {
 /// Get current commit ID from jj
 fn get_current_commit() -> Option<String> {
     let output = Command::new("jj")
-        .args(&[
+        .args([
             "log",
             "-r",
             "@",
@@ -119,7 +119,7 @@ fn get_current_commit() -> Option<String> {
 /// Get current commit description from jj
 fn get_current_description() -> Option<String> {
     let output = Command::new("jj")
-        .args(&["log", "-r", "@", "--no-pager", "-T", r#"{description}"#])
+        .args(["log", "-r", "@", "--no-pager", "-T", r#"{description}"#])
         .output()
         .ok()?;
 

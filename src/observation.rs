@@ -56,7 +56,7 @@ impl Observation {
         let time_str = match SystemTime::UNIX_EPOCH
             .checked_add(std::time::Duration::from_secs(self.timestamp))
         {
-            Some(t) => format!("{:?}", t),
+            Some(t) => format!("{t:?}"),
             None => format!("{} (unix timestamp)", self.timestamp),
         };
 
@@ -67,7 +67,7 @@ impl Observation {
             input_str,
             output_preview,
             if let Some(ctx) = &self.context {
-                format!("\n\n**Context:** {}", ctx)
+                format!("\n\n**Context:** {ctx}")
             } else {
                 String::new()
             }

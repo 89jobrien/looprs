@@ -69,7 +69,7 @@ impl HookRegistry {
                         registry
                             .hooks_by_event
                             .entry(hook.trigger.clone())
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push(hook);
                     }
                     Err(e) => {

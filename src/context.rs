@@ -35,10 +35,10 @@ impl SessionContext {
         if let Some(ref commits) = self.jj_recent_commits {
             let commits_str = commits
                 .iter()
-                .map(|c| format!("  - {}", c))
+                .map(|c| format!("  - {c}"))
                 .collect::<Vec<_>>()
                 .join("\n");
-            parts.push(format!("## Recent Commits\n{}", commits_str));
+            parts.push(format!("## Recent Commits\n{commits_str}"));
         }
 
         // Format open issues if available
@@ -55,7 +55,7 @@ impl SessionContext {
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
-            parts.push(format!("## Open Issues\n{}", issues_str));
+            parts.push(format!("## Open Issues\n{issues_str}"));
         }
 
         if parts.is_empty() {
