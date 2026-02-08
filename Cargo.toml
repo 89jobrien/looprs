@@ -1,7 +1,12 @@
 [package]
 name = "looprs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
+description = "Concise coding assistant REPL"
+license = "MIT"
+repository = "https://github.com/89jobrien/looprs.git"
+readme = "README.md"
+rust-version = "1.88"
 
 [dependencies]
 anyhow = "1.0"
@@ -15,3 +20,6 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
 tokio = { version = "1.38", features = ["macros", "rt-multi-thread"] }
+
+[dev-dependencies]
+tempfile = "3.12"

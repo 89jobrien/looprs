@@ -65,7 +65,7 @@ impl Agent {
             if !res.status().is_success() {
                 let status = res.status();
                 let err_text = res.text().await?;
-                anyhow::bail!("API Error {}: {}", status, err_text);
+                anyhow::bail!("API Error {status}: {err_text}");
             }
 
             let response_json: Value = res.json().await?;
@@ -133,7 +133,7 @@ impl Agent {
                         output
                     }
                     Err(e) => {
-                        let err_msg = format!("error: {}", e);
+                        let err_msg = format!("error: {e}");
                         println!("  {} {}", "└─".red(), err_msg.red());
                         err_msg
                     }
