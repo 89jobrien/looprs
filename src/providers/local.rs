@@ -1,8 +1,8 @@
-use anyhow::{Context, Result};
 use serde_json::{Value, json};
 use std::time::Duration;
 
 use crate::api::ContentBlock;
+use crate::errors::ProviderError;
 
 use super::{InferenceRequest, InferenceResponse, LLMProvider, Usage};
 use crate::types::ModelId;
@@ -14,7 +14,7 @@ pub struct LocalProvider {
 }
 
 impl LocalProvider {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL")
             .or_else(|_| std::env::var("OLLAMA_MODEL"))
             .ok()
@@ -22,7 +22,7 @@ impl LocalProvider {
         Self::new_with_model(model)
     }
 
-    pub fn new_with_model(model: Option<ModelId>) -> Result<Self> {
+    pub fn new_with_model(model: Option<ModelId>) -> Result<Self, ProviderError> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(120))
             .build()?;
@@ -37,8 +37,9 @@ impl LocalProvider {
                     .or_else(|| std::env::var("MODEL").ok())
                     .map(ModelId::new);
                 env_model.ok_or_else(|| {
-                    anyhow::anyhow!(
+                    ProviderError::Config(
                         "No local model configured. Set MODEL or OLLAMA_MODEL, or configure .looprs/provider.json"
+                            .to_string(),
                     )
                 })?
             }
@@ -99,7 +100,7 @@ impl LocalProvider {
 
 #[async_trait::async_trait]
 impl LLMProvider for LocalProvider {
-    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse> {
+    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse, ProviderError> {
         let mut messages = vec![json!({
             "role": "system",
             "content": req.system
@@ -124,7 +125,9 @@ impl LLMProvider for LocalProvider {
         if !res.status().is_success() {
             let status = res.status();
             let err_text = res.text().await?;
-            anyhow::bail!("Ollama API Error {status}: {err_text}");
+            return Err(ProviderError::ApiError(format!(
+                "Ollama API Error {status}: {err_text}"
+            )));
         }
 
         let response_json: Value = res.json().await?;
@@ -133,7 +136,9 @@ impl LLMProvider for LocalProvider {
             .get("message")
             .and_then(|m| m.get("content"))
             .and_then(|c| c.as_str())
-            .context("No message content in response")?;
+            .ok_or_else(|| {
+                ProviderError::InvalidResponse("No message content in response".to_string())
+            })?;
 
         // Simple parsing for tool markers since local models don't support structured tools well
         let mut blocks = Vec::new();
@@ -199,9 +204,9 @@ impl LLMProvider for LocalProvider {
         &self.model
     }
 
-    fn validate_config(&self) -> Result<()> {
+    fn validate_config(&self) -> Result<(), ProviderError> {
         if self.host.is_empty() {
-            anyhow::bail!("Ollama host is empty");
+            return Err(ProviderError::Config("Ollama host is empty".to_string()));
         }
         Ok(())
     }

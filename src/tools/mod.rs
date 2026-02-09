@@ -7,12 +7,12 @@ mod grep;
 mod read;
 mod write;
 
-use anyhow::Result;
 use serde_json::{json, Value};
 use std::env;
 use std::path::{Path, PathBuf};
 
 use crate::api::ToolDefinition;
+use crate::errors::ToolContextError;
 
 pub use error::ToolError;
 
@@ -21,9 +21,9 @@ pub struct ToolContext {
 }
 
 impl ToolContext {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, ToolContextError> {
         Ok(Self {
-            working_dir: env::current_dir()?,
+            working_dir: env::current_dir().map_err(ToolContextError::WorkingDirUnavailable)?,
         })
     }
 

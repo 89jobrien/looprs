@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::api::ContentBlock;
 use crate::api::Message;
+use crate::errors::AgentError;
 use crate::events::{Event, EventContext, EventManager};
 use crate::hooks::HookExecutor;
 use crate::hooks::HookRegistry;
@@ -20,7 +20,7 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new(provider: Box<dyn LLMProvider>) -> Result<Self> {
+    pub fn new(provider: Box<dyn LLMProvider>) -> Result<Self, AgentError> {
         Ok(Self {
             provider,
             messages: Vec::new(),
@@ -89,7 +89,7 @@ impl Agent {
         enriched_context
     }
 
-    pub async fn run_turn(&mut self) -> Result<()> {
+    pub async fn run_turn(&mut self) -> Result<(), AgentError> {
         // Fire UserPromptSubmit event
         let user_msg = self
             .messages
@@ -240,6 +240,7 @@ impl Agent {
 mod tests {
     use super::*;
     use crate::providers::{InferenceResponse, Usage};
+    use crate::errors::ProviderError;
 
     // Mock provider for testing
     struct MockProvider {
@@ -273,7 +274,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl LLMProvider for MockProvider {
-        async fn infer(&self, _req: &InferenceRequest) -> Result<InferenceResponse> {
+        async fn infer(&self, _req: &InferenceRequest) -> Result<InferenceResponse, ProviderError> {
             let mut count = self.call_count.lock().unwrap();
             let idx = *count;
             *count += 1;
@@ -303,7 +304,7 @@ mod tests {
             &self.model
         }
 
-        fn validate_config(&self) -> Result<()> {
+        fn validate_config(&self) -> Result<(), ProviderError> {
             Ok(())
         }
     }

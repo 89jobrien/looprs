@@ -1,7 +1,7 @@
-use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
 use crate::api::ContentBlock;
+use crate::errors::ProviderError;
 
 use super::{InferenceRequest, InferenceResponse, LLMProvider, ProviderHttpClient, Usage};
 use crate::types::ModelId;
@@ -13,12 +13,12 @@ pub struct AnthropicProvider {
 }
 
 impl AnthropicProvider {
-    pub fn new(key: String) -> Result<Self> {
+    pub fn new(key: String) -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL").ok().map(ModelId::new);
         Self::new_with_model(key, model)
     }
 
-    pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self> {
+    pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self, ProviderError> {
         let http = ProviderHttpClient::default()?;
 
         let model = model.unwrap_or_else(ModelId::claude_opus);
@@ -29,7 +29,7 @@ impl AnthropicProvider {
 
 #[async_trait::async_trait]
 impl LLMProvider for AnthropicProvider {
-    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse> {
+    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse, ProviderError> {
         let body = json!({
             "model": req.model.as_str(),
             "max_tokens": req.max_tokens,
@@ -59,14 +59,20 @@ impl LLMProvider for AnthropicProvider {
         if !res.status().is_success() {
             let status = res.status();
             let err_text = res.text().await?;
-            anyhow::bail!("Anthropic API Error {status}: {err_text}");
+            return Err(ProviderError::ApiError(format!(
+                "Anthropic API Error {status}: {err_text}"
+            )));
         }
 
         let response_json: Value = res.json().await?;
 
         let content_arr = response_json["content"]
             .as_array()
-            .context("Unexpected API response: missing 'content' array")?;
+            .ok_or_else(|| {
+                ProviderError::InvalidResponse(
+                    "Unexpected API response: missing 'content' array".to_string(),
+                )
+            })?;
 
         let mut blocks = Vec::new();
 
@@ -85,15 +91,19 @@ impl LLMProvider for AnthropicProvider {
                     let id = block
                         .get("id")
                         .and_then(|v| v.as_str())
-                        .context("Missing tool_use id")?;
+                        .ok_or_else(|| ProviderError::InvalidResponse("Missing tool_use id".to_string()))?;
                     let name = block
                         .get("name")
                         .and_then(|v| v.as_str())
-                        .context("Missing tool_use name")?;
+                        .ok_or_else(|| {
+                            ProviderError::InvalidResponse("Missing tool_use name".to_string())
+                        })?;
                     let input = block
                         .get("input")
                         .cloned()
-                        .context("Missing tool_use input")?;
+                        .ok_or_else(|| {
+                            ProviderError::InvalidResponse("Missing tool_use input".to_string())
+                        })?;
 
                     blocks.push(ContentBlock::ToolUse {
                         id: crate::types::ToolId::new(id),
@@ -144,9 +154,11 @@ impl LLMProvider for AnthropicProvider {
         &self.model
     }
 
-    fn validate_config(&self) -> Result<()> {
+    fn validate_config(&self) -> Result<(), ProviderError> {
         if self.key.is_empty() {
-            anyhow::bail!("Anthropic API key is empty");
+            return Err(ProviderError::Config(
+                "Anthropic API key is empty".to_string(),
+            ));
         }
         Ok(())
     }
