@@ -8,7 +8,7 @@ use looprs::observation_manager::load_recent_observations;
 use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
 use looprs::{
     console_approval_prompt, Agent, ApprovalCallback, Command, CommandRegistry, Event,
-    EventContext, HookRegistry, SessionContext,
+    EventContext, HookRegistry, SessionContext, SkillRegistry,
 };
 use looprs::ui;
 
@@ -101,13 +101,34 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Load skills from both user and repo directories
+    let user_skills_dir = env::home_dir()
+        .unwrap_or_default()
+        .join(".looprs")
+        .join("skills");
+    
+    let repo_skills_dir = env::current_dir()
+        .ok()
+        .map(|d| d.join(".looprs").join("skills"));
+
+    let mut skill_registry = SkillRegistry::new();
+    
+    // Load with precedence (repo overrides user)
+    if let Some(repo_dir) = repo_skills_dir {
+        if let Ok(_count) = skill_registry.load_with_precedence(&user_skills_dir, &repo_dir) {
+            // Skills loaded successfully
+        }
+    } else if user_skills_dir.exists() {
+        let _ = skill_registry.load_from_directory(&user_skills_dir);
+    }
+
     // Handle scriptable (non-interactive) mode
     if cli_args.is_scriptable() {
         return run_scriptable(&cli_args, &model, &provider_name, agent).await;
     }
 
     // Interactive mode
-    run_interactive(&cli_args, &model, &provider_name, agent, command_registry).await
+    run_interactive(&cli_args, &model, &provider_name, agent, command_registry, skill_registry).await
 }
 
 async fn run_scriptable(
@@ -152,6 +173,7 @@ async fn run_interactive(
     provider_name: &str,
     mut agent: Agent,
     command_registry: CommandRegistry,
+    skill_registry: SkillRegistry,
 ) -> Result<()> {
     let mut rl = DefaultEditor::new()?;
 
@@ -219,6 +241,21 @@ async fn run_interactive(
                         agent.clear_history();
                         ui::info("● Conversation cleared");
                     }
+                    CliCommand::InvokeSkill(skill_name) => {
+                        if let Some(skill) = skill_registry.get(&skill_name) {
+                            ui::info(format!("📚 Loading skill: {}", skill.name));
+                            // Add skill content to conversation
+                            let skill_message = format!("Skill '{}' activated:\n\n{}", skill.name, skill.content);
+                            agent.add_user_message(skill_message);
+                            
+                            if let Err(e) = agent.run_turn().await {
+                                ui::error(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));
+                            }
+                        } else {
+                            ui::warn(format!("Skill not found: ${}", skill_name));
+                            ui::info("Available skills: /skills (not yet implemented)");
+                        }
+                    }
                     CliCommand::CustomCommand(cmd_input) => {
                         // Parse command name and args
                         let parts: Vec<&str> = cmd_input.split_whitespace().collect();
@@ -238,7 +275,26 @@ async fn run_interactive(
                         }
                     }
                     CliCommand::Message(msg) => {
-                        agent.add_user_message(msg);
+                        // Check for auto-triggering skills
+                        let matching_skills = skill_registry.find_matching(&msg);
+                        
+                        if !matching_skills.is_empty() {
+                            ui::info(format!("📚 Auto-triggered {} skill(s)", matching_skills.len()));
+                            for skill in &matching_skills {
+                                ui::info(format!("  • {}", skill.name.cyan()));
+                            }
+                            
+                            // Prepend skill content to user message
+                            let mut full_message = String::new();
+                            for skill in matching_skills {
+                                full_message.push_str(&format!("=== Skill: {} ===\n{}\n\n", skill.name, skill.content));
+                            }
+                            full_message.push_str(&format!("User message: {}", msg));
+                            
+                            agent.add_user_message(full_message);
+                        } else {
+                            agent.add_user_message(msg);
+                        }
 
                         if let Err(e) = agent.run_turn().await {
                             ui::error(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));

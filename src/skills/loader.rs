@@ -47,11 +47,9 @@ impl SkillRegistry {
         }
 
         // Load repo skills - these will override user skills with same name
-        let repo_count = if repo_dir.exists() {
-            self.load_from_directory(repo_dir)?
-        } else {
-            0
-        };
+        if repo_dir.exists() {
+            let _ = self.load_from_directory(repo_dir)?;
+        }
 
         // Return total count
         Ok(self.skills.len())

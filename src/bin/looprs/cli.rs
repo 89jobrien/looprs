@@ -2,6 +2,7 @@ pub enum CliCommand {
     Quit,
     Clear,
     CustomCommand(String), // Custom command from .looprs/commands/
+    InvokeSkill(String),   // Explicit skill invocation: $skill-name
     Message(String),
 }
 
@@ -10,6 +11,14 @@ pub fn parse_input(line: &str) -> Option<CliCommand> {
 
     if trimmed.is_empty() {
         return None;
+    }
+
+    // Check for explicit skill invocation ($ prefix)
+    if trimmed.starts_with('$') && trimmed.len() > 1 {
+        let skill_name = trimmed[1..].split_whitespace().next().unwrap_or("");
+        if !skill_name.is_empty() {
+            return Some(CliCommand::InvokeSkill(skill_name.to_string()));
+        }
     }
 
     // Check for custom commands (/ prefix)
@@ -66,5 +75,30 @@ mod tests {
     fn ignore_empty_input() {
         assert!(parse_input("").is_none());
         assert!(parse_input("   ").is_none());
+    }
+
+    #[test]
+    fn parse_skill_invocation() {
+        assert!(matches!(
+            parse_input("$rust-testing"),
+            Some(CliCommand::InvokeSkill(_))
+        ));
+        
+        if let Some(CliCommand::InvokeSkill(name)) = parse_input("$rust-testing") {
+            assert_eq!(name, "rust-testing");
+        }
+    }
+
+    #[test]
+    fn parse_skill_invocation_ignores_trailing_text() {
+        if let Some(CliCommand::InvokeSkill(name)) = parse_input("$rust-testing help me") {
+            assert_eq!(name, "rust-testing");
+        }
+    }
+
+    #[test]
+    fn parse_empty_skill_name() {
+        // Just "$" should be treated as a message
+        assert!(matches!(parse_input("$"), Some(CliCommand::Message(_))));
     }
 }
