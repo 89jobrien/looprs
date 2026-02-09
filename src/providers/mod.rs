@@ -1,4 +1,3 @@
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::Duration;
@@ -8,6 +7,7 @@ pub mod local;
 pub mod openai;
 
 use crate::api::{ContentBlock, Message, ToolDefinition};
+use crate::errors::ProviderError;
 use crate::types::ModelId;
 use reqwest::Client;
 
@@ -16,14 +16,14 @@ pub(crate) struct ProviderHttpClient {
 }
 
 impl ProviderHttpClient {
-    pub fn new(timeout_secs: u64) -> Result<Self> {
+    pub fn new(timeout_secs: u64) -> Result<Self, ProviderError> {
         let client = Client::builder()
             .timeout(Duration::from_secs(timeout_secs))
             .build()?;
         Ok(Self { client })
     }
 
-    pub fn default() -> Result<Self> {
+    pub fn default() -> Result<Self, ProviderError> {
         Self::new(120)
     }
 
@@ -61,7 +61,7 @@ pub struct Usage {
 #[async_trait::async_trait]
 pub trait LLMProvider: Send + Sync {
     /// Run inference with the given request
-    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse>;
+    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse, ProviderError>;
 
     /// Get the name of this provider
     fn name(&self) -> &str;
@@ -70,7 +70,7 @@ pub trait LLMProvider: Send + Sync {
     fn model(&self) -> &ModelId;
 
     /// Validate that this provider is properly configured
-    fn validate_config(&self) -> Result<()>;
+    fn validate_config(&self) -> Result<(), ProviderError>;
 
     /// Whether this provider supports tool use (function calling)
     fn supports_tool_use(&self) -> bool {
@@ -90,13 +90,13 @@ pub struct ProviderOverrides {
 /// 3. Auto-detection from available API keys
 /// 4. Try local Ollama
 /// 5. Error if none found
-pub async fn create_provider() -> Result<Box<dyn LLMProvider>> {
+pub async fn create_provider() -> Result<Box<dyn LLMProvider>, ProviderError> {
     create_provider_with_overrides(ProviderOverrides::default()).await
 }
 
 pub async fn create_provider_with_overrides(
     overrides: ProviderOverrides,
-) -> Result<Box<dyn LLMProvider>> {
+) -> Result<Box<dyn LLMProvider>, ProviderError> {
     // Load .env file if available
     let _ = dotenvy::dotenv();
 
@@ -117,7 +117,8 @@ pub async fn create_provider_with_overrides(
 
     // Step 3: Try providers in priority order based on available API keys
     if env::var("ANTHROPIC_API_KEY").is_ok() {
-        let key = env::var("ANTHROPIC_API_KEY")?;
+        let key = env::var("ANTHROPIC_API_KEY")
+            .map_err(|_| ProviderError::MissingApiKey("anthropic".to_string()))?;
         let cfg_model = config_file
             .as_ref()
             .and_then(|c| c.merged_settings("anthropic").model)
@@ -130,7 +131,8 @@ pub async fn create_provider_with_overrides(
     }
 
     if env::var("OPENAI_API_KEY").is_ok() {
-        let key = env::var("OPENAI_API_KEY")?;
+        let key = env::var("OPENAI_API_KEY")
+            .map_err(|_| ProviderError::MissingApiKey("openai".to_string()))?;
         let cfg_model = config_file
             .as_ref()
             .and_then(|c| c.merged_settings("openai").model)
@@ -156,14 +158,7 @@ pub async fn create_provider_with_overrides(
     }
 
     // Step 5: Error if none found
-    anyhow::bail!(
-        "No LLM provider configured. Please set one of:\n\
-         - ANTHROPIC_API_KEY (Anthropic)\n\
-         - OPENAI_API_KEY (OpenAI)\n\
-         Or run local Ollama on localhost:11434\n\
-         Or create .looprs/provider.json with settings\n\
-         Or set PROVIDER env var to 'local' to force Ollama"
-    );
+    Err(ProviderError::NoProviderConfigured)
 }
 
 /// Create a provider by explicit name
@@ -171,11 +166,11 @@ async fn create_provider_by_name(
     name: &str,
     config_file: &Option<crate::config_file::ProviderConfig>,
     overrides: ProviderOverrides,
-) -> Result<Box<dyn LLMProvider>> {
+) -> Result<Box<dyn LLMProvider>, ProviderError> {
     match name.to_lowercase().as_str() {
         "anthropic" => {
             let key = env::var("ANTHROPIC_API_KEY")
-                .map_err(|_| anyhow::anyhow!("PROVIDER=anthropic but ANTHROPIC_API_KEY not set"))?;
+                .map_err(|_| ProviderError::MissingApiKey("anthropic".to_string()))?;
             let cfg_model = config_file
                 .as_ref()
                 .and_then(|c| c.merged_settings("anthropic").model)
@@ -188,7 +183,7 @@ async fn create_provider_by_name(
         }
         "openai" => {
             let key = env::var("OPENAI_API_KEY")
-                .map_err(|_| anyhow::anyhow!("PROVIDER=openai but OPENAI_API_KEY not set"))?;
+                .map_err(|_| ProviderError::MissingApiKey("openai".to_string()))?;
             let cfg_model = config_file
                 .as_ref()
                 .and_then(|c| c.merged_settings("openai").model)
@@ -210,7 +205,9 @@ async fn create_provider_by_name(
                 .or(cfg_model);
             Ok(Box::new(local::LocalProvider::new_with_model(model)?))
         }
-        "openrouter" => Err(anyhow::anyhow!("OpenRouter provider not yet implemented")),
-        other => Err(anyhow::anyhow!("Unknown provider: {other}")),
+        "openrouter" => Err(ProviderError::Config(
+            "OpenRouter provider not yet implemented".to_string(),
+        )),
+        other => Err(ProviderError::Config(format!("Unknown provider: {other}"))),
     }
 }

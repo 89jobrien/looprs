@@ -1,7 +1,7 @@
-use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
 use crate::api::ContentBlock;
+use crate::errors::ProviderError;
 
 use super::{InferenceRequest, InferenceResponse, LLMProvider, ProviderHttpClient, Usage};
 use crate::types::ModelId;
@@ -19,12 +19,12 @@ pub struct OpenAIProvider {
 }
 
 impl OpenAIProvider {
-    pub fn new(key: String) -> Result<Self> {
+    pub fn new(key: String) -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL").ok().map(ModelId::new);
         Self::new_with_model(key, model)
     }
 
-    pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self> {
+    pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self, ProviderError> {
         let http = ProviderHttpClient::default()?;
 
         let model = model.unwrap_or_else(ModelId::gpt_5_mini);
@@ -96,7 +96,7 @@ impl OpenAIProvider {
 
 #[async_trait::async_trait]
 impl LLMProvider for OpenAIProvider {
-    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse> {
+    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse, ProviderError> {
         let tools = req
             .tools
             .iter()
@@ -153,7 +153,9 @@ impl LLMProvider for OpenAIProvider {
         if !res.status().is_success() {
             let status = res.status();
             let err_text = res.text().await?;
-            anyhow::bail!("OpenAI API Error {status}: {err_text}");
+            return Err(ProviderError::ApiError(format!(
+                "OpenAI API Error {status}: {err_text}"
+            )));
         }
 
         let response_json: Value = res.json().await?;
@@ -162,9 +164,11 @@ impl LLMProvider for OpenAIProvider {
             .get("choices")
             .and_then(|arr| arr.as_array())
             .and_then(|arr| arr.first())
-            .context("No choices in response")?;
+            .ok_or_else(|| ProviderError::InvalidResponse("No choices in response".to_string()))?;
 
-        let message = choice.get("message").context("No message in choice")?;
+        let message = choice
+            .get("message")
+            .ok_or_else(|| ProviderError::InvalidResponse("No message in choice".to_string()))?;
 
         let mut blocks = Vec::new();
 
@@ -238,9 +242,9 @@ impl LLMProvider for OpenAIProvider {
         &self.model
     }
 
-    fn validate_config(&self) -> Result<()> {
+    fn validate_config(&self) -> Result<(), ProviderError> {
         if self.key.is_empty() {
-            anyhow::bail!("OpenAI API key is empty");
+            return Err(ProviderError::Config("OpenAI API key is empty".to_string()));
         }
         Ok(())
     }
