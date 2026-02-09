@@ -30,6 +30,37 @@ impl AppConfig {
         Ok(())
     }
 
+    pub fn set_onboarding_demo_seen(value: bool) -> anyhow::Result<()> {
+        use serde_json::{json, Value};
+
+        let path = Path::new(".looprs/config.json");
+        let mut root: Value = if path.exists() {
+            serde_json::from_str(&fs::read_to_string(path)?)?
+        } else {
+            json!({})
+        };
+
+        if !root.is_object() {
+            root = json!({});
+        }
+
+        let obj = root.as_object_mut().unwrap();
+        let onboarding = obj
+            .entry("onboarding")
+            .or_insert_with(|| json!({}));
+        if !onboarding.is_object() {
+            *onboarding = json!({});
+        }
+        onboarding
+            .as_object_mut()
+            .unwrap()
+            .insert("demo_seen".to_string(), json!(value));
+
+        fs::create_dir_all(".looprs")?;
+        fs::write(path, serde_json::to_string_pretty(&root)?)?;
+        Ok(())
+    }
+
     pub fn file_ref_policy(&self) -> FileRefPolicy {
         FileRefPolicy::from_config(&self.file_references)
     }
@@ -91,10 +122,48 @@ impl Default for OnboardingConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    struct DirGuard {
+        original: PathBuf,
+    }
+
+    impl DirGuard {
+        fn change_to(path: &std::path::Path) -> Self {
+            let original = std::env::current_dir().expect("read current dir");
+            std::env::set_current_dir(path).expect("set current dir");
+            Self { original }
+        }
+    }
+
+    impl Drop for DirGuard {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.original);
+        }
+    }
 
     #[test]
     fn onboarding_demo_seen_defaults_false() {
         let cfg = AppConfig::default();
         assert!(!cfg.onboarding.demo_seen);
+    }
+
+    #[test]
+    fn set_onboarding_demo_seen_preserves_unknown_fields() {
+        let tmp = TempDir::new().unwrap();
+        let _guard = DirGuard::change_to(tmp.path());
+        fs::create_dir_all(".looprs").unwrap();
+        fs::write(
+            ".looprs/config.json",
+            r#"{ "version": "1.0.0", "onboarding": {"demo_seen": false} }"#,
+        )
+        .unwrap();
+
+        AppConfig::set_onboarding_demo_seen(true).unwrap();
+
+        let saved = fs::read_to_string(".looprs/config.json").unwrap();
+        assert!(saved.contains("\"version\": \"1.0.0\""));
+        assert!(saved.contains("\"demo_seen\": true"));
     }
 }
