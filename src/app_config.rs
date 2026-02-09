@@ -9,6 +9,7 @@ use crate::file_refs::FileRefPolicy;
 pub struct AppConfig {
     pub defaults: DefaultsConfig,
     pub file_references: FileReferencesConfig,
+    pub onboarding: OnboardingConfig,
 }
 
 impl AppConfig {
@@ -72,5 +73,28 @@ impl Default for FileReferencesConfig {
             .map(|s| s.to_string())
             .collect(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OnboardingConfig {
+    pub demo_seen: bool,
+}
+
+impl Default for OnboardingConfig {
+    fn default() -> Self {
+        Self { demo_seen: false }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn onboarding_demo_seen_defaults_false() {
+        let cfg = AppConfig::default();
+        assert!(!cfg.onboarding.demo_seen);
     }
 }
