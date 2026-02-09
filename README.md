@@ -1,8 +1,6 @@
 # looprs
 
-A unified abstraction layer for agentic AI. Looprs gives you a REPL that talks to LLMs (Claude, GPT, local models) and provides consistent interfaces for extending it with **commands** (`/`), **skills** (`$`), **agents**, **rules**, **hooks**, and **file references** (`@`).
-
-Think of it as: LLM + tools + extensibility framework = everything you need to build agents.
+Agents are still just LLMs running tools in a loop until a condition is met. That is how I will continue to treat them until the paradigm shifts. `looprs` is a dumb name but is also a kit providing: LLMs, tools, loops, and conditions to meet.  It ain't much but it doesn't have some convoluted markdown file parsing progressive disclosure system that everybody seems to somehow do differently. Like wtf? `looprs` provides consistent interfaces for extending with custom slash commands that function like commands (`/`), skills are the standard (imo, legacy) markdown utilizing progressive disclosure (`$`), agents, rules, file references(`@`), and lots o' hooks. LLMs are an invaluable assistant for me and responsible for getting this monstrosity to compile. 
 
 ## Install
 
