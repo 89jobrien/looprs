@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Skill loader** - Load skills following Anthropic Agent Skills standard
+  - YAML frontmatter parsing (name, description, triggers)
+  - `$skill-name` syntax for explicit skill invocation
+  - Auto-triggering: skills activate when user message contains trigger keywords
+  - Case-insensitive substring matching with OR logic
+  - Dual-source loading (user ~/.looprs/skills/ + repo .looprs/skills/)
+  - Repo skills override user skills (same precedence as hooks/commands)
+  - Recursive directory scanning for SKILL.md files
+  - Graceful error handling (skip invalid files, continue loading)
+  - Visual feedback (emoji indicator + skill names)
+  - Skill content injection into LLM context
+  - 17 passing tests (parser: 5, loader: 8, registry: 4)
+  - 8 CLI parsing tests for $ syntax
+- Created example skills in `.looprs/skills/examples/`
+  - `rust-testing` - Guide for writing Rust tests
+  - `rust-error-handling` - Error handling with Result types (with bundled resources)
+
 ### Changed
 - **Skills architecture redesign** - Aligned with Anthropic Agent Skills standard
   - Changed from JSON/progressive-learning format to SKILL.md with YAML frontmatter
@@ -87,6 +105,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Agent now has public ObservationManager for accessing captured observations
 
 ### Technical
+- Created `src/skills/` module for skill loading:
+  - `mod.rs` - Skill struct and SkillRegistry with trigger matching
+  - `parser.rs` - YAML frontmatter parsing with validation
+  - `loader.rs` - Recursive directory scanning with dual-source precedence
+- Added `walkdir` dependency (v2.5) for directory traversal
+- Updated `src/bin/looprs/cli.rs` to parse `$skill-name` syntax
+- Updated `src/bin/looprs/main.rs` for skill loading and auto-triggering
 - Created `src/providers/` module with:
   - `mod.rs` - Trait definition and factory function
   - `anthropic.rs` - Anthropic provider implementation
