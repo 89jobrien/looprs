@@ -134,4 +134,10 @@ actions:
             _ => panic!("Expected SetConfig action"),
         }
     }
+
+    #[test]
+    fn demo_onboarding_hook_parses() {
+        let hook = parse_hook(std::path::Path::new(".looprs/hooks/demo_onboarding.yaml")).unwrap();
+        assert_eq!(hook.name, "demo_onboarding");
+    }
 }

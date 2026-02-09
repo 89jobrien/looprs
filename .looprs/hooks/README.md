@@ -19,6 +19,16 @@ Repo-level hooks loaded from `.looprs/hooks/*.yaml`. Repo hooks override user ho
   - command: `git --no-pager log -1 --oneline` (injects `last_commit`)
   - command: `git --no-pager status --short` (requires approval, injects `git_status`)
 
+### `demo_onboarding.yaml`
+- **name**: `demo_onboarding`
+- **trigger**: `SessionStart`
+- **actions**:
+  - message: intro text (session-only keys)
+  - confirm: skip onboarding
+  - confirm + secret_prompt + set_env for Anthropic/OpenAI
+  - conditional local provider step (Ollama)
+  - set_config: `onboarding.demo_seen = true`
+
 ## Format (YAML)
 
 ```yaml

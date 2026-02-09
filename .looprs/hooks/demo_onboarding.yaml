@@ -1,0 +1,61 @@
+name: demo_onboarding
+trigger: SessionStart
+condition: config_flag:onboarding.demo_seen=false
+actions:
+  - type: message
+    text: "Welcome to the demo onboarding wizard. Keys are session-only; we'll show how to persist them."
+  - type: confirm
+    prompt: "Skip onboarding and disable for future sessions?"
+    set_key: skip_onboarding
+  - type: conditional
+    condition: equals:skip_onboarding:true
+    then:
+      - type: set_config
+        path: onboarding.demo_seen
+        value: true
+      - type: message
+        text: "Onboarding disabled. You can re-enable by setting onboarding.demo_seen=false in .looprs/config.json."
+  - type: conditional
+    condition: equals:skip_onboarding:false
+    then:
+      - type: confirm
+        prompt: "Set up Anthropic now?"
+        set_key: use_anthropic
+      - type: conditional
+        condition: equals:use_anthropic:true
+        then:
+          - type: secret_prompt
+            prompt: "Enter ANTHROPIC_API_KEY"
+            set_key: anthropic_key
+          - type: set_env
+            name: ANTHROPIC_API_KEY
+            from_key: anthropic_key
+          - type: message
+            text: "To persist: export ANTHROPIC_API_KEY=... in your shell profile."
+      - type: confirm
+        prompt: "Set up OpenAI now?"
+        set_key: use_openai
+      - type: conditional
+        condition: equals:use_openai:true
+        then:
+          - type: secret_prompt
+            prompt: "Enter OPENAI_API_KEY"
+            set_key: openai_key
+          - type: set_env
+            name: OPENAI_API_KEY
+            from_key: openai_key
+          - type: message
+            text: "To persist: export OPENAI_API_KEY=... or set it in .env." 
+      - type: conditional
+        condition: has_tool:ollama
+        then:
+          - type: confirm
+            prompt: "Use local provider (Ollama)?"
+            set_key: use_local
+          - type: message
+            text: "To persist: export PROVIDER=local and MODEL=..."
+      - type: message
+        text: "You can switch providers with :set provider <name> or :set llm <provider>/<model>."
+      - type: set_config
+        path: onboarding.demo_seen
+        value: true
