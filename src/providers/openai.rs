@@ -32,6 +32,17 @@ impl OpenAIProvider {
         Ok(Self { http, key, model })
     }
 
+    /// Check if a model is a reasoning model (o1, o3 series)
+    fn is_reasoning_model(model: &str) -> bool {
+        model.starts_with("o1") || model.starts_with("o3")
+    }
+
+    /// Check if a model supports temperature parameter
+    fn supports_temperature(model: &str) -> bool {
+        // Reasoning models don't support temperature
+        !Self::is_reasoning_model(model)
+    }
+
     fn convert_to_openai_messages(msg: &crate::api::Message) -> Vec<Value> {
         let mut messages = Vec::new();
         let mut text_parts = Vec::new();
@@ -112,11 +123,13 @@ impl LLMProvider for OpenAIProvider {
             })
             .collect::<Vec<_>>();
 
-        // GPT-5+ and newer GPT-4 models use max_completion_tokens instead of max_tokens
+        // GPT-5+, newer GPT-4, and reasoning models use max_completion_tokens instead of max_tokens
         let model = req.model.as_str();
+        let is_reasoning = Self::is_reasoning_model(model);
         let uses_completion_tokens = model.starts_with("gpt-5")
             || model.starts_with("gpt-4o")
-            || model.starts_with("gpt-4-turbo-2024");
+            || model.starts_with("gpt-4-turbo-2024")
+            || is_reasoning;
 
         let mut body = json!({
             "model": req.model.as_str(),
@@ -139,8 +152,12 @@ impl LLMProvider for OpenAIProvider {
         } else {
             body["max_tokens"] = json!(req.max_tokens);
         }
-        if let Some(temp) = req.temperature {
-            body["temperature"] = json!(temp);
+
+        // Only send temperature if the model supports it and user specified it
+        if Self::supports_temperature(model) {
+            if let Some(temp) = req.temperature {
+                body["temperature"] = json!(temp);
+            }
         }
 
         let res = self
@@ -250,5 +267,32 @@ impl LLMProvider for OpenAIProvider {
             return Err(ProviderError::Config("OpenAI API key is empty".to_string()));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_reasoning_model() {
+        assert!(OpenAIProvider::is_reasoning_model("o1-preview"));
+        assert!(OpenAIProvider::is_reasoning_model("o1-mini"));
+        assert!(OpenAIProvider::is_reasoning_model("o3-mini"));
+        assert!(!OpenAIProvider::is_reasoning_model("gpt-4"));
+        assert!(!OpenAIProvider::is_reasoning_model("gpt-5"));
+    }
+
+    #[test]
+    fn test_supports_temperature() {
+        // Reasoning models don't support temperature
+        assert!(!OpenAIProvider::supports_temperature("o1-preview"));
+        assert!(!OpenAIProvider::supports_temperature("o1-mini"));
+        assert!(!OpenAIProvider::supports_temperature("o3-mini"));
+
+        // Other models support temperature
+        assert!(OpenAIProvider::supports_temperature("gpt-4"));
+        assert!(OpenAIProvider::supports_temperature("gpt-5"));
+        assert!(OpenAIProvider::supports_temperature("gpt-4o"));
     }
 }

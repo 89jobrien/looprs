@@ -46,7 +46,7 @@ impl Default for DefaultsConfig {
     fn default() -> Self {
         Self {
             max_context_tokens: Some(8192),
-            temperature: Some(0.7),
+            temperature: Some(0.2),
             timeout_seconds: Some(120),
         }
     }
