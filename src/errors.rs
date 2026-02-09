@@ -37,4 +37,7 @@ pub enum AgentError {
 
     #[error("Provider error: {0}")]
     Provider(#[from] ProviderError),
+
+    #[error("Provider request timed out")]
+    Timeout,
 }

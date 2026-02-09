@@ -36,6 +36,10 @@ impl SkillRegistry {
         self.skills.iter().find(|s| s.name == name)
     }
 
+    pub fn list(&self) -> Vec<&Skill> {
+        self.skills.iter().collect()
+    }
+
     /// Find skills with triggers matching the input (case-insensitive substring)
     pub fn find_matching(&self, input: &str) -> Vec<&Skill> {
         let input_lower = input.to_lowercase();
@@ -134,4 +138,3 @@ mod tests {
         assert_eq!(matches.len(), 2);
     }
 }
-

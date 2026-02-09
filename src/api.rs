@@ -78,7 +78,7 @@ mod tests {
         
         match &msg.content[0] {
             ContentBlock::Text { text } => assert_eq!(text, "Hello world"),
-            _ => panic!("Expected Text content block"),
+            other => panic!("Expected Text content block, got: {other:?}"),
         }
     }
 
@@ -88,7 +88,7 @@ mod tests {
         assert_eq!(msg.role, "user");
         match &msg.content[0] {
             ContentBlock::Text { text } => assert_eq!(text, "Test"),
-            _ => panic!("Expected Text content block"),
+            other => panic!("Expected Text content block, got: {other:?}"),
         }
     }
 
@@ -126,7 +126,7 @@ mod tests {
                 assert_eq!(tool_use_id.as_str(), "tool_1");
                 assert_eq!(content, "File contents");
             }
-            _ => panic!("Expected ToolResult content block"),
+            other => panic!("Expected ToolResult content block, got: {other:?}"),
         }
     }
 
@@ -136,7 +136,7 @@ mod tests {
             text: "Hello".to_string(),
         };
         
-        let json = serde_json::to_value(&block).unwrap();
+        let json = serde_json::to_value(&block).expect("serialize ContentBlock");
         assert_eq!(json["type"], "text");
         assert_eq!(json["text"], "Hello");
     }
@@ -149,7 +149,7 @@ mod tests {
             input: json!({"command": "ls"}),
         };
         
-        let json = serde_json::to_value(&block).unwrap();
+        let json = serde_json::to_value(&block).expect("serialize ContentBlock");
         assert_eq!(json["type"], "tool_use");
         assert_eq!(json["id"], "123");
         assert_eq!(json["name"], "bash");
@@ -163,7 +163,7 @@ mod tests {
             content: "output".to_string(),
         };
         
-        let json = serde_json::to_value(&block).unwrap();
+        let json = serde_json::to_value(&block).expect("serialize ContentBlock");
         assert_eq!(json["type"], "tool_result");
         assert_eq!(json["tool_use_id"], "123");
         assert_eq!(json["content"], "output");
@@ -176,18 +176,18 @@ mod tests {
             "text": "Hello"
         });
         
-        let block: ContentBlock = serde_json::from_value(json).unwrap();
+        let block: ContentBlock = serde_json::from_value(json).expect("deserialize ContentBlock");
         match block {
             ContentBlock::Text { text } => assert_eq!(text, "Hello"),
-            _ => panic!("Expected Text block"),
+            other => panic!("Expected Text block, got: {other:?}"),
         }
     }
 
     #[test]
     fn test_message_serialization_roundtrip() {
         let original = Message::user("Test message");
-        let json = serde_json::to_string(&original).unwrap();
-        let deserialized: Message = serde_json::from_str(&json).unwrap();
+        let json = serde_json::to_string(&original).expect("serialize Message");
+        let deserialized: Message = serde_json::from_str(&json).expect("deserialize Message");
         
         assert_eq!(deserialized.role, "user");
         assert_eq!(deserialized.content.len(), 1);
@@ -206,7 +206,7 @@ mod tests {
             }),
         };
         
-        let json = serde_json::to_value(&tool).unwrap();
+        let json = serde_json::to_value(&tool).expect("serialize ToolDefinition");
         assert_eq!(json["name"], "read");
         assert_eq!(json["description"], "Read a file");
         assert_eq!(json["input_schema"]["type"], "object");
@@ -230,12 +230,12 @@ mod tests {
         
         match &msg.content[0] {
             ContentBlock::Text { text } => assert!(text.contains("read")),
-            _ => panic!("Expected Text block first"),
+            other => panic!("Expected Text block first, got: {other:?}"),
         }
         
         match &msg.content[1] {
             ContentBlock::ToolUse { name, .. } => assert_eq!(name.as_str(), "read"),
-            _ => panic!("Expected ToolUse block second"),
+            other => panic!("Expected ToolUse block second, got: {other:?}"),
         }
     }
 }

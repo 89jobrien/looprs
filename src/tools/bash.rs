@@ -43,7 +43,7 @@ mod tests {
     #[test]
     fn bash_runs_command() {
         let args = json!({"cmd": "echo ok"});
-        let out = tool_bash(&args).unwrap();
+        let out = tool_bash(&args).expect("bash tool should run");
         assert!(out.contains("ok"));
     }
 }

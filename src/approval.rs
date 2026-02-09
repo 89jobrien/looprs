@@ -5,7 +5,11 @@ use std::io::{self, Write};
 /// Returns true if approved, false if declined
 pub fn console_approval_prompt(message: &str) -> bool {
     print!("🔒 Approval required: {message} [y/N] ");
-    io::stdout().flush().unwrap();
+
+    // If flushing stdout fails, treat as non-approved (non-fatal, best-effort UI).
+    if io::stdout().flush().is_err() {
+        return false;
+    }
 
     let mut input = String::new();
     if io::stdin().read_line(&mut input).is_err() {

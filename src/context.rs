@@ -125,9 +125,7 @@ mod tests {
             kan_status: None,
         };
 
-        let formatted = ctx.format_for_prompt();
-        assert!(formatted.is_some());
-        let text = formatted.unwrap();
+        let text = ctx.format_for_prompt().expect("expected formatted prompt");
         assert!(text.contains("main"));
         assert!(text.contains("abc123"));
     }
@@ -146,9 +144,7 @@ mod tests {
             kan_status: None,
         };
 
-        let formatted = ctx.format_for_prompt();
-        assert!(formatted.is_some());
-        let text = formatted.unwrap();
+        let text = ctx.format_for_prompt().expect("expected formatted prompt");
         assert!(text.contains("Test issue"));
         assert!(text.contains("high"));
     }

@@ -30,7 +30,7 @@ impl AnthropicProvider {
 #[async_trait::async_trait]
 impl LLMProvider for AnthropicProvider {
     async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse, ProviderError> {
-        let body = json!({
+        let mut body = json!({
             "model": req.model.as_str(),
             "max_tokens": req.max_tokens,
             "system": req.system,
@@ -44,6 +44,9 @@ impl LLMProvider for AnthropicProvider {
                 }))
                 .collect::<Vec<_>>(),
         });
+        if let Some(temp) = req.temperature {
+            body["temperature"] = json!(temp);
+        }
 
         let res = self
             .http

@@ -1,5 +1,6 @@
 use crate::api::ContentBlock;
 use crate::api::Message;
+use crate::app_config::DefaultsConfig;
 use crate::errors::AgentError;
 use crate::events::{Event, EventContext, EventManager};
 use crate::hooks::HookExecutor;
@@ -9,6 +10,14 @@ use crate::providers::InferenceRequest;
 use crate::providers::LLMProvider;
 use crate::tools::{ToolContext, execute_tool, get_tool_definitions};
 use crate::ui;
+use crate::file_refs::FileRefPolicy;
+use tokio::time::{Duration, timeout};
+
+#[derive(Debug, Clone, Default)]
+pub struct RuntimeSettings {
+    pub defaults: DefaultsConfig,
+    pub max_tokens_override: Option<u32>,
+}
 
 pub struct Agent {
     provider: Box<dyn LLMProvider>,
@@ -17,10 +26,20 @@ pub struct Agent {
     pub events: EventManager,
     pub observations: ObservationManager,
     pub hooks: HookRegistry,
+    runtime: RuntimeSettings,
+    file_ref_policy: FileRefPolicy,
 }
 
 impl Agent {
     pub fn new(provider: Box<dyn LLMProvider>) -> Result<Self, AgentError> {
+        Self::new_with_runtime(provider, RuntimeSettings::default(), FileRefPolicy::default())
+    }
+
+    pub fn new_with_runtime(
+        provider: Box<dyn LLMProvider>,
+        runtime: RuntimeSettings,
+        file_ref_policy: FileRefPolicy,
+    ) -> Result<Self, AgentError> {
         Ok(Self {
             provider,
             messages: Vec::new(),
@@ -28,6 +47,8 @@ impl Agent {
             events: EventManager::new(),
             observations: ObservationManager::new(),
             hooks: HookRegistry::new(),
+            runtime,
+            file_ref_policy,
         })
     }
 
@@ -36,12 +57,28 @@ impl Agent {
         self
     }
 
+    pub fn set_provider(&mut self, provider: Box<dyn LLMProvider>) {
+        self.provider = provider;
+    }
+
+    pub fn set_runtime_settings(&mut self, runtime: RuntimeSettings) {
+        self.runtime = runtime;
+    }
+
+    pub fn set_file_ref_policy(&mut self, policy: FileRefPolicy) {
+        self.file_ref_policy = policy;
+    }
+
     pub fn add_user_message(&mut self, text: impl Into<String>) {
         let text_str = text.into();
         
         // Resolve file references (@filename) if present
         let resolved = if crate::file_refs::has_file_references(&text_str) {
-            match crate::file_refs::resolve_file_references(&text_str, &self.tool_ctx.working_dir) {
+            match crate::file_refs::resolve_file_references(
+                &text_str,
+                &self.tool_ctx.working_dir,
+                &self.file_ref_policy,
+            ) {
                 Ok(resolved_text) => resolved_text,
                 Err(e) => {
                     ui::warn(format!("Warning: Error resolving file references: {e}"));
@@ -57,6 +94,10 @@ impl Agent {
 
     pub fn clear_history(&mut self) {
         self.messages.clear();
+    }
+
+    pub fn working_dir(&self) -> &std::path::Path {
+        &self.tool_ctx.working_dir
     }
 
     pub fn execute_hooks_for_event(&self, event: &Event, context: &EventContext) -> EventContext {
@@ -137,16 +178,30 @@ impl Agent {
         }
 
         loop {
-            let max_tokens = self.provider.model().max_tokens();
+            let mut max_tokens = self.provider.model().max_tokens();
+            if let Some(override_tokens) = self.runtime.max_tokens_override {
+                max_tokens = max_tokens.min(override_tokens);
+            }
+            if let Some(max_context) = self.runtime.defaults.max_context_tokens {
+                max_tokens = max_tokens.min(max_context);
+            }
             let req = InferenceRequest {
                 model: self.provider.model().clone(),
                 messages: self.messages.clone(),
                 tools: get_tool_definitions(),
                 max_tokens,
+                temperature: self.runtime.defaults.temperature,
                 system: system_prompt.clone(),
             };
 
-            let response = self.provider.infer(&req).await?;
+            let response = if let Some(timeout_secs) = self.runtime.defaults.timeout_seconds {
+                match timeout(Duration::from_secs(timeout_secs), self.provider.infer(&req)).await {
+                    Ok(res) => res?,
+                    Err(_) => return Err(AgentError::Timeout),
+                }
+            } else {
+                self.provider.infer(&req).await?
+            };
 
             // Fire InferenceComplete event
             let event_ctx = EventContext::new();

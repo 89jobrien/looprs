@@ -139,6 +139,9 @@ impl LLMProvider for OpenAIProvider {
         } else {
             body["max_tokens"] = json!(req.max_tokens);
         }
+        if let Some(temp) = req.temperature {
+            body["temperature"] = json!(temp);
+        }
 
         let res = self
             .http

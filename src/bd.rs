@@ -83,7 +83,7 @@ mod tests {
         let result = parse_bd_issues(json);
         assert!(result.is_some());
 
-        let issues = result.unwrap();
+        let issues = result.expect("expected parsed bd issues");
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].id, "1");
         assert_eq!(issues[0].title, "test issue");
@@ -96,7 +96,7 @@ mod tests {
         let result = parse_bd_issues(json);
         assert!(result.is_some());
 
-        let issues = result.unwrap();
+        let issues = result.expect("expected parsed bd issues");
         assert_eq!(issues.len(), 2);
         assert_eq!(issues[0].title, "issue 1");
         assert_eq!(issues[1].priority, Some("high".to_string()));

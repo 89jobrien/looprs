@@ -39,6 +39,7 @@ pub struct InferenceRequest {
     pub messages: Vec<Message>,
     pub tools: Vec<ToolDefinition>,
     pub max_tokens: u32,
+    pub temperature: Option<f32>,
     pub system: String,
 }
 

@@ -82,7 +82,7 @@ mod tests {
         let result = parse_kan_status(json);
         assert!(result.is_some());
 
-        let status = result.unwrap();
+        let status = result.expect("expected parsed kan status");
         assert_eq!(status.total_tasks, 5);
         assert_eq!(status.by_column.len(), 2);
         assert_eq!(status.by_column[0].name, "todo");

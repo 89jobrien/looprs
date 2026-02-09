@@ -1,9 +1,47 @@
 use anyhow::{Context, Result};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+use crate::app_config::FileReferencesConfig;
+
+const DEFAULT_MAX_DIR_ENTRIES: usize = 200;
+
+#[derive(Debug, Clone)]
+pub struct FileRefPolicy {
+    allowed_extensions: Vec<String>,
+    max_size_bytes: u64,
+}
+
+impl FileRefPolicy {
+    pub fn from_config(config: &FileReferencesConfig) -> Self {
+        Self {
+            allowed_extensions: config
+                .allowed_extensions
+                .iter()
+                .map(|s| s.to_lowercase())
+                .collect(),
+            max_size_bytes: config.max_size_mb.saturating_mul(1024 * 1024),
+        }
+    }
+
+    pub fn default_policy() -> Self {
+        let defaults = FileReferencesConfig::default();
+        Self::from_config(&defaults)
+    }
+}
+
+impl Default for FileRefPolicy {
+    fn default() -> Self {
+        Self::default_policy()
+    }
+}
 
 /// Resolve file references in text (e.g., @file.rs -> file contents)
-pub fn resolve_file_references(text: &str, base_dir: &Path) -> Result<String> {
+pub fn resolve_file_references(
+    text: &str,
+    base_dir: &Path,
+    policy: &FileRefPolicy,
+) -> Result<String> {
     let mut result = String::new();
     let mut last_end = 0;
 
@@ -13,7 +51,7 @@ pub fn resolve_file_references(text: &str, base_dir: &Path) -> Result<String> {
         result.push_str(&text[last_end..start]);
 
         // Resolve the reference
-        match resolve_reference(&reference, base_dir) {
+        match resolve_reference(&reference, base_dir, policy) {
             Ok(content) => {
                 result.push_str(&format!("\n```\n// File: {reference}\n{content}\n```\n"));
             }
@@ -84,7 +122,7 @@ fn find_file_references(text: &str) -> Vec<(usize, String)> {
 }
 
 /// Resolve a single file reference
-fn resolve_reference(filename: &str, base_dir: &Path) -> Result<String> {
+fn resolve_reference(filename: &str, base_dir: &Path, policy: &FileRefPolicy) -> Result<String> {
     let path = base_dir.join(filename);
 
     // Security: prevent path traversal attacks
@@ -100,11 +138,85 @@ fn resolve_reference(filename: &str, base_dir: &Path) -> Result<String> {
         anyhow::bail!("Access denied: {filename} is outside working directory");
     }
 
-    // Read file contents
-    let content = fs::read_to_string(&canonical)
+    if canonical.is_dir() {
+        return list_directory(&canonical);
+    }
+
+    let metadata = fs::metadata(&canonical)
+        .with_context(|| format!("Failed to read file metadata: {filename}"))?;
+    if metadata.len() > policy.max_size_bytes {
+        anyhow::bail!("File too large: {filename}");
+    }
+
+    let ext = canonical
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_lowercase())
+        .unwrap_or_default();
+    if !ext.is_empty() && !policy.allowed_extensions.contains(&ext) {
+        anyhow::bail!("Unsupported file type: {filename}");
+    }
+
+    let bytes = fs::read(&canonical)
         .with_context(|| format!("Failed to read file: {filename}"))?;
+    let content = String::from_utf8(bytes)
+        .with_context(|| format!("File is not valid UTF-8: {filename}"))?;
 
     Ok(content)
+}
+
+pub fn resolve_at_reference(
+    reference: &str,
+    base_dir: &Path,
+    policy: &FileRefPolicy,
+) -> Result<AtReference> {
+    let path = base_dir.join(reference);
+    let canonical = path
+        .canonicalize()
+        .with_context(|| format!("File not found: {reference}"))?;
+
+    let base_canonical = base_dir
+        .canonicalize()
+        .unwrap_or_else(|_| base_dir.to_path_buf());
+    if !canonical.starts_with(&base_canonical) {
+        anyhow::bail!("Access denied: {reference} is outside working directory");
+    }
+
+    if canonical.is_dir() {
+        let listing = list_directory(&canonical)?;
+        return Ok(AtReference::Directory(listing));
+    }
+
+    let content = resolve_reference(reference, base_dir, policy)?;
+    Ok(AtReference::File(content))
+}
+
+#[derive(Debug, Clone)]
+pub enum AtReference {
+    Directory(String),
+    File(String),
+}
+
+fn list_directory(path: &PathBuf) -> Result<String> {
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let name = entry
+            .file_name()
+            .to_string_lossy()
+            .to_string();
+        if file_type.is_dir() {
+            entries.push(format!("{name}/"));
+        } else {
+            entries.push(name);
+        }
+    }
+    entries.sort();
+    if entries.len() > DEFAULT_MAX_DIR_ENTRIES {
+        entries.truncate(DEFAULT_MAX_DIR_ENTRIES);
+    }
+    Ok(entries.join("\n"))
 }
 
 /// Check if text contains any file references
@@ -172,7 +284,8 @@ mod tests {
         create_test_file(temp_dir.path(), "test.txt", "Hello, world!");
 
         let input = "Check @test.txt please";
-        let result = resolve_file_references(input, temp_dir.path()).unwrap();
+        let result =
+            resolve_file_references(input, temp_dir.path(), &FileRefPolicy::default()).unwrap();
 
         assert!(result.contains("Hello, world!"));
         assert!(result.contains("// File: test.txt"));
@@ -185,7 +298,8 @@ mod tests {
         create_test_file(temp_dir.path(), "file2.txt", "Content 2");
 
         let input = "Compare @file1.txt and @file2.txt";
-        let result = resolve_file_references(input, temp_dir.path()).unwrap();
+        let result =
+            resolve_file_references(input, temp_dir.path(), &FileRefPolicy::default()).unwrap();
 
         assert!(result.contains("Content 1"));
         assert!(result.contains("Content 2"));
@@ -197,7 +311,8 @@ mod tests {
         create_test_file(temp_dir.path(), "src/lib.rs", "pub fn main() {}");
 
         let input = "Review @src/lib.rs";
-        let result = resolve_file_references(input, temp_dir.path()).unwrap();
+        let result =
+            resolve_file_references(input, temp_dir.path(), &FileRefPolicy::default()).unwrap();
 
         assert!(result.contains("pub fn main()"));
     }
@@ -207,7 +322,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
 
         let input = "Check @nonexistent.txt";
-        let result = resolve_file_references(input, temp_dir.path()).unwrap();
+        let result =
+            resolve_file_references(input, temp_dir.path(), &FileRefPolicy::default()).unwrap();
 
         // Should keep the original reference when file not found
         assert!(result.contains("@nonexistent.txt"));
@@ -233,7 +349,11 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
 
         // Try to escape the working directory
-        let result = resolve_reference("../../../etc/passwd", temp_dir.path());
+        let result = resolve_reference(
+            "../../../etc/passwd",
+            temp_dir.path(),
+            &FileRefPolicy::default(),
+        );
         assert!(result.is_err());
     }
 

@@ -2,7 +2,9 @@ pub enum CliCommand {
     Quit,
     Clear,
     CustomCommand(String), // Custom command from .looprs/commands/
-    InvokeSkill(String),   // Explicit skill invocation: $skill-name
+    InvokeSkill(String, Option<String>), // Explicit skill invocation: $skill-name
+    ColonCommand(String),  // Command-line settings: :set/:get/:unset/:help
+    FileRef(String),       // @path or @uri
     Message(String),
 }
 
@@ -15,10 +17,26 @@ pub fn parse_input(line: &str) -> Option<CliCommand> {
 
     // Check for explicit skill invocation ($ prefix)
     if trimmed.starts_with('$') && trimmed.len() > 1 {
-        let skill_name = trimmed[1..].split_whitespace().next().unwrap_or("");
+        let mut parts = trimmed[1..].split_whitespace();
+        let skill_name = parts.next().unwrap_or("");
         if !skill_name.is_empty() {
-            return Some(CliCommand::InvokeSkill(skill_name.to_string()));
+            let trailing = parts.collect::<Vec<_>>().join(" ");
+            let trailing = if trailing.is_empty() { None } else { Some(trailing) };
+            return Some(CliCommand::InvokeSkill(skill_name.to_string(), trailing));
         }
+    }
+
+    // Check for colon commands (: prefix)
+    if trimmed.starts_with(':') && trimmed.len() > 1 {
+        let command = trimmed[1..].trim();
+        if !command.is_empty() {
+            return Some(CliCommand::ColonCommand(command.to_string()));
+        }
+    }
+
+    // Check for @path references (standalone)
+    if trimmed.starts_with('@') && trimmed.len() > 1 && !trimmed.contains(char::is_whitespace) {
+        return Some(CliCommand::FileRef(trimmed[1..].to_string()));
     }
 
     // Check for custom commands (/ prefix)
@@ -81,18 +99,19 @@ mod tests {
     fn parse_skill_invocation() {
         assert!(matches!(
             parse_input("$rust-testing"),
-            Some(CliCommand::InvokeSkill(_))
+            Some(CliCommand::InvokeSkill(_, _))
         ));
         
-        if let Some(CliCommand::InvokeSkill(name)) = parse_input("$rust-testing") {
+        if let Some(CliCommand::InvokeSkill(name, _)) = parse_input("$rust-testing") {
             assert_eq!(name, "rust-testing");
         }
     }
 
     #[test]
     fn parse_skill_invocation_ignores_trailing_text() {
-        if let Some(CliCommand::InvokeSkill(name)) = parse_input("$rust-testing help me") {
+        if let Some(CliCommand::InvokeSkill(name, trailing)) = parse_input("$rust-testing help me") {
             assert_eq!(name, "rust-testing");
+            assert_eq!(trailing, Some("help me".to_string()));
         }
     }
 
@@ -100,5 +119,21 @@ mod tests {
     fn parse_empty_skill_name() {
         // Just "$" should be treated as a message
         assert!(matches!(parse_input("$"), Some(CliCommand::Message(_))));
+    }
+
+    #[test]
+    fn parse_colon_command() {
+        assert!(matches!(
+            parse_input(":set provider openai"),
+            Some(CliCommand::ColonCommand(_))
+        ));
+    }
+
+    #[test]
+    fn parse_file_ref() {
+        assert!(matches!(
+            parse_input("@src/main.rs"),
+            Some(CliCommand::FileRef(_))
+        ));
     }
 }

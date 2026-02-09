@@ -108,11 +108,14 @@ impl LLMProvider for LocalProvider {
 
         messages.extend(req.messages.iter().map(Self::convert_to_ollama_message));
 
-        let body = json!({
+        let mut body = json!({
             "model": req.model.as_str(),
             "messages": messages,
             "stream": false,
         });
+        if let Some(temp) = req.temperature {
+            body["options"] = json!({ "temperature": temp });
+        }
 
         let res = self
             .client
