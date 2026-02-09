@@ -209,3 +209,194 @@ impl Agent {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::{InferenceResponse, Usage};
+    use crate::hooks::Hook;
+    use serde_json::json;
+
+    // Mock provider for testing
+    struct MockProvider {
+        model: String,
+        responses: Vec<InferenceResponse>,
+        call_count: std::sync::Arc<std::sync::Mutex<usize>>,
+    }
+
+    impl MockProvider {
+        fn new(responses: Vec<InferenceResponse>) -> Self {
+            Self {
+                model: "mock-model".to_string(),
+                responses,
+                call_count: std::sync::Arc::new(std::sync::Mutex::new(0)),
+            }
+        }
+
+        fn simple_text(text: &str) -> Self {
+            Self::new(vec![InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: text.to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 10,
+                    output_tokens: 20,
+                },
+            }])
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl LLMProvider for MockProvider {
+        async fn infer(&self, _req: InferenceRequest) -> Result<InferenceResponse> {
+            let mut count = self.call_count.lock().unwrap();
+            let idx = *count;
+            *count += 1;
+
+            if idx < self.responses.len() {
+                Ok(self.responses[idx].clone())
+            } else {
+                // Default response if we run out
+                Ok(InferenceResponse {
+                    content: vec![ContentBlock::Text {
+                        text: "default response".to_string(),
+                    }],
+                    stop_reason: "end_turn".to_string(),
+                    usage: Usage {
+                        input_tokens: 0,
+                        output_tokens: 0,
+                    },
+                })
+            }
+        }
+
+        fn name(&self) -> &str {
+            "mock"
+        }
+
+        fn model(&self) -> &str {
+            &self.model
+        }
+
+        fn validate_config(&self) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_agent_new() {
+        let provider = MockProvider::simple_text("test");
+        let agent = Agent::new(Box::new(provider));
+        assert!(agent.is_ok());
+    }
+
+    #[test]
+    fn test_agent_add_user_message() {
+        let provider = MockProvider::simple_text("test");
+        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        
+        agent.add_user_message("Hello");
+        assert_eq!(agent.messages.len(), 1);
+        assert_eq!(agent.messages[0].role, "user");
+    }
+
+    #[test]
+    fn test_agent_add_multiple_messages() {
+        let provider = MockProvider::simple_text("test");
+        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        
+        agent.add_user_message("First");
+        agent.add_user_message("Second");
+        assert_eq!(agent.messages.len(), 2);
+    }
+
+    #[test]
+    fn test_agent_clear_history() {
+        let provider = MockProvider::simple_text("test");
+        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        
+        agent.add_user_message("Test");
+        assert_eq!(agent.messages.len(), 1);
+        
+        agent.clear_history();
+        assert_eq!(agent.messages.len(), 0);
+    }
+
+    #[test]
+    fn test_agent_with_hooks() {
+        let provider = MockProvider::simple_text("test");
+        let hooks = HookRegistry::new();
+        
+        let agent = Agent::new(Box::new(provider))
+            .unwrap()
+            .with_hooks(hooks);
+        
+        // Just verify it works
+        assert_eq!(agent.messages.len(), 0);
+    }
+
+    #[test]
+    fn test_execute_hooks_for_event_no_hooks() {
+        let provider = MockProvider::simple_text("test");
+        let agent = Agent::new(Box::new(provider)).unwrap();
+        
+        let ctx = EventContext::new().with_user_message("test".to_string());
+        let enriched = agent.execute_hooks_for_event(&Event::SessionStart, &ctx);
+        
+        // Should return unchanged context
+        assert!(enriched.metadata.is_empty());
+    }
+
+    #[test]
+    fn test_execute_hooks_for_event_with_hooks() {
+        let provider = MockProvider::simple_text("test");
+        
+        // Create a hook registry (empty is fine, we're just testing it doesn't crash)
+        let hooks = HookRegistry::new();
+        
+        let agent = Agent::new(Box::new(provider))
+            .unwrap()
+            .with_hooks(hooks);
+        
+        let ctx = EventContext::new();
+        let enriched = agent.execute_hooks_for_event(&Event::SessionStart, &ctx);
+        
+        // Should work even with no hooks
+        assert!(enriched.metadata.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_run_turn_simple() {
+        let provider = MockProvider::simple_text("Hello response");
+        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        
+        agent.add_user_message("Hello");
+        let result = agent.run_turn().await;
+        
+        assert!(result.is_ok());
+        // Should have user message + assistant response
+        assert_eq!(agent.messages.len(), 2);
+        assert_eq!(agent.messages[1].role, "assistant");
+    }
+
+    #[test]
+    fn test_observation_manager_initialized() {
+        let provider = MockProvider::simple_text("test");
+        let agent = Agent::new(Box::new(provider)).unwrap();
+        
+        assert_eq!(agent.observations.count(), 0);
+    }
+
+    #[test]
+    fn test_event_manager_initialized() {
+        let provider = MockProvider::simple_text("test");
+        let agent = Agent::new(Box::new(provider)).unwrap();
+        
+        // EventManager should be initialized and ready to use
+        let ctx = EventContext::new();
+        agent.events.fire(Event::SessionStart, &ctx);
+        // Should not panic
+    }
+}
+
