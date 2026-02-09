@@ -25,7 +25,7 @@ pub mod types;
 pub mod ui;
 
 pub use crate::agent::{Agent, RuntimeSettings};
-pub use crate::approval::console_approval_prompt;
+pub use crate::approval::{console_approval_prompt, console_prompt, console_secret_prompt};
 pub use crate::commands::{Command, CommandAction, CommandRegistry};
 pub use crate::config_file::{ProviderConfig, ProviderSettings};
 pub use crate::context::SessionContext;
