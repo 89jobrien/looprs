@@ -1,5 +1,6 @@
 use crate::events::Event;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -40,6 +41,16 @@ pub enum Action {
         #[serde(default)]
         then: Vec<Action>,
     },
+    #[serde(rename = "confirm")]
+    Confirm { prompt: String, set_key: String },
+    #[serde(rename = "prompt")]
+    Prompt { prompt: String, set_key: String },
+    #[serde(rename = "secret_prompt")]
+    SecretPrompt { prompt: String, set_key: String },
+    #[serde(rename = "set_env")]
+    SetEnv { name: String, from_key: String },
+    #[serde(rename = "set_config")]
+    SetConfig { path: String, value: Value },
 }
 
 /// HookRegistry holds all loaded hooks keyed by event type
