@@ -116,6 +116,9 @@ impl HookExecutor {
                 let approved = if let Some(callback) = approval_fn {
                     callback(prompt)
                 } else {
+                    crate::ui::warn(
+                        "Warning: Confirm action requires approval callback; defaulting to false",
+                    );
                     false
                 };
                 local_ctx.insert(set_key.clone(), approved.to_string());
@@ -188,7 +191,15 @@ impl HookExecutor {
         if let Some(rest) = condition.strip_prefix("config_flag:") {
             let parts: Vec<&str> = rest.splitn(2, '=').collect();
             if parts.len() == 2 {
-                let cfg = AppConfig::load().unwrap_or_default();
+                let cfg = match AppConfig::load() {
+                    Ok(cfg) => cfg,
+                    Err(e) => {
+                        crate::ui::warn(format!(
+                            "Warning: Failed to load config for condition '{condition}': {e}"
+                        ));
+                        return Ok(false);
+                    }
+                };
                 if parts[0] == "onboarding.demo_seen" {
                     return Ok(cfg.onboarding.demo_seen.to_string() == parts[1]);
                 }
@@ -211,7 +222,36 @@ impl HookExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
+    use std::path::PathBuf;
+    use std::sync::{Arc, Mutex, OnceLock};
+    use tempfile::TempDir;
+
+    static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn test_lock() -> std::sync::MutexGuard<'static, ()> {
+        TEST_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("lock test mutex")
+    }
+
+    struct DirGuard {
+        original: PathBuf,
+    }
+
+    impl DirGuard {
+        fn change_to(path: &std::path::Path) -> Self {
+            let original = std::env::current_dir().expect("read current dir");
+            std::env::set_current_dir(path).expect("set current dir");
+            Self { original }
+        }
+    }
+
+    impl Drop for DirGuard {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.original);
+        }
+    }
 
     fn create_test_hook_yaml(content: &str) -> tempfile::NamedTempFile {
         use std::io::Write;
@@ -258,6 +298,63 @@ mod tests {
         let has_nonexistent =
             HookExecutor::check_tool_available("totally_nonexistent_tool_xyz").unwrap_or(false);
         assert!(!has_nonexistent);
+    }
+
+    #[test]
+    fn test_condition_env_set() {
+        let _lock = test_lock();
+        let local_ctx: HashMap<String, String> = HashMap::new();
+        let key = "LOOPRS_TEST_ENV_SET";
+        let prev = std::env::var(key).ok();
+
+        unsafe {
+            std::env::set_var(key, "1");
+        }
+        assert!(HookExecutor::eval_condition("env_set:LOOPRS_TEST_ENV_SET", &local_ctx).unwrap());
+
+        unsafe {
+            std::env::set_var(key, "");
+        }
+        assert!(!HookExecutor::eval_condition("env_set:LOOPRS_TEST_ENV_SET", &local_ctx).unwrap());
+
+        unsafe {
+            std::env::remove_var(key);
+        }
+        assert!(!HookExecutor::eval_condition("env_set:LOOPRS_TEST_ENV_SET", &local_ctx).unwrap());
+
+        unsafe {
+            if let Some(value) = prev {
+                std::env::set_var(key, value);
+            } else {
+                std::env::remove_var(key);
+            }
+        }
+    }
+
+    #[test]
+    fn test_condition_config_flag() {
+        let _lock = test_lock();
+        let tmp = TempDir::new().unwrap();
+        let _guard = DirGuard::change_to(tmp.path());
+        let local_ctx: HashMap<String, String> = HashMap::new();
+
+        std::fs::create_dir_all(".looprs").unwrap();
+        std::fs::write(
+            ".looprs/config.json",
+            r#"{ "onboarding": { "demo_seen": true } }"#,
+        )
+        .unwrap();
+
+        assert!(HookExecutor::eval_condition(
+            "config_flag:onboarding.demo_seen=true",
+            &local_ctx
+        )
+        .unwrap());
+        assert!(!HookExecutor::eval_condition(
+            "config_flag:onboarding.demo_seen=false",
+            &local_ctx
+        )
+        .unwrap());
     }
 
     #[test]
