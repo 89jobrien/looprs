@@ -1,13 +1,13 @@
 use super::error::ToolError;
+use super::ToolArgs;
 use super::ToolContext;
 use serde_json::Value;
 use std::fs;
 
 pub(super) fn tool_glob(args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
-    let pattern = args["pat"]
-        .as_str()
-        .ok_or(ToolError::MissingParameter("pat"))?;
-    let path_prefix = args["path"].as_str().unwrap_or(".");
+    let args = ToolArgs::new(args);
+    let pattern = args.get_str("pat")?;
+    let path_prefix = args.get_str_optional("path")?.unwrap_or(".");
 
     // Prevent escaping the base directory via the pattern itself.
     let pat_path = std::path::Path::new(pattern);

@@ -1,14 +1,14 @@
 use super::error::ToolError;
+use super::ToolArgs;
 use super::ToolContext;
 use serde_json::Value;
 use std::fs;
 
 pub(super) fn tool_read(args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
-    let path = args["path"]
-        .as_str()
-        .ok_or(ToolError::MissingParameter("path"))?;
-    let offset = args["offset"].as_u64().unwrap_or(0) as usize;
-    let limit = args["limit"].as_u64();
+    let args = ToolArgs::new(args);
+    let path = args.get_str("path")?;
+    let offset = args.get_u64("offset")?.unwrap_or(0) as usize;
+    let limit = args.get_u64("limit")?;
 
     let full_path = ctx.resolve_path(path)?;
     let content =

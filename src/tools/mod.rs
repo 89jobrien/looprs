@@ -62,6 +62,74 @@ impl ToolContext {
     }
 }
 
+pub(crate) struct ToolArgs<'a> {
+    args: &'a Value,
+}
+
+impl<'a> ToolArgs<'a> {
+    pub fn new(args: &'a Value) -> Self {
+        Self { args }
+    }
+
+    fn object(&self) -> Result<&serde_json::Map<String, Value>, ToolError> {
+        self.args.as_object().ok_or_else(|| ToolError::InvalidParameterType {
+            key: "<root>".to_string(),
+            expected: "object",
+        })
+    }
+
+    fn get_value(&self, key: &str) -> Result<&Value, ToolError> {
+        let map = self.object()?;
+        map.get(key)
+            .ok_or_else(|| ToolError::MissingParameter(key.to_string()))
+    }
+
+    pub fn get_str(&self, key: &str) -> Result<&str, ToolError> {
+        let value = self.get_value(key)?;
+        value.as_str().ok_or_else(|| ToolError::InvalidParameterType {
+            key: key.to_string(),
+            expected: "string",
+        })
+    }
+
+    pub fn get_str_optional(&self, key: &str) -> Result<Option<&str>, ToolError> {
+        let map = self.object()?;
+        match map.get(key) {
+            None | Some(Value::Null) => Ok(None),
+            Some(value) => value.as_str().map(Some).ok_or_else(|| {
+                ToolError::InvalidParameterType {
+                    key: key.to_string(),
+                    expected: "string",
+                }
+            }),
+        }
+    }
+
+    pub fn get_bool(&self, key: &str, default: bool) -> bool {
+        let map = match self.args.as_object() {
+            Some(map) => map,
+            None => return default,
+        };
+        match map.get(key) {
+            None | Some(Value::Null) => default,
+            Some(value) => value.as_bool().unwrap_or(default),
+        }
+    }
+
+    pub fn get_u64(&self, key: &str) -> Result<Option<u64>, ToolError> {
+        let map = self.object()?;
+        match map.get(key) {
+            None | Some(Value::Null) => Ok(None),
+            Some(value) => value.as_u64().map(Some).ok_or_else(|| {
+                ToolError::InvalidParameterType {
+                    key: key.to_string(),
+                    expected: "u64",
+                }
+            }),
+        }
+    }
+}
+
 fn normalize_relative(p: &Path) -> Result<PathBuf, ()> {
     use std::path::Component;
 
@@ -92,7 +160,7 @@ pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<Strin
         "glob" => glob::tool_glob(args, ctx),
         "grep" => grep::tool_grep(args, ctx),
         "bash" => bash::tool_bash(args),
-        _ => Err(ToolError::MissingParameter("Unknown tool")),
+        _ => Err(ToolError::UnknownTool(name.to_string())),
     }
 }
 

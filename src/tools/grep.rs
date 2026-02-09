@@ -1,4 +1,5 @@
 use super::error::ToolError;
+use super::ToolArgs;
 use super::ToolContext;
 use regex::Regex;
 use serde_json::Value;
@@ -10,10 +11,9 @@ use crate::config::MAX_GREP_HITS;
 
 /// Try to use ripgrep (rg) if available, fall back to pure regex implementation
 pub(super) fn tool_grep(args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
-    let pat_str = args["pat"]
-        .as_str()
-        .ok_or(ToolError::MissingParameter("pat"))?;
-    let path_prefix = args["path"].as_str().unwrap_or(".");
+    let args = ToolArgs::new(args);
+    let pat_str = args.get_str("pat")?;
+    let path_prefix = args.get_str_optional("path")?.unwrap_or(".");
 
     let base = ctx.resolve_path(path_prefix)?;
 
@@ -40,7 +40,7 @@ fn try_rg(pattern: &str, path: &std::path::Path) -> Result<String, ToolError> {
         .arg(pattern)
         .arg(path)
         .output()
-        .map_err(|_| ToolError::MissingParameter("rg execution failed"))?;
+        .map_err(|_| ToolError::MissingParameter("rg execution failed".to_string()))?;
 
     if !output.status.success() && output.status.code() != Some(1) {
         return Err(ToolError::CommandFailed(format!(

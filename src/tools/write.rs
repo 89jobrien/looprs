@@ -1,13 +1,13 @@
 use super::error::ToolError;
+use super::ToolArgs;
 use super::ToolContext;
 use serde_json::Value;
 use std::fs;
 
 pub(super) fn tool_write(args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
-    let path = args["path"]
-        .as_str()
-        .ok_or(ToolError::MissingParameter("path"))?;
-    let content = args["content"].as_str().unwrap_or("");
+    let args = ToolArgs::new(args);
+    let path = args.get_str("path")?;
+    let content = args.get_str("content")?;
 
     let full_path = ctx.resolve_path(path)?;
 

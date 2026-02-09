@@ -12,7 +12,13 @@ pub enum ToolError {
     AmbiguousPattern(usize),
 
     #[error("Missing required parameter: {0}")]
-    MissingParameter(&'static str),
+    MissingParameter(String),
+
+    #[error("Invalid parameter type for {key}: expected {expected}")]
+    InvalidParameterType { key: String, expected: &'static str },
+
+    #[error("Unknown tool: {0}")]
+    UnknownTool(String),
 
     #[error("Command execution failed: {0}")]
     CommandFailed(String),

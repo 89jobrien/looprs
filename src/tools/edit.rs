@@ -1,17 +1,15 @@
 use super::error::ToolError;
+use super::ToolArgs;
 use super::ToolContext;
 use serde_json::Value;
 use std::fs;
 
 pub(super) fn tool_edit(args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
-    let path = args["path"]
-        .as_str()
-        .ok_or(ToolError::MissingParameter("path"))?;
-    let old = args["old"]
-        .as_str()
-        .ok_or(ToolError::MissingParameter("old"))?;
-    let new = args["new"].as_str().unwrap_or("");
-    let all = args["all"].as_bool().unwrap_or(false);
+    let args = ToolArgs::new(args);
+    let path = args.get_str("path")?;
+    let old = args.get_str("old")?;
+    let new = args.get_str("new")?;
+    let all = args.get_bool("all", false);
 
     let full_path = ctx.resolve_path(path)?;
     let text =

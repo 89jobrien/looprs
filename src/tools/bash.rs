@@ -1,11 +1,11 @@
 use super::error::ToolError;
+use super::ToolArgs;
 use serde_json::Value;
 use std::process::{Command, Stdio};
 
 pub(super) fn tool_bash(args: &Value) -> Result<String, ToolError> {
-    let cmd = args["cmd"]
-        .as_str()
-        .ok_or(ToolError::MissingParameter("cmd"))?;
+    let args = ToolArgs::new(args);
+    let cmd = args.get_str("cmd")?;
 
     let output = Command::new("bash")
         .arg("-c")
