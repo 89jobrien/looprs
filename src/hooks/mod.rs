@@ -10,6 +10,7 @@ pub mod parser;
 
 pub use executor::{ApprovalCallback, HookExecutor};
 pub use parser::parse_hook;
+pub type PromptCallback = Box<dyn Fn(&str) -> Option<String> + Send + Sync>;
 
 /// A hook is an event-triggered action defined in YAML
 #[derive(Debug, Clone, Serialize, Deserialize)]
