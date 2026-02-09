@@ -54,6 +54,117 @@ cargo install fd-find      # glob speedup
 
 Both are detected automatically. Falls back to pure Rust if not installed.
 
+## Fine-Tuning Local Models for Tool Calling
+
+Local models (via Ollama) have limited tool-calling capabilities out of the box. However, you can fine-tune models to understand looprs' tool format using LoRA adapters.
+
+### Why Fine-Tune?
+
+- **Enable tool use** - Local models can learn to emit `[TOOL_USE ...]` markers
+- **No API costs** - Run agents completely locally with tool support
+- **Privacy** - Keep data on your machine while still getting tool capabilities
+- **Fast inference** - Small fine-tuned models (300MB-7B) run quickly on consumer hardware
+
+### Quick Start
+
+**Option 1: Prompt Engineering (5 minutes, no GPU)**
+
+Create a Modelfile with few-shot examples:
+
+```
+FROM functiongemma:latest
+
+SYSTEM """Execute tool calls immediately.
+Format: [TOOL_USE id=tool_NUM name=NAME]
+{JSON}"""
+
+MESSAGE user Show me README.md
+MESSAGE assistant [TOOL_USE id=tool_1 name=read]\n{"path": "README.md"}
+
+MESSAGE user List all Python files  
+MESSAGE assistant [TOOL_USE id=tool_2 name=glob]\n{"pat": "**/*.py"}
+
+PARAMETER temperature 0.1
+```
+
+```bash
+ollama create looprs-fg -f Modelfile
+MODEL=looprs-fg looprs -p "Read Cargo.toml"
+```
+
+**Limitations:** Works in isolation but may fail in full looprs context. Best for testing.
+
+**Option 2: LoRA Fine-Tuning (15 minutes with GPU)**
+
+Complete training scripts available in session workspace. Requires GPU (Google Colab T4 works great):
+
+```bash
+# Generate training data (23 examples covering all 6 tools)
+python3 training-data-generator.py
+
+# Train LoRA adapter (requires: torch, transformers, peft)
+python3 train-lora.py  # ~15 min on T4 GPU
+
+# Convert adapter to GGUF and import to Ollama
+# (see README-FINETUNE.md for conversion steps)
+
+# Use the fine-tuned model
+MODEL=looprs-functiongemma looprs
+```
+
+**Benefits:** Proper weight updates, consistent behavior, handles edge cases better.
+
+### Training Data Format
+
+looprs uses text-based tool markers:
+
+```
+User: Show me README.md
+Assistant: [TOOL_USE id=tool_123 name=read]
+{"path": "README.md"}
+User: [TOOL_RESULT id=tool_123]
+# looprs
+A unified abstraction layer...
+Assistant: Here's the README content.
+```
+
+The training data generator creates examples for all built-in tools: `read`, `write`, `edit`, `glob`, `grep`, `bash`.
+
+### Fine-Tuning Resources
+
+Complete fine-tuning package with:
+- `training-data-generator.py` - Generates synthetic examples
+- `train-lora.py` - Full LoRA training with PEFT
+- `README-FINETUNE.md` - Detailed guide with troubleshooting
+- `Modelfile-v4` - Best prompt engineering approach
+- `PROMPT-ENGINEERING-RESULTS.md` - Test results and findings
+
+Files available in: `~/.local/state/.copilot/session-state/<session-id>/files/`
+
+### Recommended Models
+
+**For prompt engineering:**
+- `functiongemma:latest` (300 MB) - Google's function-calling model
+- `gemma:7b` (7B) - Larger, better instruction following
+
+**For LoRA training:**
+- Base: `google/gemma-2b-it` or `google/gemma-7b-it`
+- Hardware: 16GB+ VRAM recommended, 8GB works with QLoRA
+- Training time: ~15 minutes (T4), ~5 minutes (4090/A100)
+
+### Integration
+
+After fine-tuning, enable tool support in looprs:
+
+```rust
+// src/providers/local.rs
+fn supports_tool_use(&self) -> bool {
+    self.model.contains("looprs-functiongemma")
+}
+```
+
+See `PROMPT-ENGINEERING-RESULTS.md` for detailed findings and next steps.
+
 ## Extensibility Framework
 
 The `.looprs/` directory defines your agent configuration (provider, rules, skills, etc.).
