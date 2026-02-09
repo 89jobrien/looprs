@@ -1,14 +1,17 @@
 use std::ffi::OsString;
 
+use crate::plugins::NamedTool;
+use crate::plugins::binaries::{Fd, Rg};
+
 /// Check if ripgrep (rg) binary is available in PATH
 pub fn is_rg_available() -> bool {
-    crate::plugins::system().probe_success("rg", vec![OsString::from("--version")])
+    Rg::system().probe_success(vec![OsString::from("--version")])
 }
 
 /// Check if fd binary is available in PATH
 #[allow(dead_code)]
 pub fn is_fd_available() -> bool {
-    crate::plugins::system().probe_success("fd", vec![OsString::from("--version")])
+    Fd::system().probe_success(vec![OsString::from("--version")])
 }
 
 #[allow(dead_code)]

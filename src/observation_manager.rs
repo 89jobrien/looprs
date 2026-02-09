@@ -4,6 +4,7 @@ use std::ffi::OsString;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::observation::Observation;
+use crate::plugins::{NamedTool, binaries::Bd};
 
 /// Manages observation capture and storage across a session
 pub struct ObservationManager {
@@ -55,7 +56,7 @@ impl ObservationManager {
         }
 
         // Check if bd is available
-        if !crate::plugins::system().has_in_path("bd") {
+        if !Bd::system().is_available() {
             // bd not installed, silently skip
             return Ok(());
         }
@@ -73,7 +74,7 @@ impl ObservationManager {
                 "--tags".into(),
                 "observation,automated".into(),
             ];
-            let output = crate::plugins::system().output("bd", args);
+            let output = Bd::system().output(args);
 
             // Log but don't fail if individual observation save fails
             match output {
@@ -110,7 +111,7 @@ impl Default for ObservationManager {
 /// Load recent observations from bd
 pub fn load_recent_observations(limit: usize) -> Option<Vec<String>> {
     // Check if bd is available
-    if !crate::plugins::system().has_in_path("bd") {
+    if !Bd::system().is_available() {
         return None;
     }
 
@@ -124,7 +125,7 @@ pub fn load_recent_observations(limit: usize) -> Option<Vec<String>> {
         "--json".into(),
     ];
 
-    let output = crate::plugins::system().output_if_available("bd", args)?;
+    let output = Bd::system().output_if_available(args)?;
 
     if !output.status.success() {
         return None;

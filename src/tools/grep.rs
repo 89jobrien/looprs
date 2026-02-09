@@ -8,6 +8,8 @@ use std::fs;
 
 use super::availability;
 use crate::config::MAX_GREP_HITS;
+use crate::plugins::NamedTool;
+use crate::plugins::binaries::Rg;
 
 /// Try to use ripgrep (rg) if available, fall back to pure regex implementation
 pub(super) fn tool_grep(args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
@@ -41,8 +43,8 @@ fn try_rg(pattern: &str, path: &std::path::Path) -> Result<String, ToolError> {
         path.as_os_str().to_os_string(),
     ];
 
-    let output = crate::plugins::system()
-        .output("rg", args)
+    let output = Rg::system()
+        .output(args)
         .map_err(|_| ToolError::MissingParameter("rg execution failed".to_string()))?;
 
     if !output.status.success() && output.status.code() != Some(1) {
