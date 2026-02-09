@@ -24,45 +24,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Created example skills in `.looprs/skills/examples/`
   - `rust-testing` - Guide for writing Rust tests
   - `rust-error-handling` - Error handling with Result types (with bundled resources)
-
-### Changed
-- **Skills architecture redesign** - Aligned with Anthropic Agent Skills standard
-  - Changed from JSON/progressive-learning format to SKILL.md with YAML frontmatter
-  - Skills now follow industry standard (agentskills.io)
-  - Format: YAML frontmatter (name, description) + markdown instructions
-  - Support for bundled resources: scripts/, references/, assets/
-  - Progressive disclosure: metadata → SKILL.md body → resources as needed
-  - Auto-triggering based on description field (primary trigger mechanism)
-  - Design principles: concise, execution-focused, appropriate degrees of freedom
-- Updated `.looprs/skills/README.md` with new architecture and examples
-- Updated bd issue `looprs-l4r` with corrected skill loader requirements
-
-### Added
-- **Multi-provider LLM support**: Switch between Anthropic, OpenAI, and Local Ollama without code changes
+- **Multi-provider LLM support** - Switch between Anthropic, OpenAI, and Local Ollama without code changes
   - Anthropic provider with Claude 3 models
   - OpenAI provider with GPT-4/GPT-5 models
   - Local provider for Ollama (open-source models)
-- **Provider detection**: Auto-detect provider from environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or Ollama availability)
-- **Flexible configuration**: 
-  - `PROVIDER` env var to force specific provider
-  - `MODEL` env var to select model per provider
+  - Provider detection: Auto-detect from environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or Ollama availability)
+  - Flexible configuration via `PROVIDER` and `MODEL` env vars
   - `.env.example` with complete setup instructions
-- **Provider selection docs**: Added comprehensive provider configuration guide to README
-- **Graceful degradation**: Local models work without tool use support
-- `async-trait` dependency for provider trait pattern
-- **jj integration**: Auto-detect jujutsu repos and read status, branch, recent commits
+  - Provider selection docs in README
+  - Graceful degradation: Local models work without tool use support
+  - `async-trait` dependency for provider trait pattern
+- **jj integration** - Auto-detect jujutsu repos and read status, branch, recent commits
   - `jj::get_status()` - Current branch, commit, description
   - `jj::get_recent_commits()` - Last N commits from main branch
   - Graceful fallback if not in jj repo or jj not installed
-- **bd integration**: Auto-detect beads.db and list open issues
+- **bd integration** - Auto-detect beads.db and list open issues
   - `bd::list_open_issues()` - Query open issues with title, status, priority
   - Parse newline-delimited JSON from bd command
   - Graceful fallback if not in bd repo or bd not installed
-- **SessionContext collection**: Automatically gather repo state at startup
+- **SessionContext collection** - Automatically gather repo state at startup
   - `SessionContext::collect()` - Gathers jj status, recent commits, open issues
   - `format_for_prompt()` - Human-readable formatted context for injection
   - Display context on session start (when available)
-- **Event system**: Session lifecycle and execution events
+- **Event system** - Session lifecycle and execution events
   - `Event` enum with 8 event types (SessionStart, SessionEnd, UserPromptSubmit, PreToolUse, PostToolUse, InferenceComplete, OnError, OnWarning)
   - `EventContext` for passing data through events (session context, user message, tool name, error info)
   - `EventManager` for registering and firing event handlers
@@ -89,6 +73,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    - Example hook: `~/.looprs/hooks/SessionStart.yaml` with message action
 
 ### Changed
+- **Skills architecture redesign** - Aligned with Anthropic Agent Skills standard
+  - Changed from JSON/progressive-learning format to SKILL.md with YAML frontmatter
+  - Skills now follow industry standard (agentskills.io)
+  - Format: YAML frontmatter (name, description, triggers) + markdown instructions
+  - Support for bundled resources: scripts/, references/, assets/
+  - Progressive disclosure: metadata → SKILL.md body → resources as needed
+  - Explicit trigger field replaces description-based triggering
+  - Design principles: concise, execution-focused, appropriate degrees of freedom
+  - Updated `.looprs/skills/README.md` with new architecture and examples
 - Agent now uses provider abstraction (`dyn LLMProvider`) instead of hardcoded Anthropic logic
 - Main REPL loads hooks from `~/.looprs/hooks/` on startup
 - Main REPL executes hooks on SessionStart/SessionEnd
