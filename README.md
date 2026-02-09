@@ -169,6 +169,17 @@ See `PROMPT-ENGINEERING-RESULTS.md` for detailed findings and next steps.
 
 The `.looprs/` directory defines your agent configuration (provider, rules, skills, etc.).
 
+## Architecture
+
+- `src/bin/looprs/` - CLI entrypoint, argument parsing, interactive REPL
+- `src/agent.rs` - Core orchestrator (messages, tools, events, hooks, observations)
+- `src/providers/` - LLM backends (Anthropic, OpenAI, local)
+- `src/tools/` - Built-in tools (read/write/edit/glob/grep/bash)
+- `src/events.rs` + `src/hooks/` - Event system and hook execution
+- `src/commands.rs` + `.looprs/commands/` - Command registry and repo command definitions
+- `src/skills/` + `.looprs/skills/` - Skill loading and repo examples
+- `src/context.rs` - SessionContext (jj/bd/kan snapshots at startup)
+
 ### Custom Commands
 
 Define slash commands to execute common workflows. Commands are loaded from both user and repo directories with **repo precedence**.
@@ -190,10 +201,10 @@ name: test
 description: Run tests
 aliases:
   - t
-action:
-  type: shell
-  command: cargo test
-  inject_output: true  # Add output to conversation context
+ action:
+   type: shell
+   command: cargo test --lib
+   inject_output: true  # Add output to conversation context
 ```
 
 **Usage:**
@@ -204,6 +215,15 @@ action:
 ❯ /test
 # Runs cargo test, shows output, injects into context if inject_output: true
 ```
+
+### Repo Commands (this repo)
+
+Loaded from `.looprs/commands/`:
+
+- `/help` (`/h`) - Show available custom commands
+- `/refactor` (`/r`) - Prompt-only refactor request
+- `/test` (`/t`) - `cargo test --lib` with output injected
+- `/lint` (`/l`) - `cargo clippy --all-targets -- -D warnings` with output injected
 
 **Action types:**
 - `prompt` - Send template as message to LLM
