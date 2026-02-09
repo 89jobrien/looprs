@@ -1,10 +1,10 @@
-use super::error::ToolError;
 use super::ToolArgs;
 use super::ToolContext;
+use super::error::ToolError;
 use regex::Regex;
 use serde_json::Value;
+use std::ffi::OsString;
 use std::fs;
-use std::process::Command;
 
 use super::availability;
 use crate::config::MAX_GREP_HITS;
@@ -30,16 +30,19 @@ pub(super) fn tool_grep(args: &Value, ctx: &ToolContext) -> Result<String, ToolE
 
 /// Try to use ripgrep for searching
 fn try_rg(pattern: &str, path: &std::path::Path) -> Result<String, ToolError> {
-    let output = Command::new("rg")
-        .arg("--max-count")
-        .arg(MAX_GREP_HITS.to_string())
-        .arg("--line-number")
-        .arg("--no-heading")
-        .arg("--color")
-        .arg("never")
-        .arg(pattern)
-        .arg(path)
-        .output()
+    let args: Vec<OsString> = vec![
+        "--max-count".into(),
+        MAX_GREP_HITS.to_string().into(),
+        "--line-number".into(),
+        "--no-heading".into(),
+        "--color".into(),
+        "never".into(),
+        pattern.into(),
+        path.as_os_str().to_os_string(),
+    ];
+
+    let output = crate::plugins::system()
+        .output("rg", args)
         .map_err(|_| ToolError::MissingParameter("rg execution failed".to_string()))?;
 
     if !output.status.success() && output.status.code() != Some(1) {

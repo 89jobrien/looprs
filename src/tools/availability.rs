@@ -1,22 +1,14 @@
-use std::process::Command;
+use std::ffi::OsString;
 
 /// Check if ripgrep (rg) binary is available in PATH
 pub fn is_rg_available() -> bool {
-    Command::new("rg")
-        .arg("--version")
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+    crate::plugins::system().probe_success("rg", vec![OsString::from("--version")])
 }
 
 /// Check if fd binary is available in PATH
 #[allow(dead_code)]
 pub fn is_fd_available() -> bool {
-    Command::new("fd")
-        .arg("--version")
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+    crate::plugins::system().probe_success("fd", vec![OsString::from("--version")])
 }
 
 #[allow(dead_code)]
