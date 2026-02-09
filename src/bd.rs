@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 
+use crate::plugins::NamedTool;
+use crate::plugins::binaries::Bd;
+
 /// Represents a beads.db issue
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BdIssue {
@@ -17,14 +20,11 @@ pub fn list_open_issues() -> Option<Vec<BdIssue>> {
         return None;
     }
 
-    let output = crate::plugins::system().output_if_available(
-        "bd",
-        vec![
-            OsString::from("list"),
-            OsString::from("--open"),
-            OsString::from("--json"),
-        ],
-    )?;
+    let output = Bd::system().output_if_available(vec![
+        OsString::from("list"),
+        OsString::from("--open"),
+        OsString::from("--json"),
+    ])?;
 
     if !output.status.success() {
         return None;

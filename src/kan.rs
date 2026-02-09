@@ -2,6 +2,11 @@ use serde::{Deserialize, Serialize};
 #[cfg(not(test))]
 use std::ffi::OsString;
 
+#[cfg(not(test))]
+use crate::plugins::NamedTool;
+#[cfg(not(test))]
+use crate::plugins::binaries::Kan;
+
 /// Represents a kan board status
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KanStatus {
@@ -30,10 +35,8 @@ pub fn get_status() -> Option<KanStatus> {
             return None;
         }
 
-        let output = crate::plugins::system().output_if_available(
-            "kan",
-            vec![OsString::from("status"), OsString::from("--json")],
-        )?;
+        let output = Kan::system()
+            .output_if_available(vec![OsString::from("status"), OsString::from("--json")])?;
 
         if !output.status.success() {
             return None;

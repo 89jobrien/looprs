@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 
+use crate::plugins::NamedTool;
+use crate::plugins::binaries::Jj;
+
 /// Represents jujutsu repository status
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JjStatus {
@@ -42,7 +45,7 @@ pub fn get_recent_commits(count: usize) -> Option<Vec<String>> {
         "-T".into(),
         r#"description.first_line()"#.into(),
     ];
-    let output = crate::plugins::system().output_if_available("jj", args)?;
+    let output = Jj::system().output_if_available(args)?;
 
     if !output.status.success() {
         return None;
@@ -69,8 +72,8 @@ fn is_jj_repo() -> bool {
 
 /// Get current branch name from jj
 fn get_branch() -> Option<String> {
-    let output = crate::plugins::system()
-        .output_if_available("jj", vec!["branch".into(), "list".into(), "-q".into()])?;
+    let output =
+        Jj::system().output_if_available(vec!["branch".into(), "list".into(), "-q".into()])?;
 
     if !output.status.success() {
         return None;
@@ -95,7 +98,7 @@ fn get_current_commit() -> Option<String> {
         "-T".into(),
         r#"{change_id.short()}"#.into(),
     ];
-    let output = crate::plugins::system().output_if_available("jj", args)?;
+    let output = Jj::system().output_if_available(args)?;
 
     if !output.status.success() {
         return None;
@@ -120,7 +123,7 @@ fn get_current_description() -> Option<String> {
         "-T".into(),
         r#"{description}"#.into(),
     ];
-    let output = crate::plugins::system().output_if_available("jj", args)?;
+    let output = Jj::system().output_if_available(args)?;
 
     if !output.status.success() {
         return None;
