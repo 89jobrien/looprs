@@ -478,11 +478,13 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 - [x] **File reference resolver** - `@filename` syntax automatically injects file contents
 
 ### Phase 3: Extensibility Parsers (In Progress)
-- [ ] **Skill loader** - Load skills following Anthropic Agent Skills standard (SKILL.md format)
-  - YAML frontmatter with name + description
+- [x] **Skill loader** - Load skills following Anthropic Agent Skills standard ✅
+  - YAML frontmatter with name, description, triggers
+  - `$skill-name` syntax for explicit invocation
+  - Auto-triggering via keyword matching
   - Bundled resources (scripts/, references/, assets/)
   - Progressive disclosure (metadata → body → resources)
-  - Auto-triggering based on description field
+  - Dual-source loading (user + repo directories with precedence)
 - [ ] **Agent dispatcher** - YAML-based role switching
 - [ ] **Rule evaluator** - Constraint checking from markdown rules
 
@@ -505,6 +507,16 @@ make install    # install locally
 ```
 
 Uses `prek` for pre-commit hooks (cargo test + clippy). See `Makefile` for all targets.
+
+### Versioning
+
+Patch versions increment automatically on every push via pre-push git hook:
+- Bumps version in `Cargo.toml`
+- Moves `[Unreleased]` content to new version section in `CHANGELOG.md`
+- Amends commit with version bump changes
+- Adds marker to prevent recursive bumping
+
+Example: Push commit "feat: add feature" → automatically becomes version 0.1.4.
 
 ## License
 
