@@ -6,6 +6,12 @@ use crate::api::ContentBlock;
 
 use super::{InferenceRequest, InferenceResponse, LLMProvider, Usage};
 
+/// OpenAI provider implementation
+/// 
+/// API differences:
+/// - GPT-5.x and newer GPT-4 models use `max_completion_tokens` instead of `max_tokens`
+/// - Tool calls use OpenAI's function calling format (different from Anthropic)
+/// - System messages are passed as a separate message in the messages array
 pub struct OpenAIProvider {
     client: reqwest::Client,
     key: String,
@@ -80,9 +86,13 @@ impl LLMProvider for OpenAIProvider {
             })
             .collect::<Vec<_>>();
 
-        let body = json!({
+        // GPT-5+ and newer GPT-4 models use max_completion_tokens instead of max_tokens
+        let uses_completion_tokens = req.model.starts_with("gpt-5") 
+            || req.model.starts_with("gpt-4o") 
+            || req.model.starts_with("gpt-4-turbo-2024");
+
+        let mut body = json!({
             "model": &req.model,
-            "max_tokens": req.max_tokens,
             "messages": vec![
                 json!({
                     "role": "system",
@@ -95,6 +105,13 @@ impl LLMProvider for OpenAIProvider {
             "tools": tools,
             "tool_choice": if tools.is_empty() { "none" } else { "auto" }
         });
+
+        // Use the correct parameter name based on model
+        if uses_completion_tokens {
+            body["max_completion_tokens"] = json!(req.max_tokens);
+        } else {
+            body["max_tokens"] = json!(req.max_tokens);
+        }
 
         let res = self
             .client
