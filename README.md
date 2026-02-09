@@ -56,21 +56,19 @@ Both are detected automatically. Falls back to pure Rust if not installed.
 
 ## Extensibility Framework
 
-The `.looprs/` directory defines your agent:
+The `.looprs/` directory defines your agent configuration (provider, rules, skills, etc.).
+
+> Note: **Hooks are currently loaded from `~/.looprs/hooks/` (user-level)**. Repo-level hooks in `.looprs/hooks/` are **planned** but not yet implemented.
 
 ```
 .looprs/
 ├── provider.json          # Provider settings
 ├── config.json            # Global config
-├── hooks/                 # Event hooks (context injection, automation)
-│   ├── SessionStart       # Inject repo map, jj status, bd list, kanban
-│   ├── UserPromptSubmit   # Enrich context before LLM
-│   ├── PreToolUse         # Approval gates
-│   └── PostToolUse        # Sync to bd, kanban, etc.
 ├── commands/              # Custom commands (/)
 ├── skills/                # Skills with progressive disclosure ($)
 ├── agents/                # Agent role definitions (YAML)
 └── rules/                 # Constraints and guidelines (Markdown)
+# (planned) hooks/         # Repo-level hooks (see Roadmap)
 ```
 
 ### SessionStart Context
@@ -93,17 +91,21 @@ When you start looprs, it automatically collects:
 - [#51] Add tests for X: normal priority
 ```
 
-Example hook that injects context:
+Example hook that injects context (user-level):
 
 ```yaml
-# .looprs/hooks/SessionStart
-events: [SessionStart]
+# ~/.looprs/hooks/SessionStart.yaml
+name: inject_context
+trigger: SessionStart
 actions:
-  - exec: jj log --no-pager -r 'main::' | head -5
+  - type: command
+    command: "jj log --no-pager -r 'main::' | head -5"
     inject_as: recent_commits
-  - exec: bd list --open
+  - type: command
+    command: "bd list --open"
     inject_as: open_issues
-  - exec: kanban_board --json
+  - type: command
+    command: "kanban_board --json"
     inject_as: board_state
 ```
 
@@ -185,7 +187,7 @@ actions:
 - `has_tool:jj` - Only execute if tool is available in PATH
 
 **Graceful degradation:**
-- If `.looprs/hooks/` doesn't exist → no hooks run (works fine)
+- If `~/.looprs/hooks/` doesn't exist → no hooks run (works fine)
 - If hook execution fails → warning printed, session continues
 - If tool isn't available → condition fails silently, hook skipped
 
@@ -255,10 +257,11 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 - [x] SessionContext collection - auto-detect on startup
 - [x] **Event system** (SessionStart, SessionEnd, PreToolUse, PostToolUse, OnError, OnWarning)
 - [x] **Session observations** - Auto-capture tool use, store in bd
-- [x] **Hook file loading** - Parse YAML from `.looprs/hooks/`
+- [x] **Hook file loading** - Parse YAML from `~/.looprs/hooks/`
 - [x] **Hook execution** - Fire hooks on events, execute shell commands
 
 ### Phase 2b: Context Injection (Next)
+- [ ] **Repo-level `.looprs/hooks/` support** - Load hooks from the current repo (in addition to `~/.looprs/hooks/`), with documented precedence/merge behavior
 - [ ] **Context injection** - Inject hook outputs into LLM prompts
 - [ ] **Approval gates** - User approval for automated actions
 - [ ] **Hook output storage** - Persist hook results for debugging

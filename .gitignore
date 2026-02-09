@@ -5,3 +5,4 @@
 thoughts/
 
 .env
+.looprs/provider.json
