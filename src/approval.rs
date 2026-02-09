@@ -83,7 +83,7 @@ fn read_hidden_input() -> io::Result<String> {
     let result = io::stdin().read_line(&mut input);
 
     let _ = unsafe { libc::tcsetattr(fd, libc::TCSANOW, &original) };
-    print!("\n");
+    println!();
     let _ = io::stdout().flush();
 
     result.map(|_| input)

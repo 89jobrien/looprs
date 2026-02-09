@@ -75,7 +75,7 @@ impl HookExecutor {
     /// Execute a single action and return (output, inject_key)
     fn execute_action(
         action: &Action,
-        context: &EventContext,
+        _context: &EventContext,
         approval_fn: Option<&ApprovalCallback>,
         prompt_fn: Option<&PromptCallback>,
         secret_prompt_fn: Option<&PromptCallback>,
@@ -124,16 +124,14 @@ impl HookExecutor {
                 if Self::eval_condition(condition, local_ctx)? {
                     let mut last_result: Option<(String, Option<String>)> = None;
                     for action in actions {
-                        if let Some(result) =
-                            Self::execute_action(
-                                action,
-                                context,
-                                approval_fn,
-                                prompt_fn,
-                                secret_prompt_fn,
-                                local_ctx,
-                            )?
-                        {
+                        if let Some(result) = Self::execute_action(
+                            action,
+                            _context,
+                            approval_fn,
+                            prompt_fn,
+                            secret_prompt_fn,
+                            local_ctx,
+                        )? {
                             last_result = Some(result);
                         }
                     }
@@ -159,9 +157,7 @@ impl HookExecutor {
                         local_ctx.insert(set_key.clone(), value);
                     }
                 } else {
-                    crate::ui::warn(
-                        "Warning: Prompt action requires a prompt callback; skipping",
-                    );
+                    crate::ui::warn("Warning: Prompt action requires a prompt callback; skipping");
                 }
                 Ok(None)
             }
@@ -194,9 +190,7 @@ impl HookExecutor {
             Action::SetConfig { path, value } => {
                 if path == "onboarding.demo_seen" {
                     let Some(flag) = value.as_bool() else {
-                        crate::ui::warn(format!(
-                            "Warning: set_config expected boolean for {path}"
-                        ));
+                        crate::ui::warn(format!("Warning: set_config expected boolean for {path}"));
                         return Ok(None);
                     };
                     AppConfig::set_onboarding_demo_seen(flag)?;
@@ -410,16 +404,14 @@ mod tests {
         )
         .unwrap();
 
-        assert!(HookExecutor::eval_condition(
-            "config_flag:onboarding.demo_seen=true",
-            &local_ctx
-        )
-        .unwrap());
-        assert!(!HookExecutor::eval_condition(
-            "config_flag:onboarding.demo_seen=false",
-            &local_ctx
-        )
-        .unwrap());
+        assert!(
+            HookExecutor::eval_condition("config_flag:onboarding.demo_seen=true", &local_ctx)
+                .unwrap()
+        );
+        assert!(
+            !HookExecutor::eval_condition("config_flag:onboarding.demo_seen=false", &local_ctx)
+                .unwrap()
+        );
     }
 
     #[test]

@@ -137,8 +137,8 @@ actions:
 
     #[test]
     fn demo_onboarding_hook_parses() {
-        let path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".looprs/hooks/demo_onboarding.yaml");
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(".looprs/hooks/demo_onboarding.yaml");
         let hook = parse_hook(&path).unwrap();
         assert_eq!(hook.name, "demo_onboarding");
     }

@@ -35,7 +35,7 @@ impl AppConfig {
     }
 
     fn set_onboarding_demo_seen_at(path: &Path, value: bool) -> anyhow::Result<()> {
-        use serde_json::{json, Value};
+        use serde_json::{Value, json};
 
         let mut root: Value = if path.exists() {
             serde_json::from_str(&fs::read_to_string(path)?)?
@@ -48,9 +48,7 @@ impl AppConfig {
         }
 
         let obj = root.as_object_mut().unwrap();
-        let onboarding = obj
-            .entry("onboarding")
-            .or_insert_with(|| json!({}));
+        let onboarding = obj.entry("onboarding").or_insert_with(|| json!({}));
         if !onboarding.is_object() {
             *onboarding = json!({});
         }
@@ -111,16 +109,10 @@ impl Default for FileReferencesConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct OnboardingConfig {
     pub demo_seen: bool,
-}
-
-impl Default for OnboardingConfig {
-    fn default() -> Self {
-        Self { demo_seen: false }
-    }
 }
 
 #[cfg(test)]
