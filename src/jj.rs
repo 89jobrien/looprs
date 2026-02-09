@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::process::Command;
+use std::ffi::OsString;
 
 /// Represents jujutsu repository status
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,19 +32,17 @@ pub fn get_recent_commits(count: usize) -> Option<Vec<String>> {
         return None;
     }
 
-    let output = Command::new("jj")
-        .args([
-            "log",
-            "--no-pager",
-            "-r",
-            "main..",
-            "-n",
-            &count.to_string(),
-            "-T",
-            r#"description.first_line()"#,
-        ])
-        .output()
-        .ok()?;
+    let args: Vec<OsString> = vec![
+        "log".into(),
+        "--no-pager".into(),
+        "-r".into(),
+        "main..".into(),
+        "-n".into(),
+        count.to_string().into(),
+        "-T".into(),
+        r#"description.first_line()"#.into(),
+    ];
+    let output = crate::plugins::system().output_if_available("jj", args)?;
 
     if !output.status.success() {
         return None;
@@ -71,10 +69,8 @@ fn is_jj_repo() -> bool {
 
 /// Get current branch name from jj
 fn get_branch() -> Option<String> {
-    let output = Command::new("jj")
-        .args(["branch", "list", "-q"])
-        .output()
-        .ok()?;
+    let output = crate::plugins::system()
+        .output_if_available("jj", vec!["branch".into(), "list".into(), "-q".into()])?;
 
     if !output.status.success() {
         return None;
@@ -91,17 +87,15 @@ fn get_branch() -> Option<String> {
 
 /// Get current commit ID from jj
 fn get_current_commit() -> Option<String> {
-    let output = Command::new("jj")
-        .args([
-            "log",
-            "-r",
-            "@",
-            "--no-pager",
-            "-T",
-            r#"{change_id.short()}"#,
-        ])
-        .output()
-        .ok()?;
+    let args: Vec<OsString> = vec![
+        "log".into(),
+        "-r".into(),
+        "@".into(),
+        "--no-pager".into(),
+        "-T".into(),
+        r#"{change_id.short()}"#.into(),
+    ];
+    let output = crate::plugins::system().output_if_available("jj", args)?;
 
     if !output.status.success() {
         return None;
@@ -118,10 +112,15 @@ fn get_current_commit() -> Option<String> {
 
 /// Get current commit description from jj
 fn get_current_description() -> Option<String> {
-    let output = Command::new("jj")
-        .args(["log", "-r", "@", "--no-pager", "-T", r#"{description}"#])
-        .output()
-        .ok()?;
+    let args: Vec<OsString> = vec![
+        "log".into(),
+        "-r".into(),
+        "@".into(),
+        "--no-pager".into(),
+        "-T".into(),
+        r#"{description}"#.into(),
+    ];
+    let output = crate::plugins::system().output_if_available("jj", args)?;
 
     if !output.status.success() {
         return None;

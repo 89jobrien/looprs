@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde_json::Value;
-use std::process::Command;
+use std::ffi::OsString;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::observation::Observation;
@@ -55,9 +55,7 @@ impl ObservationManager {
         }
 
         // Check if bd is available
-        let bd_check = Command::new("bd").args(["--version"]).output();
-
-        if bd_check.is_err() {
+        if !crate::plugins::system().has_in_path("bd") {
             // bd not installed, silently skip
             return Ok(());
         }
@@ -67,16 +65,15 @@ impl ObservationManager {
             let title = obs.to_bd_title();
             let description = obs.to_bd_description();
 
-            let output = Command::new("bd")
-                .args([
-                    "create",
-                    &title,
-                    "--description",
-                    &description,
-                    "--tags",
-                    "observation,automated",
-                ])
-                .output();
+            let args: Vec<OsString> = vec![
+                "create".into(),
+                title.into(),
+                "--description".into(),
+                description.into(),
+                "--tags".into(),
+                "observation,automated".into(),
+            ];
+            let output = crate::plugins::system().output("bd", args);
 
             // Log but don't fail if individual observation save fails
             match output {
@@ -113,24 +110,21 @@ impl Default for ObservationManager {
 /// Load recent observations from bd
 pub fn load_recent_observations(limit: usize) -> Option<Vec<String>> {
     // Check if bd is available
-    let bd_check = Command::new("bd").args(["--version"]).output();
-
-    if bd_check.is_err() {
+    if !crate::plugins::system().has_in_path("bd") {
         return None;
     }
 
     // Query bd for recent observations
-    let output = Command::new("bd")
-        .args([
-            "list",
-            "--tag",
-            "observation",
-            "--limit",
-            &limit.to_string(),
-            "--json",
-        ])
-        .output()
-        .ok()?;
+    let args: Vec<OsString> = vec![
+        "list".into(),
+        "--tag".into(),
+        "observation".into(),
+        "--limit".into(),
+        limit.to_string().into(),
+        "--json".into(),
+    ];
+
+    let output = crate::plugins::system().output_if_available("bd", args)?;
 
     if !output.status.success() {
         return None;

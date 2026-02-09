@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::process::Command;
+use std::ffi::OsString;
 
 /// Represents a beads.db issue
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,10 +17,14 @@ pub fn list_open_issues() -> Option<Vec<BdIssue>> {
         return None;
     }
 
-    let output = Command::new("bd")
-        .args(["list", "--open", "--json"])
-        .output()
-        .ok()?;
+    let output = crate::plugins::system().output_if_available(
+        "bd",
+        vec![
+            OsString::from("list"),
+            OsString::from("--open"),
+            OsString::from("--json"),
+        ],
+    )?;
 
     if !output.status.success() {
         return None;

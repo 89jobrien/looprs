@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
-
 #[cfg(not(test))]
-use std::process::Command;
+use std::ffi::OsString;
 
 /// Represents a kan board status
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,10 +30,10 @@ pub fn get_status() -> Option<KanStatus> {
             return None;
         }
 
-        let output = Command::new("kan")
-            .args(["status", "--json"])
-            .output()
-            .ok()?;
+        let output = crate::plugins::system().output_if_available(
+            "kan",
+            vec![OsString::from("status"), OsString::from("--json")],
+        )?;
 
         if !output.status.success() {
             return None;
@@ -47,15 +46,7 @@ pub fn get_status() -> Option<KanStatus> {
 
 /// Check if kan is available in PATH
 fn is_kan_available() -> bool {
-    // Use a simple, fast check
-    std::env::var("PATH")
-        .ok()
-        .and_then(|path| {
-            path.split(':')
-                .any(|dir| std::path::Path::new(dir).join("kan").exists())
-                .then_some(true)
-        })
-        .unwrap_or(false)
+    crate::plugins::system().has_in_path("kan")
 }
 
 /// Parse kan JSON output into status
