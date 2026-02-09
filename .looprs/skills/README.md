@@ -19,6 +19,8 @@ skills/
 
 `SKILL.md` includes YAML frontmatter plus concise instructions:
 
+Current, concise: 
+
 ```markdown
 ---
 name: rust-error-handling
@@ -27,9 +29,19 @@ triggers:
   - "error handling"
   - "Result type"
 ---
+```
 
-# Rust Error Handling
-...
+```
+hooks: list[str]
+commands: list[str]
+tools: list[str]
+prompt: str
+model: str
+is_invocable: bool
+is_discoverable: bool
+metadata: 
+  - version: 0.0.0
+  - author: John Doe
 ```
 
 ## Notes

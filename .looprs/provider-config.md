@@ -122,6 +122,8 @@ looprs
 
 ### Example 2: Multiple Providers with Different Settings
 
+<!--TODO: Update to current models for defaults-->
+
 ```json
 {
   "defaults": {
@@ -163,14 +165,14 @@ looprs
 {
   "provider": "anthropic",
   "anthropic": {
-    "model": "claude-3-opus-20240229"
+    "model": "claude-4.5-opus-XXXXXXXXX"
   }
 }
 ```
 
 But force a different model:
 ```bash
-export MODEL=claude-3-sonnet-20240229
+export MODEL=claude-4.5-opus-XXXXXXXXX
 looprs
 ```
 

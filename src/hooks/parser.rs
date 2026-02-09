@@ -55,6 +55,34 @@ actions:
     }
 
     #[test]
+    fn parse_new_hook_actions() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"name: demo
+trigger: SessionStart
+actions:
+  - type: confirm
+    prompt: \"Continue?\"
+    set_key: continue
+  - type: secret_prompt
+    prompt: \"Key\"
+    set_key: key
+  - type: set_env
+    name: OPENAI_API_KEY
+    from_key: key
+  - type: set_config
+    path: onboarding.demo_seen
+    value: true
+"#
+        )
+        .unwrap();
+
+        let hook = parse_hook(file.path()).unwrap();
+        assert_eq!(hook.actions.len(), 4);
+    }
+
+    #[test]
     fn test_parse_invalid_yaml() {
         let mut file = NamedTempFile::new().unwrap();
         writeln!(

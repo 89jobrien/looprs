@@ -40,6 +40,19 @@ pub enum Action {
         #[serde(default)]
         then: Vec<Action>,
     },
+    #[serde(rename = "confirm")]
+    Confirm { prompt: String, set_key: String },
+    #[serde(rename = "prompt")]
+    Prompt { prompt: String, set_key: String },
+    #[serde(rename = "secret_prompt")]
+    SecretPrompt { prompt: String, set_key: String },
+    #[serde(rename = "set_env")]
+    SetEnv { name: String, from_key: String },
+    #[serde(rename = "set_config")]
+    SetConfig {
+        path: String,
+        value: serde_json::Value,
+    },
 }
 
 /// HookRegistry holds all loaded hooks keyed by event type
