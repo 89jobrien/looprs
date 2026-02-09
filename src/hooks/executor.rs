@@ -113,7 +113,10 @@ impl HookExecutor {
                 let output = Self::run_command(command)?;
                 Ok(Some((output, inject_as.clone())))
             }
-            Action::Message { text } => Ok(Some((text.clone(), None))),
+            Action::Message { text } => {
+                crate::ui::info(text);
+                Ok(None)
+            }
             Action::Conditional {
                 condition,
                 then: actions,
@@ -631,5 +634,63 @@ actions:
                 .unwrap();
 
         assert!(results.iter().all(|r| r.inject_key.is_none()));
+    }
+
+    #[test]
+    fn set_env_sets_value_from_prompt() {
+        let _lock = test_lock();
+        let key = "LOOPRS_TEST_SET_ENV";
+        let prev = std::env::var(key).ok();
+
+        let yaml = r#"name: test
+trigger: SessionStart
+actions:
+  - type: prompt
+    prompt: "Value"
+    set_key: value
+  - type: set_env
+    name: LOOPRS_TEST_SET_ENV
+    from_key: value
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new();
+        let prompt: crate::hooks::PromptCallback = Box::new(|_| Some("ok".to_string()));
+
+        HookExecutor::execute_hook_with_callbacks(&hook, &context, None, Some(&prompt), None)
+            .unwrap();
+
+        assert_eq!(std::env::var(key).unwrap(), "ok");
+
+        unsafe {
+            if let Some(value) = prev {
+                std::env::set_var(key, value);
+            } else {
+                std::env::remove_var(key);
+            }
+        }
+    }
+
+    #[test]
+    fn set_config_sets_onboarding_flag() {
+        let _lock = test_lock();
+        let tmp = TempDir::new().unwrap();
+        let _guard = DirGuard::change_to(tmp.path());
+
+        let yaml = r#"name: test
+trigger: SessionStart
+actions:
+  - type: set_config
+    path: onboarding.demo_seen
+    value: true
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new();
+
+        HookExecutor::execute_hook_with_callbacks(&hook, &context, None, None, None).unwrap();
+
+        let saved = std::fs::read_to_string(".looprs/config.json").unwrap();
+        assert!(saved.contains("\"demo_seen\": true"));
     }
 }
