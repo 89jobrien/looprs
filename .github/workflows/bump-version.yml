@@ -99,6 +99,12 @@ jobs:
           
           NEW_VERSION="${{ steps.version.outputs.new_version }}"
           
+          # Check if tag already exists
+          if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
+            echo "Tag v$NEW_VERSION already exists, skipping"
+            exit 0
+          fi
+          
           git add Cargo.toml CHANGELOG.md
           git commit -m "chore: bump version to $NEW_VERSION"
           git tag "v$NEW_VERSION"
@@ -106,6 +112,7 @@ jobs:
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
+        if: success()
         with:
           tag_name: v${{ steps.version.outputs.new_version }}
           name: ${{ steps.version.outputs.new_version }}
