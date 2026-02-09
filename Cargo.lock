@@ -657,6 +657,7 @@ dependencies = [
  "dotenvy",
  "env_logger",
  "glob",
+ "libc",
  "log",
  "regex",
  "reqwest",
