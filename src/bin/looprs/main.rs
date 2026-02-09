@@ -261,7 +261,7 @@ async fn run_interactive(
                                 ui::error(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));
                             }
                         } else {
-                            ui::warn(format!("Skill not found: ${}", skill_name));
+                            ui::warn(format!("Skill not found: {skill_name}"));
                             ui::info("Available skills: /skills (not yet implemented)");
                         }
                     }
@@ -298,7 +298,7 @@ async fn run_interactive(
                             for skill in matching_skills {
                                 full_message.push_str(&format!("=== Skill: {} ===\n{}\n\n", skill.name, skill.content));
                             }
-                            full_message.push_str(&format!("User message: {}", msg));
+                            full_message.push_str(&format!("User message: {msg}"));
                             
                             agent.add_user_message(full_message);
                         } else {
