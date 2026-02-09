@@ -1,9 +1,9 @@
 mod agent;
 mod api;
+pub mod app_config;
 pub mod approval;
 pub mod bd;
 pub mod commands;
-pub mod app_config;
 mod config;
 mod config_file;
 pub mod context;

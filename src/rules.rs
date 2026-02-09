@@ -70,13 +70,12 @@ impl RuleRegistry {
         }
 
         let entries = fs::read_dir(dir)
-            .map_err(|e| format!("Failed to read rules directory {}: {}", dir.display(), e))?;
+            .map_err(|e| format!("Failed to read rules directory {}: {e}", dir.display()))?;
 
         let mut loaded = 0;
 
         for entry in entries {
-            let entry = entry
-                .map_err(|e| format!("Failed to read directory entry: {}", e))?;
+            let entry = entry.map_err(|e| format!("Failed to read directory entry: {e}"))?;
             let path = entry.path();
 
             // Only process .md files
@@ -97,7 +96,7 @@ impl RuleRegistry {
                         loaded += 1;
                     }
                     Err(e) => {
-                        eprintln!("⚠️  Failed to load rule from {}: {}", path.display(), e);
+                        eprintln!("⚠️  Failed to load rule from {}: {e}", path.display());
                     }
                 }
             }
@@ -114,14 +113,14 @@ impl RuleRegistry {
         if let Ok(home) = std::env::var("HOME") {
             let user_rules_dir = std::path::PathBuf::from(home).join(".looprs").join("rules");
             if let Err(e) = registry.load_from_directory(&user_rules_dir) {
-                eprintln!("⚠️  Failed to load user rules: {}", e);
+                eprintln!("⚠️  Failed to load user rules: {e}");
             }
         }
 
         // Load repo-level rules second (.looprs/rules/) - these override user rules
         let repo_rules_dir = PathBuf::from(".looprs").join("rules");
         if let Err(e) = registry.load_from_directory(&repo_rules_dir) {
-            eprintln!("⚠️  Failed to load repo rules: {}", e);
+            eprintln!("⚠️  Failed to load repo rules: {e}");
         }
 
         registry
@@ -243,7 +242,7 @@ mod tests {
 
         let mut file = fs::File::create(&rule_path).unwrap();
         writeln!(file, "# Test Rule").unwrap();
-        writeln!(file, "").unwrap();
+        writeln!(file).unwrap();
         writeln!(file, "This is a test rule.").unwrap();
 
         let rule = Rule::from_file(&rule_path).unwrap();

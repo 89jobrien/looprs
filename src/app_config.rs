@@ -4,20 +4,11 @@ use std::path::Path;
 
 use crate::file_refs::FileRefPolicy;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
     pub defaults: DefaultsConfig,
     pub file_references: FileReferencesConfig,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            defaults: DefaultsConfig::default(),
-            file_references: FileReferencesConfig::default(),
-        }
-    }
 }
 
 impl AppConfig {

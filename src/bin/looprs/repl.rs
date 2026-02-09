@@ -1,12 +1,12 @@
 use std::sync::{Arc, Mutex};
 
 use rustyline::completion::Completer;
-use rustyline::hint::Hinter;
 use rustyline::highlight::Highlighter;
+use rustyline::hint::Hinter;
+use rustyline::history::DefaultHistory;
 use rustyline::validate::Validator;
 use rustyline::{Cmd, ConditionalEventHandler, Context, Editor, Event, EventContext, EventHandler};
 use rustyline::{KeyCode, KeyEvent, Modifiers};
-use rustyline::history::DefaultHistory;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReplMode {
@@ -111,11 +111,11 @@ pub fn bind_repl_keys(
     state: Arc<Mutex<ReplState>>,
     sets: Arc<MatchSets>,
 ) {
-    let slash_handler = ReplHandler::new(HandlerKind::SlashKey, state.clone(), sets.clone());
-    let skill_handler = ReplHandler::new(HandlerKind::SkillKey, state.clone(), sets.clone());
-    let colon_handler = ReplHandler::new(HandlerKind::ColonKey, state.clone(), sets.clone());
-    let enter_handler = ReplHandler::new(HandlerKind::EnterKey, state.clone(), sets.clone());
-    let esc_handler = ReplHandler::new(HandlerKind::EscKey, state, sets);
+    let slash_handler = ReplHandler::new(HandlerKind::Slash, state.clone(), sets.clone());
+    let skill_handler = ReplHandler::new(HandlerKind::Skill, state.clone(), sets.clone());
+    let colon_handler = ReplHandler::new(HandlerKind::Colon, state.clone(), sets.clone());
+    let enter_handler = ReplHandler::new(HandlerKind::Enter, state.clone(), sets.clone());
+    let esc_handler = ReplHandler::new(HandlerKind::Esc, state, sets);
 
     let _ = editor.bind_sequence(
         Event::from(KeyEvent(KeyCode::Char('/'), Modifiers::NONE)),
@@ -141,11 +141,11 @@ pub fn bind_repl_keys(
 
 #[derive(Debug, Clone, Copy)]
 enum HandlerKind {
-    SlashKey,
-    SkillKey,
-    ColonKey,
-    EnterKey,
-    EscKey,
+    Slash,
+    Skill,
+    Colon,
+    Enter,
+    Esc,
 }
 
 struct ReplHandler {
@@ -206,21 +206,16 @@ impl ConditionalEventHandler for ReplHandler {
         ctx: &EventContext,
     ) -> Option<Cmd> {
         match self.kind {
-            HandlerKind::SlashKey => self.handle_mode_key(ctx, ReplMode::Slash, '/'),
-            HandlerKind::SkillKey => self.handle_mode_key(ctx, ReplMode::Skill, '$'),
-            HandlerKind::ColonKey => self.handle_mode_key(ctx, ReplMode::Colon, ':'),
-            HandlerKind::EnterKey => self.handle_enter(ctx),
-            HandlerKind::EscKey => self.handle_escape(ctx),
+            HandlerKind::Slash => self.handle_mode_key(ctx, ReplMode::Slash, '/'),
+            HandlerKind::Skill => self.handle_mode_key(ctx, ReplMode::Skill, '$'),
+            HandlerKind::Colon => self.handle_mode_key(ctx, ReplMode::Colon, ':'),
+            HandlerKind::Enter => self.handle_enter(ctx),
+            HandlerKind::Esc => self.handle_escape(ctx),
         }
     }
 }
 
-fn completion_hint(
-    line: &str,
-    pos: usize,
-    prefix: char,
-    items: &[String],
-) -> Option<String> {
+fn completion_hint(line: &str, pos: usize, prefix: char, items: &[String]) -> Option<String> {
     if pos != line.len() {
         return None;
     }

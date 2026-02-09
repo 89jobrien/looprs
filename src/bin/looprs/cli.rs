@@ -21,7 +21,11 @@ pub fn parse_input(line: &str) -> Option<CliCommand> {
         let skill_name = parts.next().unwrap_or("");
         if !skill_name.is_empty() {
             let trailing = parts.collect::<Vec<_>>().join(" ");
-            let trailing = if trailing.is_empty() { None } else { Some(trailing) };
+            let trailing = if trailing.is_empty() {
+                None
+            } else {
+                Some(trailing)
+            };
             return Some(CliCommand::InvokeSkill(skill_name.to_string(), trailing));
         }
     }
@@ -101,7 +105,7 @@ mod tests {
             parse_input("$rust-testing"),
             Some(CliCommand::InvokeSkill(_, _))
         ));
-        
+
         if let Some(CliCommand::InvokeSkill(name, _)) = parse_input("$rust-testing") {
             assert_eq!(name, "rust-testing");
         }
@@ -109,7 +113,8 @@ mod tests {
 
     #[test]
     fn parse_skill_invocation_ignores_trailing_text() {
-        if let Some(CliCommand::InvokeSkill(name, trailing)) = parse_input("$rust-testing help me") {
+        if let Some(CliCommand::InvokeSkill(name, trailing)) = parse_input("$rust-testing help me")
+        {
             assert_eq!(name, "rust-testing");
             assert_eq!(trailing, Some("help me".to_string()));
         }

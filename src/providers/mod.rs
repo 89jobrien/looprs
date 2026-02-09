@@ -128,7 +128,9 @@ pub async fn create_provider_with_overrides(
             .model
             .or(env::var("MODEL").ok().map(ModelId::new))
             .or(cfg_model);
-        return Ok(Box::new(anthropic::AnthropicProvider::new_with_model(key, model)?));
+        return Ok(Box::new(anthropic::AnthropicProvider::new_with_model(
+            key, model,
+        )?));
     }
 
     if env::var("OPENAI_API_KEY").is_ok() {
@@ -142,7 +144,9 @@ pub async fn create_provider_with_overrides(
             .model
             .or(env::var("MODEL").ok().map(ModelId::new))
             .or(cfg_model);
-        return Ok(Box::new(openai::OpenAIProvider::new_with_model(key, model)?));
+        return Ok(Box::new(openai::OpenAIProvider::new_with_model(
+            key, model,
+        )?));
     }
 
     // Step 4: Try local Ollama
@@ -180,7 +184,9 @@ async fn create_provider_by_name(
                 .model
                 .or(env::var("MODEL").ok().map(ModelId::new))
                 .or(cfg_model);
-            Ok(Box::new(anthropic::AnthropicProvider::new_with_model(key, model)?))
+            Ok(Box::new(anthropic::AnthropicProvider::new_with_model(
+                key, model,
+            )?))
         }
         "openai" => {
             let key = env::var("OPENAI_API_KEY")
@@ -193,7 +199,9 @@ async fn create_provider_by_name(
                 .model
                 .or(env::var("MODEL").ok().map(ModelId::new))
                 .or(cfg_model);
-            Ok(Box::new(openai::OpenAIProvider::new_with_model(key, model)?))
+            Ok(Box::new(openai::OpenAIProvider::new_with_model(
+                key, model,
+            )?))
         }
         "local" | "ollama" => {
             let cfg_model = config_file

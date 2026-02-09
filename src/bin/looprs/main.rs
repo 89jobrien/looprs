@@ -1,21 +1,21 @@
 use anyhow::Result;
 use colored::*;
-use rustyline::history::DefaultHistory;
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
+use rustyline::history::DefaultHistory;
 use std::env;
 
-use looprs::observation_manager::load_recent_observations;
-use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
 use looprs::ModelId;
-use looprs::{
-    console_approval_prompt, Agent, ApprovalCallback, Command, CommandRegistry, Event,
-    EventContext, HookRegistry, SessionContext, SkillRegistry,
-};
 use looprs::app_config::AppConfig;
 use looprs::file_refs::{AtReference, resolve_at_reference};
-use looprs::{ProviderConfig, ProviderSettings};
+use looprs::observation_manager::load_recent_observations;
+use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
 use looprs::ui;
+use looprs::{
+    Agent, ApprovalCallback, Command, CommandRegistry, Event, EventContext, HookRegistry,
+    SessionContext, SkillRegistry, console_approval_prompt,
+};
+use looprs::{ProviderConfig, ProviderSettings};
 
 mod args;
 mod cli;
@@ -49,9 +49,7 @@ async fn main() -> Result<()> {
     let model = provider.model().as_str().to_string();
 
     let provider_config = ProviderConfig::load().unwrap_or_default();
-    let max_tokens_override = provider_config
-        .merged_settings(&provider_name)
-        .max_tokens;
+    let max_tokens_override = provider_config.merged_settings(&provider_name).max_tokens;
     let runtime = looprs::RuntimeSettings {
         defaults: app_config.defaults.clone(),
         max_tokens_override,
@@ -65,7 +63,7 @@ async fn main() -> Result<()> {
             .unwrap_or_default()
             .join(".looprs")
             .join("hooks");
-        
+
         let repo_hooks_dir = env::current_dir()
             .ok()
             .map(|d| d.join(".looprs").join("hooks"));
@@ -78,10 +76,7 @@ async fn main() -> Result<()> {
 
         let repo_dir = repo_hooks_dir.filter(|d| d.exists());
 
-        if let Ok(hooks) = HookRegistry::load_dual_source(
-            user_dir.as_ref(),
-            repo_dir.as_ref(),
-        ) {
+        if let Ok(hooks) = HookRegistry::load_dual_source(user_dir.as_ref(), repo_dir.as_ref()) {
             agent = agent.with_hooks(hooks);
         }
     }
@@ -91,13 +86,13 @@ async fn main() -> Result<()> {
         .unwrap_or_default()
         .join(".looprs")
         .join("commands");
-    
+
     let repo_commands_dir = env::current_dir()
         .ok()
         .map(|d| d.join(".looprs").join("commands"));
 
     let mut command_registry = CommandRegistry::new();
-    
+
     // Load user commands
     if user_commands_dir.exists() {
         if let Ok(user_commands) = CommandRegistry::load_from_directory(&user_commands_dir) {
@@ -106,7 +101,7 @@ async fn main() -> Result<()> {
             }
         }
     }
-    
+
     // Load repo commands (will override user commands with same name)
     if let Some(dir) = repo_commands_dir {
         if dir.exists() {
@@ -123,13 +118,13 @@ async fn main() -> Result<()> {
         .unwrap_or_default()
         .join(".looprs")
         .join("skills");
-    
+
     let repo_skills_dir = env::current_dir()
         .ok()
         .map(|d| d.join(".looprs").join("skills"));
 
     let mut skill_registry = SkillRegistry::new();
-    
+
     // Load with precedence (repo overrides user)
     if let Some(repo_dir) = repo_skills_dir {
         if let Ok(_count) = skill_registry.load_with_precedence(&user_skills_dir, &repo_dir) {
@@ -205,6 +200,7 @@ async fn run_scriptable(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_interactive(
     cli_args: &CliArgs,
     mut model: String,
@@ -245,11 +241,14 @@ async fn run_interactive(
     let session_context_str = context.format_for_prompt().unwrap_or_default();
     let event_ctx = EventContext::new().with_session_context(session_context_str);
     agent.events.fire(Event::SessionStart, &event_ctx);
-    
+
     // Create approval callback for interactive prompts
     let approval_callback: ApprovalCallback = Box::new(console_approval_prompt);
-    let enriched_ctx =
-        agent.execute_hooks_for_event_with_approval(&Event::SessionStart, &event_ctx, Some(&approval_callback));
+    let enriched_ctx = agent.execute_hooks_for_event_with_approval(
+        &Event::SessionStart,
+        &event_ctx,
+        Some(&approval_callback),
+    );
 
     // Display context if available (unless quiet mode)
     if !cli_args.quiet {
@@ -310,13 +309,19 @@ async fn run_interactive(
                                 );
                                 agent.add_user_message(skill_message);
                             } else {
-                                let skill_message =
-                                    format!("Skill '{}' activated:\n\n{}", skill.name, skill.content);
+                                let skill_message = format!(
+                                    "Skill '{}' activated:\n\n{}",
+                                    skill.name, skill.content
+                                );
                                 agent.add_user_message(skill_message);
                             }
-                            
+
                             if let Err(e) = agent.run_turn().await {
-                                ui::error(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));
+                                ui::error(format!(
+                                    "\n{} {}",
+                                    "✗".red().bold(),
+                                    e.to_string().red()
+                                ));
                             }
                         } else {
                             ui::warn(format!("Skill not found: {skill_name}"));
@@ -339,8 +344,7 @@ async fn run_interactive(
                     }
                     CliCommand::FileRef(reference) => {
                         let policy = app_config.file_ref_policy();
-                        match resolve_at_reference(&reference, agent.working_dir(), &policy)
-                        {
+                        match resolve_at_reference(&reference, agent.working_dir(), &policy) {
                             Ok(AtReference::Directory(listing)) => {
                                 ui::info_full(listing);
                             }
@@ -358,9 +362,9 @@ async fn run_interactive(
                         if parts.is_empty() {
                             continue;
                         }
-                        
+
                         let cmd_name = parts[0];
-                        
+
                         if let Some(cmd) = command_registry.get(cmd_name) {
                             if let Err(e) = execute_command(cmd, &cmd_input, &mut agent).await {
                                 ui::error(format!("{} {}", "✗".red().bold(), e.to_string().red()));
@@ -373,20 +377,26 @@ async fn run_interactive(
                     CliCommand::Message(msg) => {
                         // Check for auto-triggering skills
                         let matching_skills = skill_registry.find_matching(&msg);
-                        
+
                         if !matching_skills.is_empty() {
-                            ui::info(format!("📚 Auto-triggered {} skill(s)", matching_skills.len()));
+                            ui::info(format!(
+                                "📚 Auto-triggered {} skill(s)",
+                                matching_skills.len()
+                            ));
                             for skill in &matching_skills {
                                 ui::info(format!("  • {}", skill.name.cyan()));
                             }
-                            
+
                             // Prepend skill content to user message
                             let mut full_message = String::new();
                             for skill in matching_skills {
-                                full_message.push_str(&format!("=== Skill: {} ===\n{}\n\n", skill.name, skill.content));
+                                full_message.push_str(&format!(
+                                    "=== Skill: {} ===\n{}\n\n",
+                                    skill.name, skill.content
+                                ));
                             }
                             full_message.push_str(&format!("User message: {msg}"));
-                            
+
                             agent.add_user_message(full_message);
                         } else {
                             agent.add_user_message(msg);
@@ -449,7 +459,7 @@ EXAMPLES:
   looprs -p "explain closures"     # Run single prompt and exit
   looprs -f script.txt -q          # Read from file, quiet mode
   looprs -p "code" -m gpt-5.2-codex --json  # JSON output
-"#
+"#,
     );
 }
 
@@ -458,7 +468,7 @@ fn build_command_items(command_registry: &CommandRegistry) -> Vec<String> {
     for cmd in command_registry.list() {
         items.push(format!("/{}", cmd.name));
         for alias in &cmd.aliases {
-            items.push(format!("/{}", alias));
+            items.push(format!("/{alias}"));
         }
     }
     items.sort();
@@ -497,7 +507,9 @@ fn provider_settings_mut<'a>(
     provider: &str,
 ) -> &'a mut ProviderSettings {
     match provider {
-        "anthropic" => config.anthropic.get_or_insert_with(ProviderSettings::default),
+        "anthropic" => config
+            .anthropic
+            .get_or_insert_with(ProviderSettings::default),
         "openai" => config.openai.get_or_insert_with(ProviderSettings::default),
         "local" | "ollama" => config.local.get_or_insert_with(ProviderSettings::default),
         _ => config.openai.get_or_insert_with(ProviderSettings::default),
@@ -521,9 +533,7 @@ fn build_runtime_settings(
     provider_config: &ProviderConfig,
     provider_name: &str,
 ) -> looprs::RuntimeSettings {
-    let max_tokens_override = provider_config
-        .merged_settings(provider_name)
-        .max_tokens;
+    let max_tokens_override = provider_config.merged_settings(provider_name).max_tokens;
     looprs::RuntimeSettings {
         defaults: app_config.defaults.clone(),
         max_tokens_override,
@@ -670,15 +680,12 @@ async fn handle_colon_command(
             save_configs(app_config, provider_config)?;
 
             if reload_provider {
-                let provider = create_provider_with_overrides(ProviderOverrides { model: None })
-                    .await?;
+                let provider =
+                    create_provider_with_overrides(ProviderOverrides { model: None }).await?;
                 *provider_name = provider.name().to_string();
                 *model = provider.model().as_str().to_string();
                 agent.set_provider(provider);
-                ui::info(format!(
-                    "Switched to {}/{}",
-                    provider_name, model
-                ));
+                ui::info(format!("Switched to {provider_name}/{model}"));
             }
 
             let runtime = build_runtime_settings(app_config, provider_config, provider_name);
@@ -703,8 +710,9 @@ fn get_setting_value(
 ) -> Option<String> {
     match key {
         "provider" => provider_config.provider.clone(),
-        "model" => provider_settings_ref(provider_config, provider_name)
-            .and_then(|s| s.model.clone()),
+        "model" => {
+            provider_settings_ref(provider_config, provider_name).and_then(|s| s.model.clone())
+        }
         "max_tokens" => provider_settings_ref(provider_config, provider_name)
             .and_then(|s| s.max_tokens)
             .map(|v| v.to_string()),
@@ -716,10 +724,7 @@ fn get_setting_value(
             .max_context_tokens
             .map(|v| v.to_string()),
         "defaults.temperature" => app_config.defaults.temperature.map(|v| v.to_string()),
-        "defaults.timeout_seconds" => app_config
-            .defaults
-            .timeout_seconds
-            .map(|v| v.to_string()),
+        "defaults.timeout_seconds" => app_config.defaults.timeout_seconds.map(|v| v.to_string()),
         _ => None,
     }
 }
@@ -773,10 +778,7 @@ async fn execute_command(cmd: &Command, _input: &str, agent: &mut Agent) -> Resu
             inject_output,
         } => {
             ui::running_command(command);
-            let output = ProcessCommand::new("sh")
-                .arg("-c")
-                .arg(command)
-                .output()?;
+            let output = ProcessCommand::new("sh").arg("-c").arg(command).output()?;
 
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);

@@ -7,7 +7,7 @@ mod grep;
 mod read;
 mod write;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -72,10 +72,12 @@ impl<'a> ToolArgs<'a> {
     }
 
     fn object(&self) -> Result<&serde_json::Map<String, Value>, ToolError> {
-        self.args.as_object().ok_or_else(|| ToolError::InvalidParameterType {
-            key: "<root>".to_string(),
-            expected: "object",
-        })
+        self.args
+            .as_object()
+            .ok_or_else(|| ToolError::InvalidParameterType {
+                key: "<root>".to_string(),
+                expected: "object",
+            })
     }
 
     fn get_value(&self, key: &str) -> Result<&Value, ToolError> {
@@ -86,22 +88,27 @@ impl<'a> ToolArgs<'a> {
 
     pub fn get_str(&self, key: &str) -> Result<&str, ToolError> {
         let value = self.get_value(key)?;
-        value.as_str().ok_or_else(|| ToolError::InvalidParameterType {
-            key: key.to_string(),
-            expected: "string",
-        })
+        value
+            .as_str()
+            .ok_or_else(|| ToolError::InvalidParameterType {
+                key: key.to_string(),
+                expected: "string",
+            })
     }
 
     pub fn get_str_optional(&self, key: &str) -> Result<Option<&str>, ToolError> {
         let map = self.object()?;
         match map.get(key) {
             None | Some(Value::Null) => Ok(None),
-            Some(value) => value.as_str().map(Some).ok_or_else(|| {
-                ToolError::InvalidParameterType {
-                    key: key.to_string(),
-                    expected: "string",
-                }
-            }),
+            Some(value) => {
+                value
+                    .as_str()
+                    .map(Some)
+                    .ok_or_else(|| ToolError::InvalidParameterType {
+                        key: key.to_string(),
+                        expected: "string",
+                    })
+            }
         }
     }
 
@@ -120,12 +127,15 @@ impl<'a> ToolArgs<'a> {
         let map = self.object()?;
         match map.get(key) {
             None | Some(Value::Null) => Ok(None),
-            Some(value) => value.as_u64().map(Some).ok_or_else(|| {
-                ToolError::InvalidParameterType {
-                    key: key.to_string(),
-                    expected: "u64",
-                }
-            }),
+            Some(value) => {
+                value
+                    .as_u64()
+                    .map(Some)
+                    .ok_or_else(|| ToolError::InvalidParameterType {
+                        key: key.to_string(),
+                        expected: "u64",
+                    })
+            }
         }
     }
 }

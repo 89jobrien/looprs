@@ -69,13 +69,11 @@ impl LLMProvider for AnthropicProvider {
 
         let response_json: Value = res.json().await?;
 
-        let content_arr = response_json["content"]
-            .as_array()
-            .ok_or_else(|| {
-                ProviderError::InvalidResponse(
-                    "Unexpected API response: missing 'content' array".to_string(),
-                )
-            })?;
+        let content_arr = response_json["content"].as_array().ok_or_else(|| {
+            ProviderError::InvalidResponse(
+                "Unexpected API response: missing 'content' array".to_string(),
+            )
+        })?;
 
         let mut blocks = Vec::new();
 
@@ -91,22 +89,15 @@ impl LLMProvider for AnthropicProvider {
                     }
                 }
                 Some("tool_use") => {
-                    let id = block
-                        .get("id")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| ProviderError::InvalidResponse("Missing tool_use id".to_string()))?;
-                    let name = block
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            ProviderError::InvalidResponse("Missing tool_use name".to_string())
-                        })?;
-                    let input = block
-                        .get("input")
-                        .cloned()
-                        .ok_or_else(|| {
-                            ProviderError::InvalidResponse("Missing tool_use input".to_string())
-                        })?;
+                    let id = block.get("id").and_then(|v| v.as_str()).ok_or_else(|| {
+                        ProviderError::InvalidResponse("Missing tool_use id".to_string())
+                    })?;
+                    let name = block.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
+                        ProviderError::InvalidResponse("Missing tool_use name".to_string())
+                    })?;
+                    let input = block.get("input").cloned().ok_or_else(|| {
+                        ProviderError::InvalidResponse("Missing tool_use input".to_string())
+                    })?;
 
                     blocks.push(ContentBlock::ToolUse {
                         id: crate::types::ToolId::new(id),

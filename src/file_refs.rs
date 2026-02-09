@@ -157,10 +157,9 @@ fn resolve_reference(filename: &str, base_dir: &Path, policy: &FileRefPolicy) ->
         anyhow::bail!("Unsupported file type: {filename}");
     }
 
-    let bytes = fs::read(&canonical)
-        .with_context(|| format!("Failed to read file: {filename}"))?;
-    let content = String::from_utf8(bytes)
-        .with_context(|| format!("File is not valid UTF-8: {filename}"))?;
+    let bytes = fs::read(&canonical).with_context(|| format!("Failed to read file: {filename}"))?;
+    let content =
+        String::from_utf8(bytes).with_context(|| format!("File is not valid UTF-8: {filename}"))?;
 
     Ok(content)
 }
@@ -202,10 +201,7 @@ fn list_directory(path: &PathBuf) -> Result<String> {
     for entry in fs::read_dir(path)? {
         let entry = entry?;
         let file_type = entry.file_type()?;
-        let name = entry
-            .file_name()
-            .to_string_lossy()
-            .to_string();
+        let name = entry.file_name().to_string_lossy().to_string();
         if file_type.is_dir() {
             entries.push(format!("{name}/"));
         } else {

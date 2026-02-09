@@ -15,14 +15,14 @@ struct SkillFrontmatter {
 pub fn parse_skill_file(path: &Path, content: &str) -> Result<super::Skill> {
     // Split frontmatter from content
     let parts: Vec<&str> = content.splitn(3, "---").collect();
-    
+
     if parts.len() < 3 {
         anyhow::bail!("Invalid SKILL.md format: missing YAML frontmatter delimiters");
     }
 
     // Parse YAML frontmatter
-    let frontmatter: SkillFrontmatter = serde_yaml::from_str(parts[1])
-        .context("Failed to parse YAML frontmatter")?;
+    let frontmatter: SkillFrontmatter =
+        serde_yaml::from_str(parts[1]).context("Failed to parse YAML frontmatter")?;
 
     // Validate required fields
     if frontmatter.name.is_empty() {
@@ -65,9 +65,15 @@ This is the skill content.
         let skill = parse_skill_file(&path, content).unwrap();
 
         assert_eq!(skill.name, "rust-testing");
-        assert_eq!(skill.description, Some("Guide for writing Rust tests".to_string()));
+        assert_eq!(
+            skill.description,
+            Some("Guide for writing Rust tests".to_string())
+        );
         assert_eq!(skill.triggers, vec!["rust test", "cargo test"]);
-        assert_eq!(skill.content, "# Rust Testing\n\nThis is the skill content.");
+        assert_eq!(
+            skill.content,
+            "# Rust Testing\n\nThis is the skill content."
+        );
         assert_eq!(skill.source_path, path);
     }
 
@@ -97,10 +103,15 @@ Content only.
     fn test_parse_missing_frontmatter() {
         let content = "# Just Content\n\nNo frontmatter.";
         let path = PathBuf::from("/test/SKILL.md");
-        
+
         let result = parse_skill_file(&path, content);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("missing YAML frontmatter"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("missing YAML frontmatter")
+        );
     }
 
     #[test]
@@ -113,10 +124,15 @@ triggers:
 Content
 "#;
         let path = PathBuf::from("/test/SKILL.md");
-        
+
         let result = parse_skill_file(&path, content);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("name cannot be empty")
+        );
     }
 
     #[test]
@@ -128,9 +144,14 @@ triggers: []
 Content
 "#;
         let path = PathBuf::from("/test/SKILL.md");
-        
+
         let result = parse_skill_file(&path, content);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("at least one trigger"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("at least one trigger")
+        );
     }
 }

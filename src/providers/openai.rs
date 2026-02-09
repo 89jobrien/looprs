@@ -7,7 +7,7 @@ use super::{InferenceRequest, InferenceResponse, LLMProvider, ProviderHttpClient
 use crate::types::ModelId;
 
 /// OpenAI provider implementation
-/// 
+///
 /// API differences:
 /// - GPT-5.x and newer GPT-4 models use `max_completion_tokens` instead of `max_tokens`
 /// - Tool calls use OpenAI's function calling format (different from Anthropic)
@@ -36,7 +36,7 @@ impl OpenAIProvider {
         let mut messages = Vec::new();
         let mut text_parts = Vec::new();
         let mut tool_calls = Vec::new();
-        
+
         // Separate content into text, tool uses, and tool results
         for block in &msg.content {
             match block {
@@ -67,13 +67,13 @@ impl OpenAIProvider {
                 }
             }
         }
-        
+
         // Build the main message if there's text or tool calls
         if !text_parts.is_empty() || !tool_calls.is_empty() {
             let mut main_msg = json!({
                 "role": msg.role,
             });
-            
+
             // Add content if we have text
             if !text_parts.is_empty() {
                 main_msg["content"] = json!(text_parts.join("\n"));
@@ -81,15 +81,15 @@ impl OpenAIProvider {
                 // OpenAI requires content field if no tool_calls
                 main_msg["content"] = json!("");
             }
-            
+
             // Add tool_calls if we have any
             if !tool_calls.is_empty() {
                 main_msg["tool_calls"] = json!(tool_calls);
             }
-            
+
             messages.insert(0, main_msg);
         }
-        
+
         messages
     }
 }

@@ -3,6 +3,7 @@ use crate::api::Message;
 use crate::app_config::DefaultsConfig;
 use crate::errors::AgentError;
 use crate::events::{Event, EventContext, EventManager};
+use crate::file_refs::FileRefPolicy;
 use crate::hooks::HookExecutor;
 use crate::hooks::HookRegistry;
 use crate::observation_manager::ObservationManager;
@@ -11,7 +12,6 @@ use crate::providers::LLMProvider;
 use crate::rules::RuleRegistry;
 use crate::tools::{ToolContext, execute_tool, get_tool_definitions};
 use crate::ui;
-use crate::file_refs::FileRefPolicy;
 use tokio::time::{Duration, timeout};
 
 #[derive(Debug, Clone, Default)]
@@ -34,7 +34,11 @@ pub struct Agent {
 
 impl Agent {
     pub fn new(provider: Box<dyn LLMProvider>) -> Result<Self, AgentError> {
-        Self::new_with_runtime(provider, RuntimeSettings::default(), FileRefPolicy::default())
+        Self::new_with_runtime(
+            provider,
+            RuntimeSettings::default(),
+            FileRefPolicy::default(),
+        )
     }
 
     pub fn new_with_runtime(
@@ -74,7 +78,7 @@ impl Agent {
 
     pub fn add_user_message(&mut self, text: impl Into<String>) {
         let text_str = text.into();
-        
+
         // Resolve file references (@filename) if present
         let resolved = if crate::file_refs::has_file_references(&text_str) {
             match crate::file_refs::resolve_file_references(
@@ -91,7 +95,7 @@ impl Agent {
         } else {
             text_str
         };
-        
+
         self.messages.push(Message::user(resolved));
     }
 
@@ -114,7 +118,7 @@ impl Agent {
         approval_fn: Option<&crate::hooks::ApprovalCallback>,
     ) -> EventContext {
         let mut enriched_context = context.clone();
-        
+
         if let Some(hooks) = self.hooks.hooks_for_event(event) {
             for hook in hooks {
                 if let Ok(results) =
@@ -129,7 +133,7 @@ impl Agent {
                 }
             }
         }
-        
+
         enriched_context
     }
 
@@ -176,9 +180,11 @@ impl Agent {
                 // Truncate large values to prevent prompt bloat (max 2000 chars per injection)
                 const MAX_INJECTION_SIZE: usize = 2000;
                 let truncated_value = if value.len() > MAX_INJECTION_SIZE {
-                    format!("{}... [truncated {} bytes]", 
-                            &value[..MAX_INJECTION_SIZE], 
-                            value.len() - MAX_INJECTION_SIZE)
+                    format!(
+                        "{}... [truncated {} bytes]",
+                        &value[..MAX_INJECTION_SIZE],
+                        value.len() - MAX_INJECTION_SIZE
+                    )
                 } else {
                     value.clone()
                 };
@@ -264,8 +270,11 @@ impl Agent {
                     Ok(ref output) => {
                         ui::tool_ok();
                         // Capture observation
-                        self.observations
-                            .capture(name.as_str().to_string(), input.clone(), output.clone());
+                        self.observations.capture(
+                            name.as_str().to_string(),
+                            input.clone(),
+                            output.clone(),
+                        );
                         // Fire PostToolUse event on success
                         let event_ctx = EventContext::new()
                             .with_tool_name(name.as_str().to_string())
@@ -303,8 +312,8 @@ impl Agent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::providers::{InferenceResponse, Usage};
     use crate::errors::ProviderError;
+    use crate::providers::{InferenceResponse, Usage};
 
     // Mock provider for testing
     struct MockProvider {
@@ -384,7 +393,7 @@ mod tests {
     fn test_agent_add_user_message() {
         let provider = MockProvider::simple_text("test");
         let mut agent = Agent::new(Box::new(provider)).unwrap();
-        
+
         agent.add_user_message("Hello");
         assert_eq!(agent.messages.len(), 1);
         assert_eq!(agent.messages[0].role, "user");
@@ -394,7 +403,7 @@ mod tests {
     fn test_agent_add_multiple_messages() {
         let provider = MockProvider::simple_text("test");
         let mut agent = Agent::new(Box::new(provider)).unwrap();
-        
+
         agent.add_user_message("First");
         agent.add_user_message("Second");
         assert_eq!(agent.messages.len(), 2);
@@ -404,10 +413,10 @@ mod tests {
     fn test_agent_clear_history() {
         let provider = MockProvider::simple_text("test");
         let mut agent = Agent::new(Box::new(provider)).unwrap();
-        
+
         agent.add_user_message("Test");
         assert_eq!(agent.messages.len(), 1);
-        
+
         agent.clear_history();
         assert_eq!(agent.messages.len(), 0);
     }
@@ -416,11 +425,9 @@ mod tests {
     fn test_agent_with_hooks() {
         let provider = MockProvider::simple_text("test");
         let hooks = HookRegistry::new();
-        
-        let agent = Agent::new(Box::new(provider))
-            .unwrap()
-            .with_hooks(hooks);
-        
+
+        let agent = Agent::new(Box::new(provider)).unwrap().with_hooks(hooks);
+
         // Just verify it works
         assert_eq!(agent.messages.len(), 0);
     }
@@ -429,10 +436,10 @@ mod tests {
     fn test_execute_hooks_for_event_no_hooks() {
         let provider = MockProvider::simple_text("test");
         let agent = Agent::new(Box::new(provider)).unwrap();
-        
+
         let ctx = EventContext::new().with_user_message("test".to_string());
         let enriched = agent.execute_hooks_for_event(&Event::SessionStart, &ctx);
-        
+
         // Should return unchanged context
         assert!(enriched.metadata.is_empty());
     }
@@ -440,17 +447,15 @@ mod tests {
     #[test]
     fn test_execute_hooks_for_event_with_hooks() {
         let provider = MockProvider::simple_text("test");
-        
+
         // Create a hook registry (empty is fine, we're just testing it doesn't crash)
         let hooks = HookRegistry::new();
-        
-        let agent = Agent::new(Box::new(provider))
-            .unwrap()
-            .with_hooks(hooks);
-        
+
+        let agent = Agent::new(Box::new(provider)).unwrap().with_hooks(hooks);
+
         let ctx = EventContext::new();
         let enriched = agent.execute_hooks_for_event(&Event::SessionStart, &ctx);
-        
+
         // Should work even with no hooks
         assert!(enriched.metadata.is_empty());
     }
@@ -459,9 +464,9 @@ mod tests {
     fn test_context_injection_from_hooks() {
         use std::io::Write;
         use tempfile::TempDir;
-        
+
         let provider = MockProvider::simple_text("test");
-        
+
         // Create a temporary hook file with inject_as
         let temp_dir = TempDir::new().unwrap();
         let hook_file = temp_dir.path().join("test_hook.yaml");
@@ -480,31 +485,35 @@ actions:
         )
         .unwrap();
         drop(file);
-        
+
         // Load hooks from temp directory
         let hooks = HookRegistry::load_from_directory(&temp_dir.path().to_path_buf()).unwrap();
-        
-        let agent = Agent::new(Box::new(provider))
-            .unwrap()
-            .with_hooks(hooks);
-        
+
+        let agent = Agent::new(Box::new(provider)).unwrap().with_hooks(hooks);
+
         let ctx = EventContext::new();
         let enriched = agent.execute_hooks_for_event(&Event::SessionStart, &ctx);
-        
+
         // Should have injected context in metadata
         assert!(!enriched.metadata.is_empty());
         assert_eq!(enriched.metadata.len(), 2);
-        assert_eq!(enriched.metadata.get("test_key").unwrap(), "injected context");
-        assert_eq!(enriched.metadata.get("another_key").unwrap(), "another value");
+        assert_eq!(
+            enriched.metadata.get("test_key").unwrap(),
+            "injected context"
+        );
+        assert_eq!(
+            enriched.metadata.get("another_key").unwrap(),
+            "another value"
+        );
     }
 
     #[test]
     fn test_context_injection_without_inject_as() {
         use std::io::Write;
         use tempfile::TempDir;
-        
+
         let provider = MockProvider::simple_text("test");
-        
+
         // Create a hook without inject_as
         let temp_dir = TempDir::new().unwrap();
         let hook_file = temp_dir.path().join("test_hook.yaml");
@@ -521,16 +530,14 @@ actions:
         )
         .unwrap();
         drop(file);
-        
+
         let hooks = HookRegistry::load_from_directory(&temp_dir.path().to_path_buf()).unwrap();
-        
-        let agent = Agent::new(Box::new(provider))
-            .unwrap()
-            .with_hooks(hooks);
-        
+
+        let agent = Agent::new(Box::new(provider)).unwrap().with_hooks(hooks);
+
         let ctx = EventContext::new();
         let enriched = agent.execute_hooks_for_event(&Event::SessionStart, &ctx);
-        
+
         // Should NOT have any injected context
         assert!(enriched.metadata.is_empty());
     }
@@ -539,15 +546,15 @@ actions:
     fn test_context_injection_large_value_truncation() {
         let provider = MockProvider::simple_text("test");
         let mut agent = Agent::new(Box::new(provider)).unwrap();
-        
+
         // Create context with a very large injected value
         let large_value = "x".repeat(5000);
         let mut ctx = EventContext::new().with_user_message("test".to_string());
         ctx.metadata.insert("large_key".to_string(), large_value);
-        
+
         // Simulate the hook execution result
         agent.messages.push(crate::api::Message::user("test"));
-        
+
         // The run_turn method should handle large values gracefully
         // We can't easily test the full flow without mocking, but we can verify
         // the context is created correctly
@@ -558,10 +565,10 @@ actions:
     async fn test_run_turn_simple() {
         let provider = MockProvider::simple_text("Hello response");
         let mut agent = Agent::new(Box::new(provider)).unwrap();
-        
+
         agent.add_user_message("Hello");
         let result = agent.run_turn().await;
-        
+
         assert!(result.is_ok());
         // Should have user message + assistant response
         assert_eq!(agent.messages.len(), 2);
@@ -572,7 +579,7 @@ actions:
     fn test_observation_manager_initialized() {
         let provider = MockProvider::simple_text("test");
         let agent = Agent::new(Box::new(provider)).unwrap();
-        
+
         assert_eq!(agent.observations.count(), 0);
     }
 
@@ -580,7 +587,7 @@ actions:
     fn test_event_manager_initialized() {
         let provider = MockProvider::simple_text("test");
         let agent = Agent::new(Box::new(provider)).unwrap();
-        
+
         // EventManager should be initialized and ready to use
         let ctx = EventContext::new();
         agent.events.fire(Event::SessionStart, &ctx);
@@ -591,21 +598,21 @@ actions:
     fn test_file_reference_resolution() {
         use std::io::Write;
         use tempfile::TempDir;
-        
+
         let temp_dir = TempDir::new().unwrap();
         let test_file = temp_dir.path().join("test.txt");
         let mut file = std::fs::File::create(&test_file).unwrap();
         writeln!(file, "Hello from file!").unwrap();
-        
+
         let provider = MockProvider::simple_text("test");
         let mut agent = Agent::new(Box::new(provider)).unwrap();
-        
+
         // Override working directory to temp dir for this test
         agent.tool_ctx.working_dir = temp_dir.path().to_path_buf();
-        
+
         // Add message with file reference
         agent.add_user_message("Check @test.txt please");
-        
+
         // Should have resolved the file reference
         assert_eq!(agent.messages.len(), 1);
         let msg_content = agent.messages[0].content.first().unwrap();

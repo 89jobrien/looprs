@@ -2,7 +2,7 @@ use std::sync::{Mutex, OnceLock};
 
 use tempfile::TempDir;
 
-use looprs::{ModelId, create_provider_with_overrides, ProviderOverrides};
+use looprs::{ModelId, ProviderOverrides, create_provider_with_overrides};
 
 static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 

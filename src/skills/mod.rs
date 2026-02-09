@@ -46,9 +46,10 @@ impl SkillRegistry {
         self.skills
             .iter()
             .filter(|skill| {
-                skill.triggers.iter().any(|trigger| {
-                    input_lower.contains(&trigger.to_lowercase())
-                })
+                skill
+                    .triggers
+                    .iter()
+                    .any(|trigger| input_lower.contains(&trigger.to_lowercase()))
             })
             .collect()
     }
@@ -74,9 +75,9 @@ mod tests {
             content: "content".to_string(),
             source_path: PathBuf::from("/test"),
         };
-        
+
         registry.register(skill.clone());
-        
+
         assert_eq!(registry.get("test-skill"), Some(&skill));
         assert_eq!(registry.get("nonexistent"), None);
     }
