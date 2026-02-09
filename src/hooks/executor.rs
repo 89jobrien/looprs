@@ -1,5 +1,7 @@
 use super::{Action, Hook};
+use crate::app_config::AppConfig;
 use crate::events::EventContext;
+use std::collections::HashMap;
 use std::process::Command;
 
 pub struct HookExecutor;
@@ -28,17 +30,19 @@ impl HookExecutor {
         approval_fn: Option<&ApprovalCallback>,
     ) -> anyhow::Result<Vec<HookResult>> {
         let mut results = Vec::new();
+        let mut local_ctx: HashMap<String, String> = HashMap::new();
 
         // Check condition if present
         if let Some(condition) = &hook.condition {
-            if !Self::eval_condition(condition, context)? {
+            if !Self::eval_condition(condition, &local_ctx)? {
                 return Ok(results); // Skip hook if condition fails
             }
         }
 
         // Execute each action
         for (idx, action) in hook.actions.iter().enumerate() {
-            if let Some(result) = Self::execute_action(action, context, approval_fn)? {
+            if let Some(result) = Self::execute_action(action, context, approval_fn, &mut local_ctx)?
+            {
                 results.push(HookResult {
                     hook_name: hook.name.clone(),
                     action_index: idx,
@@ -56,6 +60,7 @@ impl HookExecutor {
         action: &Action,
         context: &EventContext,
         approval_fn: Option<&ApprovalCallback>,
+        local_ctx: &mut HashMap<String, String>,
     ) -> anyhow::Result<Option<(String, Option<String>)>> {
         match action {
             Action::Command {
@@ -94,15 +99,26 @@ impl HookExecutor {
                 condition,
                 then: actions,
             } => {
-                if Self::eval_condition(condition, context)? {
+                if Self::eval_condition(condition, local_ctx)? {
+                    let mut last_result: Option<(String, Option<String>)> = None;
                     for action in actions {
-                        Self::execute_action(action, context, approval_fn)?;
+                        if let Some(result) =
+                            Self::execute_action(action, context, approval_fn, local_ctx)?
+                        {
+                            last_result = Some(result);
+                        }
                     }
+                    return Ok(last_result);
                 }
                 Ok(None)
             }
-            Action::Confirm { .. } => {
-                crate::ui::warn("Warning: Hook action 'confirm' not implemented yet");
+            Action::Confirm { prompt, set_key } => {
+                let approved = if let Some(callback) = approval_fn {
+                    callback(prompt)
+                } else {
+                    false
+                };
+                local_ctx.insert(set_key.clone(), approved.to_string());
                 Ok(None)
             }
             Action::Prompt { .. } => {
@@ -139,7 +155,10 @@ impl HookExecutor {
     }
 
     /// Evaluate simple conditions (very basic for now)
-    fn eval_condition(condition: &str, _context: &EventContext) -> anyhow::Result<bool> {
+    fn eval_condition(
+        condition: &str,
+        local_ctx: &HashMap<String, String>,
+    ) -> anyhow::Result<bool> {
         // Simple condition evaluation: "on_branch:main" or "has_tool:git"
         if condition.starts_with("on_branch:") {
             let branch = condition.strip_prefix("on_branch:").unwrap_or("");
@@ -150,6 +169,30 @@ impl HookExecutor {
         if condition.starts_with("has_tool:") {
             let tool = condition.strip_prefix("has_tool:").unwrap_or("");
             return Self::check_tool_available(tool);
+        }
+
+        if let Some(rest) = condition.strip_prefix("equals:") {
+            let parts: Vec<&str> = rest.splitn(2, ':').collect();
+            if parts.len() == 2 {
+                return Ok(local_ctx
+                    .get(parts[0])
+                    .map(|v| v == parts[1])
+                    .unwrap_or(false));
+            }
+        }
+
+        if let Some(var) = condition.strip_prefix("env_set:") {
+            return Ok(std::env::var(var).map(|v| !v.is_empty()).unwrap_or(false));
+        }
+
+        if let Some(rest) = condition.strip_prefix("config_flag:") {
+            let parts: Vec<&str> = rest.splitn(2, '=').collect();
+            if parts.len() == 2 {
+                let cfg = AppConfig::load().unwrap_or_default();
+                if parts[0] == "onboarding.demo_seen" {
+                    return Ok(cfg.onboarding.demo_seen.to_string() == parts[1]);
+                }
+            }
         }
 
         // Unknown condition -> fail closed.
@@ -193,15 +236,15 @@ mod tests {
 
     #[test]
     fn test_condition_on_branch() {
-        let context = EventContext::new();
-        assert!(HookExecutor::eval_condition("on_branch:main", &context).unwrap());
-        assert!(HookExecutor::eval_condition("on_branch:*", &context).unwrap());
+        let local_ctx: HashMap<String, String> = HashMap::new();
+        assert!(HookExecutor::eval_condition("on_branch:main", &local_ctx).unwrap());
+        assert!(HookExecutor::eval_condition("on_branch:*", &local_ctx).unwrap());
     }
 
     #[test]
     fn test_condition_unknown_fails_closed() {
-        let context = EventContext::new();
-        assert!(!HookExecutor::eval_condition("unknown_condition:foo", &context).unwrap());
+        let local_ctx: HashMap<String, String> = HashMap::new();
+        assert!(!HookExecutor::eval_condition("unknown_condition:foo", &local_ctx).unwrap());
     }
 
     #[test]
@@ -232,6 +275,30 @@ actions:
 
         let results = HookExecutor::execute_hook(&hook, &context).unwrap();
         assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn equals_condition_uses_hook_local_context() {
+        let yaml = r#"name: test
+trigger: SessionStart
+actions:
+  - type: confirm
+    prompt: "Continue?"
+    set_key: continue
+  - type: conditional
+    condition: equals:continue:true
+    then:
+      - type: message
+        text: "ok"
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new();
+
+        let approve: ApprovalCallback = Box::new(|_| true);
+        let results =
+            HookExecutor::execute_hook_with_approval(&hook, &context, Some(&approve)).unwrap();
+        assert!(results.iter().any(|r| r.output == "ok"));
     }
 
     #[test]
