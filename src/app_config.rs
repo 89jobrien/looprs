@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::file_refs::FileRefPolicy;
+use crate::state::AppState;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -13,54 +14,20 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    /// Load from user-owned `.looprs/config.json`, then overlay onboarding from app state file.
     pub fn load() -> anyhow::Result<Self> {
         let path = Path::new(".looprs/config.json");
-        if !path.exists() {
-            return Ok(Self::default());
-        }
-        let content = fs::read_to_string(path)?;
-        let config: Self = serde_json::from_str(&content)?;
-        Ok(config)
-    }
-
-    pub fn save(&self) -> anyhow::Result<()> {
-        fs::create_dir_all(".looprs")?;
-        let content = serde_json::to_string_pretty(self)?;
-        fs::write(".looprs/config.json", content)?;
-        Ok(())
-    }
-
-    pub fn set_onboarding_demo_seen(value: bool) -> anyhow::Result<()> {
-        Self::set_onboarding_demo_seen_at(Path::new(".looprs/config.json"), value)
-    }
-
-    fn set_onboarding_demo_seen_at(path: &Path, value: bool) -> anyhow::Result<()> {
-        use serde_json::{Value, json};
-
-        let mut root: Value = if path.exists() {
-            serde_json::from_str(&fs::read_to_string(path)?)?
+        let mut config: Self = if path.exists() {
+            let content = fs::read_to_string(path)?;
+            serde_json::from_str(&content)?
         } else {
-            json!({})
+            Self::default()
         };
-
-        if !root.is_object() {
-            root = json!({});
+        // State file (e.g. onboarding.demo_seen) overrides so app never writes config.json
+        if let Ok(state) = AppState::load() {
+            config.onboarding.demo_seen = state.onboarding.demo_seen;
         }
-
-        let obj = root.as_object_mut().unwrap();
-        let onboarding = obj.entry("onboarding").or_insert_with(|| json!({}));
-        if !onboarding.is_object() {
-            *onboarding = json!({});
-        }
-        onboarding
-            .as_object_mut()
-            .unwrap()
-            .insert("demo_seen".to_string(), json!(value));
-
-        let parent = path.parent().unwrap_or_else(|| Path::new("."));
-        fs::create_dir_all(parent)?;
-        fs::write(path, serde_json::to_string_pretty(&root)?)?;
-        Ok(())
+        Ok(config)
     }
 
     pub fn file_ref_policy(&self) -> FileRefPolicy {
@@ -118,6 +85,7 @@ pub struct OnboardingConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
     use tempfile::TempDir;
 
     #[test]
@@ -127,32 +95,27 @@ mod tests {
     }
 
     #[test]
-    fn set_onboarding_demo_seen_preserves_unknown_fields() {
+    fn load_overlays_onboarding_from_state_file() {
         let tmp = TempDir::new().unwrap();
-        let config_dir = tmp.path().join(".looprs");
-        fs::create_dir_all(&config_dir).unwrap();
-        let config_path = config_dir.join("config.json");
-        fs::write(
-            &config_path,
-            r#"{ "version": "1.0.0", "onboarding": {"demo_seen": false} }"#,
+        let looprs = tmp.path().join(".looprs");
+        std::fs::create_dir_all(&looprs).unwrap();
+        std::fs::write(
+            looprs.join("config.json"),
+            r#"{ "onboarding": { "demo_seen": false } }"#,
         )
         .unwrap();
-
-        AppConfig::set_onboarding_demo_seen_at(&config_path, true).unwrap();
-
-        let saved = fs::read_to_string(&config_path).unwrap();
-        assert!(saved.contains("\"version\": \"1.0.0\""));
-        assert!(saved.contains("\"demo_seen\": true"));
-    }
-
-    #[test]
-    fn set_onboarding_demo_seen_creates_parent_dir() {
-        let tmp = TempDir::new().unwrap();
-        let config_path = tmp.path().join("nested/.looprs/config.json");
-
-        AppConfig::set_onboarding_demo_seen_at(&config_path, true).unwrap();
-
-        let saved = fs::read_to_string(&config_path).unwrap();
-        assert!(saved.contains("\"demo_seen\": true"));
+        std::fs::write(
+            looprs.join("state.json"),
+            r#"{ "onboarding": { "demo_seen": true } }"#,
+        )
+        .unwrap();
+        let original = env::current_dir().unwrap();
+        let _ = env::set_current_dir(tmp.path());
+        let cfg = AppConfig::load().unwrap();
+        let _ = env::set_current_dir(original);
+        assert!(
+            cfg.onboarding.demo_seen,
+            "state file should override config"
+        );
     }
 }

@@ -29,6 +29,25 @@ use repl::{MatchSets, ReplHelper, bind_repl_keys};
 async fn main() -> Result<()> {
     ui::init_logging();
 
+    // Subcommand: seed [DIR] — write example config files (default: .looprs)
+    let args: Vec<String> = env::args().collect();
+    if matches!(args.get(1).map(String::as_str), Some("seed")) {
+        let dir_str = args.get(2).map(String::as_str).unwrap_or(".looprs");
+        let dir = looprs::seed::expand_tilde(dir_str);
+        match looprs::seed::seed_into(&dir) {
+            Ok(files) => {
+                for f in &files {
+                    println!("{}", f.display());
+                }
+                std::process::exit(0);
+            }
+            Err(e) => {
+                ui::error(format!("seed: {e}"));
+                std::process::exit(1);
+            }
+        }
+    }
+
     // Parse command-line arguments
     let cli_args = match CliArgs::parse() {
         Ok(args) => args,
@@ -449,7 +468,11 @@ async fn run_interactive(
 
 fn print_usage() {
     ui::error_full(
-        r#"Usage: looprs [OPTIONS]
+        r#"Usage: looprs [OPTIONS] | looprs seed [DIR]
+
+COMMANDS:
+  seed [DIR]             Write example config files to DIR (default: .looprs).
+                         Use ~ for home (e.g. ~/.looprs). Does not overwrite.
 
 OPTIONS:
   -p, --prompt <TEXT>    Run with single prompt and exit (scriptable mode)
@@ -461,9 +484,9 @@ OPTIONS:
 
 EXAMPLES:
   looprs                           # Interactive mode
+  looprs seed                      # Create .looprs/config.json.example, etc.
+  looprs seed ~/.looprs            # Seed home config dir
   looprs -p "explain closures"     # Run single prompt and exit
-  looprs -f script.txt -q          # Read from file, quiet mode
-  looprs -p "code" -m gpt-5.2-codex --json  # JSON output
 "#,
     );
 }
@@ -761,9 +784,9 @@ fn unset_setting(
     }
 }
 
-fn save_configs(app_config: &AppConfig, provider_config: &ProviderConfig) -> Result<()> {
-    app_config.save()?;
-    provider_config.save()?;
+/// Config files are user-owned; we no longer write config.json or provider.json.
+/// Session changes from :set/:unset apply in-memory only.
+fn save_configs(_app_config: &AppConfig, _provider_config: &ProviderConfig) -> Result<()> {
     Ok(())
 }
 

@@ -1,6 +1,7 @@
 use super::{Action, Hook, PromptCallback};
 use crate::app_config::AppConfig;
 use crate::events::EventContext;
+use crate::state::AppState;
 use std::collections::HashMap;
 use std::process::Command;
 
@@ -193,7 +194,7 @@ impl HookExecutor {
                         crate::ui::warn(format!("Warning: set_config expected boolean for {path}"));
                         return Ok(None);
                     };
-                    AppConfig::set_onboarding_demo_seen(flag)?;
+                    AppState::set_onboarding_demo_seen(flag)?;
                 } else {
                     crate::ui::warn(format!("Warning: Unknown config path '{path}'"));
                 }
@@ -399,7 +400,7 @@ mod tests {
 
         std::fs::create_dir_all(".looprs").unwrap();
         std::fs::write(
-            ".looprs/config.json",
+            ".looprs/state.json",
             r#"{ "onboarding": { "demo_seen": true } }"#,
         )
         .unwrap();
@@ -682,7 +683,7 @@ actions:
 
         HookExecutor::execute_hook_with_callbacks(&hook, &context, None, None, None).unwrap();
 
-        let saved = std::fs::read_to_string(".looprs/config.json").unwrap();
+        let saved = std::fs::read_to_string(".looprs/state.json").unwrap();
         assert!(saved.contains("\"demo_seen\": true"));
     }
 }
