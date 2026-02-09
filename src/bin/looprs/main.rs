@@ -13,7 +13,8 @@ use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
 use looprs::ui;
 use looprs::{
     Agent, ApprovalCallback, Command, CommandRegistry, Event, EventContext, HookRegistry,
-    SessionContext, SkillRegistry, console_approval_prompt,
+    PromptCallback, SessionContext, SkillRegistry, console_approval_prompt, console_prompt,
+    console_secret_prompt,
 };
 use looprs::{ProviderConfig, ProviderSettings};
 
@@ -244,10 +245,14 @@ async fn run_interactive(
 
     // Create approval callback for interactive prompts
     let approval_callback: ApprovalCallback = Box::new(console_approval_prompt);
-    let enriched_ctx = agent.execute_hooks_for_event_with_approval(
+    let prompt_callback: PromptCallback = Box::new(console_prompt);
+    let secret_prompt_callback: PromptCallback = Box::new(console_secret_prompt);
+    let enriched_ctx = agent.execute_hooks_for_event_with_callbacks(
         &Event::SessionStart,
         &event_ctx,
         Some(&approval_callback),
+        Some(&prompt_callback),
+        Some(&secret_prompt_callback),
     );
 
     // Display context if available (unless quiet mode)
