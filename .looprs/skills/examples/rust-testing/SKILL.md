@@ -1,6 +1,13 @@
 ---
 name: rust-testing
-description: Guide for writing effective Rust tests with cargo test, unit tests, integration tests, and test organization. Use when writing tests in Rust, organizing test modules, or improving test coverage.
+description: Guide for writing effective Rust tests with cargo test, unit tests, integration tests, and test organization
+triggers:
+  - "rust test"
+  - "cargo test"
+  - "unit test"
+  - "integration test"
+  - "test coverage"
+  - "#[test]"
 ---
 
 # Rust Testing

@@ -55,7 +55,22 @@ Concise instructions for Claude to follow (<500 lines preferred).
 ### Required Fields
 
 - **name**: Unique identifier (lowercase, hyphens for spaces)
-- **description**: Primary trigger mechanism - includes BOTH what the skill does AND when to use it
+- **description**: Complete description of what this skill does and when to use it
+- **triggers**: List of keywords/phrases that activate this skill (explicit triggering)
+
+Example:
+```yaml
+---
+name: rust-error-handling
+description: Guide for Rust error handling with Result<T,E>, error propagation, and custom error types
+triggers:
+  - "error handling"
+  - "Result type"
+  - "? operator"
+  - "thiserror"
+  - "anyhow"
+---
+```
 
 ### Optional Bundled Resources
 
@@ -101,11 +116,18 @@ Match specificity to task fragility:
 
 ## Usage
 
-Skills are automatically triggered when Claude determines they're relevant based on the description field. You can also explicitly invoke:
+Skills are automatically triggered when user messages contain trigger keywords/phrases. You can also explicitly invoke:
 
 ```
 Use the rust-error-handling skill to refactor this code
+$rust-error-handling     # Explicit invocation
 ```
+
+**Trigger matching:**
+- Case-insensitive substring matching
+- Multiple triggers per skill (OR logic)
+- User message: "How do I use the ? operator?" → triggers rust-error-handling
+- User message: "Need help with Result types" → triggers rust-error-handling
 
 Skills can reference bundled resources:
 ```
@@ -119,7 +141,14 @@ Run scripts/format_code.py to apply formatting
 ```markdown
 ---
 name: rust-error-handling
-description: Guide for Rust error handling with Result<T,E>, error propagation, and custom error types. Use when working with Rust code that needs error handling, Result types, the ? operator, or custom error implementations.
+description: Guide for Rust error handling with Result<T,E>, error propagation, and custom error types
+triggers:
+  - "error handling"
+  - "Result type"
+  - "? operator"
+  - "thiserror"
+  - "anyhow"
+  - "error propagation"
 ---
 
 # Rust Error Handling

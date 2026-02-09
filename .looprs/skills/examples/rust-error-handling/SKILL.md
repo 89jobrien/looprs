@@ -1,6 +1,14 @@
 ---
 name: rust-error-handling
-description: Guide for Rust error handling with Result<T,E>, error propagation, the ? operator, and custom error types using thiserror and anyhow. Use when working with Rust code that needs error handling, Result types, error conversion, or custom error implementations.
+description: Guide for Rust error handling with Result<T,E>, error propagation, the ? operator, and custom error types using thiserror and anyhow
+triggers:
+  - "error handling"
+  - "Result type"
+  - "? operator"
+  - "thiserror"
+  - "anyhow"
+  - "error propagation"
+  - "custom error"
 ---
 
 # Rust Error Handling
