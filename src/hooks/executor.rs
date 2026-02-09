@@ -101,11 +101,26 @@ impl HookExecutor {
                 }
                 Ok(None)
             }
-            Action::Confirm { .. }
-            | Action::Prompt { .. }
-            | Action::SecretPrompt { .. }
-            | Action::SetEnv { .. }
-            | Action::SetConfig { .. } => Ok(None),
+            Action::Confirm { .. } => {
+                crate::ui::warn("Warning: Hook action 'confirm' not implemented yet");
+                Ok(None)
+            }
+            Action::Prompt { .. } => {
+                crate::ui::warn("Warning: Hook action 'prompt' not implemented yet");
+                Ok(None)
+            }
+            Action::SecretPrompt { .. } => {
+                crate::ui::warn("Warning: Hook action 'secret_prompt' not implemented yet");
+                Ok(None)
+            }
+            Action::SetEnv { .. } => {
+                crate::ui::warn("Warning: Hook action 'set_env' not implemented yet");
+                Ok(None)
+            }
+            Action::SetConfig { .. } => {
+                crate::ui::warn("Warning: Hook action 'set_config' not implemented yet");
+                Ok(None)
+            }
         }
     }
 
