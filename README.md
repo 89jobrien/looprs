@@ -171,8 +171,15 @@ The `.looprs/` directory defines your agent configuration (provider, rules, skil
 
 ## Architecture
 
-- `src/bin/looprs/` - CLI entrypoint, argument parsing, interactive REPL
+### Core Modules
+
+- `src/bin/looprs/` - CLI application
+  - `main.rs` - Entry point and argument parsing
+  - `cli.rs` - CLI initialization and configuration
+  - `repl.rs` - Interactive REPL loop
+  - `args.rs` - Command-line argument definitions
 - `src/agent.rs` - Core orchestrator (messages, tools, events, hooks, observations)
+- `src/app_config.rs` - Centralized application configuration
 - `src/providers/` - LLM backends (Anthropic, OpenAI, local)
 - `src/tools/` - Built-in tools (read/write/edit/glob/grep/bash)
 - `src/events.rs` + `src/hooks/` - Event system and hook execution
