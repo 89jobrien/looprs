@@ -59,7 +59,8 @@ impl AppConfig {
             .unwrap()
             .insert("demo_seen".to_string(), json!(value));
 
-        fs::create_dir_all(".looprs")?;
+        let parent = path.parent().unwrap_or_else(|| Path::new("."));
+        fs::create_dir_all(parent)?;
         fs::write(path, serde_json::to_string_pretty(&root)?)?;
         Ok(())
     }
