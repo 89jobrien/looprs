@@ -17,6 +17,7 @@ pub mod providers;
 mod sanitize;
 pub mod skills;
 mod tools;
+pub mod types;
 pub mod ui;
 
 pub use crate::agent::Agent;
@@ -31,3 +32,4 @@ pub use crate::observation::Observation;
 pub use crate::observation_manager::ObservationManager;
 pub use crate::providers::{ProviderOverrides, create_provider_with_overrides};
 pub use crate::skills::{Skill, SkillRegistry};
+pub use crate::types::{ModelId, ToolId, ToolName};

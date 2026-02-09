@@ -1,7 +1,6 @@
 use anyhow::Result;
 use crate::api::ContentBlock;
 use crate::api::Message;
-use crate::config::get_max_tokens_for_model;
 use crate::events::{Event, EventContext, EventManager};
 use crate::hooks::HookExecutor;
 use crate::hooks::HookRegistry;
@@ -138,46 +137,39 @@ impl Agent {
         }
 
         loop {
-            let max_tokens = get_max_tokens_for_model(self.provider.model());
+            let max_tokens = self.provider.model().max_tokens();
             let req = InferenceRequest {
-                model: self.provider.model().to_string(),
+                model: self.provider.model().clone(),
                 messages: self.messages.clone(),
                 tools: get_tool_definitions(),
                 max_tokens,
                 system: system_prompt.clone(),
             };
 
-            let response = self.provider.infer(req).await?;
+            let response = self.provider.infer(&req).await?;
 
             // Fire InferenceComplete event
             let event_ctx = EventContext::new();
             self.events.fire(Event::InferenceComplete, &event_ctx);
             self.execute_hooks_for_event(&Event::InferenceComplete, &event_ctx);
 
-            let mut assistant_blocks = Vec::new();
-            let mut tools_to_execute = Vec::new();
+            let assistant_blocks = response.content;
+            let mut tool_indices = Vec::new();
 
-            for block in response.content {
+            for (idx, block) in assistant_blocks.iter().enumerate() {
                 match block {
-                    ContentBlock::Text { ref text } => {
+                    ContentBlock::Text { text } => {
                         ui::assistant_text(text);
-                        assistant_blocks.push(block);
                     }
-                    ContentBlock::ToolUse {
-                        ref id,
-                        ref name,
-                        ref input,
-                    } => {
+                    ContentBlock::ToolUse { name, input, .. } => {
                         let preview = serde_json::to_string(&input)
                             .unwrap_or_default()
                             .chars()
                             .take(60)
                             .collect::<String>();
 
-                        ui::tool_call(name, &preview);
-
-                        assistant_blocks.push(block.clone());
-                        tools_to_execute.push((id.clone(), name.clone(), input.clone()));
+                        ui::tool_call(name.as_str(), &preview);
+                        tool_indices.push(idx);
                     }
                     _ => {}
                 }
@@ -185,29 +177,34 @@ impl Agent {
 
             self.messages.push(Message::assistant(assistant_blocks));
 
-            if tools_to_execute.is_empty() {
+            if tool_indices.is_empty() {
                 break;
             }
 
             let mut tool_results = Vec::new();
+            let assistant_message = self.messages.last().expect("assistant message just pushed");
 
-            for (id, name, input) in tools_to_execute {
+            for idx in tool_indices {
+                let ContentBlock::ToolUse { id, name, input } = &assistant_message.content[idx]
+                else {
+                    continue;
+                };
                 // Fire PreToolUse event
-                let event_ctx = EventContext::new().with_tool_name(name.clone());
+                let event_ctx = EventContext::new().with_tool_name(name.as_str().to_string());
                 self.events.fire(Event::PreToolUse, &event_ctx);
                 self.execute_hooks_for_event(&Event::PreToolUse, &event_ctx);
 
-                let result = execute_tool(&name, &input, &self.tool_ctx);
+                let result = execute_tool(name.as_str(), input, &self.tool_ctx);
 
                 let content = match result {
                     Ok(ref output) => {
                         ui::tool_ok();
                         // Capture observation
                         self.observations
-                            .capture(name.clone(), input.clone(), output.clone());
+                            .capture(name.as_str().to_string(), input.clone(), output.clone());
                         // Fire PostToolUse event on success
                         let event_ctx = EventContext::new()
-                            .with_tool_name(name.clone())
+                            .with_tool_name(name.as_str().to_string())
                             .with_tool_output(output.clone());
                         self.events.fire(Event::PostToolUse, &event_ctx);
                         self.execute_hooks_for_event(&Event::PostToolUse, &event_ctx);
@@ -218,7 +215,7 @@ impl Agent {
                         ui::tool_err(&err_msg);
                         // Fire OnError event
                         let event_ctx = EventContext::new()
-                            .with_tool_name(name.clone())
+                            .with_tool_name(name.as_str().to_string())
                             .with_error(err_msg.clone());
                         self.events.fire(Event::OnError, &event_ctx);
                         self.execute_hooks_for_event(&Event::OnError, &event_ctx);
@@ -227,7 +224,7 @@ impl Agent {
                 };
 
                 tool_results.push(ContentBlock::ToolResult {
-                    tool_use_id: id,
+                    tool_use_id: id.clone(),
                     content,
                 });
             }
@@ -246,7 +243,7 @@ mod tests {
 
     // Mock provider for testing
     struct MockProvider {
-        model: String,
+        model: crate::types::ModelId,
         responses: Vec<InferenceResponse>,
         call_count: std::sync::Arc<std::sync::Mutex<usize>>,
     }
@@ -254,7 +251,7 @@ mod tests {
     impl MockProvider {
         fn new(responses: Vec<InferenceResponse>) -> Self {
             Self {
-                model: "mock-model".to_string(),
+                model: crate::types::ModelId::new("mock-model"),
                 responses,
                 call_count: std::sync::Arc::new(std::sync::Mutex::new(0)),
             }
@@ -276,7 +273,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl LLMProvider for MockProvider {
-        async fn infer(&self, _req: InferenceRequest) -> Result<InferenceResponse> {
+        async fn infer(&self, _req: &InferenceRequest) -> Result<InferenceResponse> {
             let mut count = self.call_count.lock().unwrap();
             let idx = *count;
             *count += 1;
@@ -302,7 +299,7 @@ mod tests {
             "mock"
         }
 
-        fn model(&self) -> &str {
+        fn model(&self) -> &crate::types::ModelId {
             &self.model
         }
 

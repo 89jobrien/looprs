@@ -1,39 +1,37 @@
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
-use std::time::Duration;
 
 use crate::api::ContentBlock;
 
-use super::{InferenceRequest, InferenceResponse, LLMProvider, Usage};
+use super::{InferenceRequest, InferenceResponse, LLMProvider, ProviderHttpClient, Usage};
+use crate::types::ModelId;
 
 pub struct AnthropicProvider {
-    client: reqwest::Client,
+    http: ProviderHttpClient,
     key: String,
-    model: String,
+    model: ModelId,
 }
 
 impl AnthropicProvider {
     pub fn new(key: String) -> Result<Self> {
-        let model = std::env::var("MODEL").ok();
+        let model = std::env::var("MODEL").ok().map(ModelId::new);
         Self::new_with_model(key, model)
     }
 
-    pub fn new_with_model(key: String, model: Option<String>) -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(120))
-            .build()?;
+    pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self> {
+        let http = ProviderHttpClient::default()?;
 
-        let model = model.unwrap_or_else(|| "claude-3-opus-20240229".to_string());
+        let model = model.unwrap_or_else(ModelId::claude_opus);
 
-        Ok(Self { client, key, model })
+        Ok(Self { http, key, model })
     }
 }
 
 #[async_trait::async_trait]
 impl LLMProvider for AnthropicProvider {
-    async fn infer(&self, req: InferenceRequest) -> Result<InferenceResponse> {
+    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse> {
         let body = json!({
-            "model": &req.model,
+            "model": req.model.as_str(),
             "max_tokens": req.max_tokens,
             "system": req.system,
             "messages": req.messages,
@@ -48,7 +46,8 @@ impl LLMProvider for AnthropicProvider {
         });
 
         let res = self
-            .client
+            .http
+            .client()
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.key)
             .header("anthropic-version", "2023-06-01")
@@ -86,19 +85,21 @@ impl LLMProvider for AnthropicProvider {
                     let id = block
                         .get("id")
                         .and_then(|v| v.as_str())
-                        .context("Missing tool_use id")?
-                        .to_string();
+                        .context("Missing tool_use id")?;
                     let name = block
                         .get("name")
                         .and_then(|v| v.as_str())
-                        .context("Missing tool_use name")?
-                        .to_string();
+                        .context("Missing tool_use name")?;
                     let input = block
                         .get("input")
                         .cloned()
                         .context("Missing tool_use input")?;
 
-                    blocks.push(ContentBlock::ToolUse { id, name, input });
+                    blocks.push(ContentBlock::ToolUse {
+                        id: crate::types::ToolId::new(id),
+                        name: crate::types::ToolName::new(name),
+                        input,
+                    });
                 }
                 _ => {}
             }
@@ -139,7 +140,7 @@ impl LLMProvider for AnthropicProvider {
         "anthropic"
     }
 
-    fn model(&self) -> &str {
+    fn model(&self) -> &ModelId {
         &self.model
     }
 

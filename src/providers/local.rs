@@ -5,27 +5,44 @@ use std::time::Duration;
 use crate::api::ContentBlock;
 
 use super::{InferenceRequest, InferenceResponse, LLMProvider, Usage};
+use crate::types::ModelId;
 
 pub struct LocalProvider {
     client: reqwest::Client,
     host: String,
-    model: String,
+    model: ModelId,
 }
 
 impl LocalProvider {
     pub fn new() -> Result<Self> {
-        let model = std::env::var("MODEL").ok();
+        let model = std::env::var("MODEL")
+            .or_else(|_| std::env::var("OLLAMA_MODEL"))
+            .ok()
+            .map(ModelId::new);
         Self::new_with_model(model)
     }
 
-    pub fn new_with_model(model: Option<String>) -> Result<Self> {
+    pub fn new_with_model(model: Option<ModelId>) -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(120))
             .build()?;
 
         let host =
             std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://localhost:11434".to_string());
-        let model = model.unwrap_or_else(|| "llama2".to_string());
+        let model = match model {
+            Some(model) => model,
+            None => {
+                let env_model = std::env::var("OLLAMA_MODEL")
+                    .ok()
+                    .or_else(|| std::env::var("MODEL").ok())
+                    .map(ModelId::new);
+                env_model.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "No local model configured. Set MODEL or OLLAMA_MODEL, or configure .looprs/provider.json"
+                    )
+                })?
+            }
+        };
 
         Ok(Self {
             client,
@@ -82,7 +99,7 @@ impl LocalProvider {
 
 #[async_trait::async_trait]
 impl LLMProvider for LocalProvider {
-    async fn infer(&self, req: InferenceRequest) -> Result<InferenceResponse> {
+    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse> {
         let mut messages = vec![json!({
             "role": "system",
             "content": req.system
@@ -91,7 +108,7 @@ impl LLMProvider for LocalProvider {
         messages.extend(req.messages.iter().map(Self::convert_to_ollama_message));
 
         let body = json!({
-            "model": &req.model,
+            "model": req.model.as_str(),
             "messages": messages,
             "stream": false,
         });
@@ -178,7 +195,7 @@ impl LLMProvider for LocalProvider {
         "local"
     }
 
-    fn model(&self) -> &str {
+    fn model(&self) -> &ModelId {
         &self.model
     }
 

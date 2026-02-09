@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::types::{ModelId, ToolId, ToolName};
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message {
     pub role: String,
@@ -37,19 +39,19 @@ pub enum ContentBlock {
         text: String,
     },
     ToolUse {
-        id: String,
-        name: String,
+        id: ToolId,
+        name: ToolName,
         input: Value,
     },
     ToolResult {
-        tool_use_id: String,
+        tool_use_id: ToolId,
         content: String,
     },
 }
 
 #[derive(Serialize)]
 pub struct ApiRequest {
-    pub model: String,
+    pub model: ModelId,
     pub max_tokens: u32,
     pub system: String,
     pub messages: Vec<Message>,
@@ -97,8 +99,8 @@ mod tests {
                 text: "Response".to_string(),
             },
             ContentBlock::ToolUse {
-                id: "tool_1".to_string(),
-                name: "read".to_string(),
+                id: ToolId::new("tool_1"),
+                name: ToolName::new("read"),
                 input: json!({"path": "/tmp/file"}),
             },
         ];
@@ -111,7 +113,7 @@ mod tests {
     #[test]
     fn test_message_tool_results() {
         let results = vec![ContentBlock::ToolResult {
-            tool_use_id: "tool_1".to_string(),
+            tool_use_id: ToolId::new("tool_1"),
             content: "File contents".to_string(),
         }];
         
@@ -121,7 +123,7 @@ mod tests {
         
         match &msg.content[0] {
             ContentBlock::ToolResult { tool_use_id, content } => {
-                assert_eq!(tool_use_id, "tool_1");
+                assert_eq!(tool_use_id.as_str(), "tool_1");
                 assert_eq!(content, "File contents");
             }
             _ => panic!("Expected ToolResult content block"),
@@ -142,8 +144,8 @@ mod tests {
     #[test]
     fn test_content_block_tool_use_serialization() {
         let block = ContentBlock::ToolUse {
-            id: "123".to_string(),
-            name: "bash".to_string(),
+            id: ToolId::new("123"),
+            name: ToolName::new("bash"),
             input: json!({"command": "ls"}),
         };
         
@@ -157,7 +159,7 @@ mod tests {
     #[test]
     fn test_content_block_tool_result_serialization() {
         let block = ContentBlock::ToolResult {
-            tool_use_id: "123".to_string(),
+            tool_use_id: ToolId::new("123"),
             content: "output".to_string(),
         };
         
@@ -217,8 +219,8 @@ mod tests {
                 text: "I'll read the file".to_string(),
             },
             ContentBlock::ToolUse {
-                id: "1".to_string(),
-                name: "read".to_string(),
+                id: ToolId::new("1"),
+                name: ToolName::new("read"),
                 input: json!({"path": "test.txt"}),
             },
         ];
@@ -232,7 +234,7 @@ mod tests {
         }
         
         match &msg.content[1] {
-            ContentBlock::ToolUse { name, .. } => assert_eq!(name, "read"),
+            ContentBlock::ToolUse { name, .. } => assert_eq!(name.as_str(), "read"),
             _ => panic!("Expected ToolUse block second"),
         }
     }

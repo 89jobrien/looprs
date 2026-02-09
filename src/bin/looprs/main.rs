@@ -6,6 +6,7 @@ use std::env;
 
 use looprs::observation_manager::load_recent_observations;
 use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
+use looprs::ModelId;
 use looprs::{
     console_approval_prompt, Agent, ApprovalCallback, Command, CommandRegistry, Event,
     EventContext, HookRegistry, SessionContext, SkillRegistry,
@@ -32,12 +33,12 @@ async fn main() -> Result<()> {
     };
 
     let provider = create_provider_with_overrides(ProviderOverrides {
-        model: cli_args.model.clone(),
+        model: cli_args.model.clone().map(ModelId::new),
     })
     .await?;
 
-    let model = provider.model().to_string();
     let provider_name = provider.name().to_string();
+    let model = provider.model().as_str().to_string();
 
     let mut agent = Agent::new(provider)?;
 
@@ -145,7 +146,11 @@ async fn run_scriptable(
 
     // Display header unless quiet mode
     if !cli_args.quiet {
-        ui::header(provider_name, model, &env::current_dir()?.display().to_string());
+        ui::header(
+            provider_name,
+            model,
+            &env::current_dir()?.display().to_string(),
+        );
     }
 
     // Add prompt and run single turn
@@ -180,7 +185,11 @@ async fn run_interactive(
     // Collect session context (jj status, bd issues, etc.)
     let context = SessionContext::collect();
 
-    ui::header(provider_name, model, &env::current_dir()?.display().to_string());
+    ui::header(
+        provider_name,
+        model,
+        &env::current_dir()?.display().to_string(),
+    );
 
     // Fire SessionStart event (this will also execute hooks with approval gates)
     let session_context_str = context.format_for_prompt().unwrap_or_default();

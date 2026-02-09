@@ -2,7 +2,7 @@ use std::sync::{Mutex, OnceLock};
 
 use tempfile::TempDir;
 
-use looprs::{create_provider_with_overrides, ProviderOverrides};
+use looprs::{ModelId, create_provider_with_overrides, ProviderOverrides};
 
 static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
@@ -100,7 +100,7 @@ async fn provider_json_model_used_when_no_env_or_override() {
         .unwrap();
 
     assert_eq!(provider.name(), "openai");
-    assert_eq!(provider.model(), "gpt-5-mini");
+    assert_eq!(provider.model().as_str(), "gpt-5-mini");
 }
 
 #[tokio::test]
@@ -127,7 +127,7 @@ async fn env_model_overrides_provider_json() {
         .unwrap();
 
     assert_eq!(provider.name(), "openai");
-    assert_eq!(provider.model(), "gpt-4o-mini");
+    assert_eq!(provider.model().as_str(), "gpt-4o-mini");
 }
 
 #[tokio::test]
@@ -150,13 +150,13 @@ async fn overrides_model_overrides_env_and_provider_json() {
     std::env::set_current_dir(tmp.path()).unwrap();
 
     let provider = create_provider_with_overrides(ProviderOverrides {
-        model: Some("gpt-5-mini-override".to_string()),
+        model: Some(ModelId::new("gpt-5-mini-override")),
     })
     .await
     .unwrap();
 
     assert_eq!(provider.name(), "openai");
-    assert_eq!(provider.model(), "gpt-5-mini-override");
+    assert_eq!(provider.model().as_str(), "gpt-5-mini-override");
 }
 
 #[tokio::test]
@@ -177,5 +177,5 @@ async fn openai_default_model_is_gpt_5_mini() {
         .unwrap();
 
     assert_eq!(provider.name(), "openai");
-    assert_eq!(provider.model(), "gpt-5-mini");
+    assert_eq!(provider.model().as_str(), "gpt-5-mini");
 }

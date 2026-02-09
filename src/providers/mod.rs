@@ -1,17 +1,41 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::time::Duration;
 
 pub mod anthropic;
 pub mod local;
 pub mod openai;
 
 use crate::api::{ContentBlock, Message, ToolDefinition};
+use crate::types::ModelId;
+use reqwest::Client;
+
+pub(crate) struct ProviderHttpClient {
+    client: Client,
+}
+
+impl ProviderHttpClient {
+    pub fn new(timeout_secs: u64) -> Result<Self> {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(timeout_secs))
+            .build()?;
+        Ok(Self { client })
+    }
+
+    pub fn default() -> Result<Self> {
+        Self::new(120)
+    }
+
+    pub fn client(&self) -> &Client {
+        &self.client
+    }
+}
 
 /// Request structure for LLM inference
 #[derive(Debug, Clone)]
 pub struct InferenceRequest {
-    pub model: String,
+    pub model: ModelId,
     pub messages: Vec<Message>,
     pub tools: Vec<ToolDefinition>,
     pub max_tokens: u32,
@@ -37,13 +61,13 @@ pub struct Usage {
 #[async_trait::async_trait]
 pub trait LLMProvider: Send + Sync {
     /// Run inference with the given request
-    async fn infer(&self, req: InferenceRequest) -> Result<InferenceResponse>;
+    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse>;
 
     /// Get the name of this provider
     fn name(&self) -> &str;
 
     /// Get the model being used
-    fn model(&self) -> &str;
+    fn model(&self) -> &ModelId;
 
     /// Validate that this provider is properly configured
     fn validate_config(&self) -> Result<()>;
@@ -57,7 +81,7 @@ pub trait LLMProvider: Send + Sync {
 #[derive(Debug, Clone, Default)]
 pub struct ProviderOverrides {
     /// Model override (e.g. from CLI -m/--model)
-    pub model: Option<String>,
+    pub model: Option<ModelId>,
 }
 
 /// Create a provider based on configuration priority:
@@ -96,8 +120,12 @@ pub async fn create_provider_with_overrides(
         let key = env::var("ANTHROPIC_API_KEY")?;
         let cfg_model = config_file
             .as_ref()
-            .and_then(|c| c.merged_settings("anthropic").model);
-        let model = overrides.model.or(env::var("MODEL").ok()).or(cfg_model);
+            .and_then(|c| c.merged_settings("anthropic").model)
+            .map(ModelId::new);
+        let model = overrides
+            .model
+            .or(env::var("MODEL").ok().map(ModelId::new))
+            .or(cfg_model);
         return Ok(Box::new(anthropic::AnthropicProvider::new_with_model(key, model)?));
     }
 
@@ -105,8 +133,12 @@ pub async fn create_provider_with_overrides(
         let key = env::var("OPENAI_API_KEY")?;
         let cfg_model = config_file
             .as_ref()
-            .and_then(|c| c.merged_settings("openai").model);
-        let model = overrides.model.or(env::var("MODEL").ok()).or(cfg_model);
+            .and_then(|c| c.merged_settings("openai").model)
+            .map(ModelId::new);
+        let model = overrides
+            .model
+            .or(env::var("MODEL").ok().map(ModelId::new))
+            .or(cfg_model);
         return Ok(Box::new(openai::OpenAIProvider::new_with_model(key, model)?));
     }
 
@@ -114,8 +146,12 @@ pub async fn create_provider_with_overrides(
     if local::LocalProvider::is_available().await {
         let cfg_model = config_file
             .as_ref()
-            .and_then(|c| c.merged_settings("local").model);
-        let model = overrides.model.or(env::var("MODEL").ok()).or(cfg_model);
+            .and_then(|c| c.merged_settings("local").model)
+            .map(ModelId::new);
+        let model = overrides
+            .model
+            .or(env::var("MODEL").ok().map(ModelId::new))
+            .or(cfg_model);
         return Ok(Box::new(local::LocalProvider::new_with_model(model)?));
     }
 
@@ -142,8 +178,12 @@ async fn create_provider_by_name(
                 .map_err(|_| anyhow::anyhow!("PROVIDER=anthropic but ANTHROPIC_API_KEY not set"))?;
             let cfg_model = config_file
                 .as_ref()
-                .and_then(|c| c.merged_settings("anthropic").model);
-            let model = overrides.model.or(env::var("MODEL").ok()).or(cfg_model);
+                .and_then(|c| c.merged_settings("anthropic").model)
+                .map(ModelId::new);
+            let model = overrides
+                .model
+                .or(env::var("MODEL").ok().map(ModelId::new))
+                .or(cfg_model);
             Ok(Box::new(anthropic::AnthropicProvider::new_with_model(key, model)?))
         }
         "openai" => {
@@ -151,15 +191,23 @@ async fn create_provider_by_name(
                 .map_err(|_| anyhow::anyhow!("PROVIDER=openai but OPENAI_API_KEY not set"))?;
             let cfg_model = config_file
                 .as_ref()
-                .and_then(|c| c.merged_settings("openai").model);
-            let model = overrides.model.or(env::var("MODEL").ok()).or(cfg_model);
+                .and_then(|c| c.merged_settings("openai").model)
+                .map(ModelId::new);
+            let model = overrides
+                .model
+                .or(env::var("MODEL").ok().map(ModelId::new))
+                .or(cfg_model);
             Ok(Box::new(openai::OpenAIProvider::new_with_model(key, model)?))
         }
         "local" | "ollama" => {
             let cfg_model = config_file
                 .as_ref()
-                .and_then(|c| c.merged_settings("local").model);
-            let model = overrides.model.or(env::var("MODEL").ok()).or(cfg_model);
+                .and_then(|c| c.merged_settings("local").model)
+                .map(ModelId::new);
+            let model = overrides
+                .model
+                .or(env::var("MODEL").ok().map(ModelId::new))
+                .or(cfg_model);
             Ok(Box::new(local::LocalProvider::new_with_model(model)?))
         }
         "openrouter" => Err(anyhow::anyhow!("OpenRouter provider not yet implemented")),

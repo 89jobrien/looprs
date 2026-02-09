@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
-use std::time::Duration;
 
 use crate::api::ContentBlock;
 
-use super::{InferenceRequest, InferenceResponse, LLMProvider, Usage};
+use super::{InferenceRequest, InferenceResponse, LLMProvider, ProviderHttpClient, Usage};
+use crate::types::ModelId;
 
 /// OpenAI provider implementation
 /// 
@@ -13,25 +13,23 @@ use super::{InferenceRequest, InferenceResponse, LLMProvider, Usage};
 /// - Tool calls use OpenAI's function calling format (different from Anthropic)
 /// - System messages are passed as a separate message in the messages array
 pub struct OpenAIProvider {
-    client: reqwest::Client,
+    http: ProviderHttpClient,
     key: String,
-    model: String,
+    model: ModelId,
 }
 
 impl OpenAIProvider {
     pub fn new(key: String) -> Result<Self> {
-        let model = std::env::var("MODEL").ok();
+        let model = std::env::var("MODEL").ok().map(ModelId::new);
         Self::new_with_model(key, model)
     }
 
-    pub fn new_with_model(key: String, model: Option<String>) -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(120))
-            .build()?;
+    pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self> {
+        let http = ProviderHttpClient::default()?;
 
-        let model = model.unwrap_or_else(|| "gpt-5-mini".to_string());
+        let model = model.unwrap_or_else(ModelId::gpt_5_mini);
 
-        Ok(Self { client, key, model })
+        Ok(Self { http, key, model })
     }
 
     fn convert_to_openai_messages(msg: &crate::api::Message) -> Vec<Value> {
@@ -48,10 +46,10 @@ impl OpenAIProvider {
                 ContentBlock::ToolUse { id, name, input } => {
                     // OpenAI format: tool_calls array in assistant message
                     tool_calls.push(json!({
-                        "id": id,
+                        "id": id.as_str(),
                         "type": "function",
                         "function": {
-                            "name": name,
+                            "name": name.as_str(),
                             "arguments": serde_json::to_string(input).unwrap_or_default()
                         }
                     }));
@@ -63,7 +61,7 @@ impl OpenAIProvider {
                     // OpenAI format: separate message with role "tool"
                     messages.push(json!({
                         "role": "tool",
-                        "tool_call_id": tool_use_id,
+                        "tool_call_id": tool_use_id.as_str(),
                         "content": result_content
                     }));
                 }
@@ -98,7 +96,7 @@ impl OpenAIProvider {
 
 #[async_trait::async_trait]
 impl LLMProvider for OpenAIProvider {
-    async fn infer(&self, req: InferenceRequest) -> Result<InferenceResponse> {
+    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse> {
         let tools = req
             .tools
             .iter()
@@ -115,12 +113,13 @@ impl LLMProvider for OpenAIProvider {
             .collect::<Vec<_>>();
 
         // GPT-5+ and newer GPT-4 models use max_completion_tokens instead of max_tokens
-        let uses_completion_tokens = req.model.starts_with("gpt-5") 
-            || req.model.starts_with("gpt-4o") 
-            || req.model.starts_with("gpt-4-turbo-2024");
+        let model = req.model.as_str();
+        let uses_completion_tokens = model.starts_with("gpt-5")
+            || model.starts_with("gpt-4o")
+            || model.starts_with("gpt-4-turbo-2024");
 
         let mut body = json!({
-            "model": &req.model,
+            "model": req.model.as_str(),
             "messages": vec![
                 json!({
                     "role": "system",
@@ -142,7 +141,8 @@ impl LLMProvider for OpenAIProvider {
         }
 
         let res = self
-            .client
+            .http
+            .client()
             .post("https://api.openai.com/v1/chat/completions")
             .bearer_auth(&self.key)
             .header("Content-Type", "application/json")
@@ -190,8 +190,8 @@ impl LLMProvider for OpenAIProvider {
                         };
 
                         blocks.push(ContentBlock::ToolUse {
-                            id: id.as_str().unwrap_or("").to_string(),
-                            name: name.as_str().unwrap_or("").to_string(),
+                            id: crate::types::ToolId::new(id.as_str().unwrap_or("")),
+                            name: crate::types::ToolName::new(name.as_str().unwrap_or("")),
                             input: args_str,
                         });
                     }
@@ -234,7 +234,7 @@ impl LLMProvider for OpenAIProvider {
         "openai"
     }
 
-    fn model(&self) -> &str {
+    fn model(&self) -> &ModelId {
         &self.model
     }
 
