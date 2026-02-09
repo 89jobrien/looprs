@@ -29,42 +29,65 @@ impl OpenAIProvider {
         Ok(Self { client, key, model })
     }
 
-    fn convert_to_openai_message(msg: &crate::api::Message) -> Value {
-        let mut content = Vec::new();
-
+    fn convert_to_openai_messages(msg: &crate::api::Message) -> Vec<Value> {
+        let mut messages = Vec::new();
+        let mut text_parts = Vec::new();
+        let mut tool_calls = Vec::new();
+        
+        // Separate content into text, tool uses, and tool results
         for block in &msg.content {
             match block {
                 ContentBlock::Text { text } => {
-                    content.push(json!({
-                        "type": "text",
-                        "text": text
-                    }));
+                    text_parts.push(text.clone());
                 }
                 ContentBlock::ToolUse { id, name, input } => {
-                    content.push(json!({
-                        "type": "tool_use",
+                    // OpenAI format: tool_calls array in assistant message
+                    tool_calls.push(json!({
                         "id": id,
-                        "name": name,
-                        "input": input
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "arguments": serde_json::to_string(input).unwrap_or_default()
+                        }
                     }));
                 }
                 ContentBlock::ToolResult {
                     tool_use_id,
                     content: result_content,
                 } => {
-                    content.push(json!({
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_id,
+                    // OpenAI format: separate message with role "tool"
+                    messages.push(json!({
+                        "role": "tool",
+                        "tool_call_id": tool_use_id,
                         "content": result_content
                     }));
                 }
             }
         }
-
-        json!({
-            "role": msg.role,
-            "content": content
-        })
+        
+        // Build the main message if there's text or tool calls
+        if !text_parts.is_empty() || !tool_calls.is_empty() {
+            let mut main_msg = json!({
+                "role": msg.role,
+            });
+            
+            // Add content if we have text
+            if !text_parts.is_empty() {
+                main_msg["content"] = json!(text_parts.join("\n"));
+            } else if tool_calls.is_empty() {
+                // OpenAI requires content field if no tool_calls
+                main_msg["content"] = json!("");
+            }
+            
+            // Add tool_calls if we have any
+            if !tool_calls.is_empty() {
+                main_msg["tool_calls"] = json!(tool_calls);
+            }
+            
+            messages.insert(0, main_msg);
+        }
+        
+        messages
     }
 }
 
@@ -100,7 +123,7 @@ impl LLMProvider for OpenAIProvider {
                 })
             ]
             .into_iter()
-            .chain(req.messages.iter().map(Self::convert_to_openai_message))
+            .chain(req.messages.iter().flat_map(Self::convert_to_openai_messages))
             .collect::<Vec<_>>(),
             "tools": tools,
             "tool_choice": if tools.is_empty() { "none" } else { "auto" }

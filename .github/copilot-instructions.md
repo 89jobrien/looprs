@@ -125,10 +125,11 @@ Design principle: **extend without modifying core** - all customization via `.lo
   - Detection: check if model name starts with `gpt-5`, `gpt-4o`, or `gpt-4-turbo-2024`
   - Always use the correct parameter for the model to avoid 400 errors
 - **Tool calling:** Each provider has different tool call formats
-  - Anthropic: native `tool_use` blocks in content
-  - OpenAI: `function` objects in separate `tool_calls` array
+  - Anthropic: native `tool_use` blocks in content array
+  - OpenAI: `tool_calls` array for assistant messages, separate `tool` role messages for results
   - Local: text-based markers (limited support)
 - **System messages:** OpenAI puts system in messages array, Anthropic uses separate field
+- **Message conversion:** OpenAI messages may expand to multiple messages (e.g., tool results become separate messages)
 
 ### Error Handling
 - Use `anyhow::Result` for functions that can fail
