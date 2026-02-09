@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Skills architecture redesign** - Aligned with Anthropic Agent Skills standard
+  - Changed from JSON/progressive-learning format to SKILL.md with YAML frontmatter
+  - Skills now follow industry standard (agentskills.io)
+  - Format: YAML frontmatter (name, description) + markdown instructions
+  - Support for bundled resources: scripts/, references/, assets/
+  - Progressive disclosure: metadata → SKILL.md body → resources as needed
+  - Auto-triggering based on description field (primary trigger mechanism)
+  - Design principles: concise, execution-focused, appropriate degrees of freedom
+- Updated `.looprs/skills/README.md` with new architecture and examples
+- Updated bd issue `looprs-l4r` with corrected skill loader requirements
+
 ### Added
 - **Multi-provider LLM support**: Switch between Anthropic, OpenAI, and Local Ollama without code changes
   - Anthropic provider with Claude 3 models
