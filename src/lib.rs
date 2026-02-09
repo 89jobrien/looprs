@@ -32,7 +32,7 @@ pub use crate::context::SessionContext;
 pub use crate::errors::{AgentError, ProviderError, ToolContextError};
 pub use crate::events::{Event, EventContext, EventManager};
 pub use crate::file_refs::{has_file_references, list_file_references, resolve_file_references};
-pub use crate::hooks::{ApprovalCallback, Hook, HookExecutor, HookRegistry};
+pub use crate::hooks::{ApprovalCallback, Hook, HookExecutor, HookRegistry, PromptCallback};
 pub use crate::observation::Observation;
 pub use crate::observation_manager::ObservationManager;
 pub use crate::providers::{ProviderOverrides, create_provider_with_overrides};

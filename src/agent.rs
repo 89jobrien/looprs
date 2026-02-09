@@ -4,8 +4,7 @@ use crate::app_config::DefaultsConfig;
 use crate::errors::AgentError;
 use crate::events::{Event, EventContext, EventManager};
 use crate::file_refs::FileRefPolicy;
-use crate::hooks::HookExecutor;
-use crate::hooks::HookRegistry;
+use crate::hooks::{ApprovalCallback, HookExecutor, HookRegistry, PromptCallback};
 use crate::observation_manager::ObservationManager;
 use crate::providers::InferenceRequest;
 use crate::providers::LLMProvider;
@@ -108,7 +107,7 @@ impl Agent {
     }
 
     pub fn execute_hooks_for_event(&self, event: &Event, context: &EventContext) -> EventContext {
-        self.execute_hooks_for_event_with_approval(event, context, None)
+        self.execute_hooks_for_event_with_callbacks(event, context, None, None, None)
     }
 
     pub fn execute_hooks_for_event_with_approval(
@@ -117,13 +116,28 @@ impl Agent {
         context: &EventContext,
         approval_fn: Option<&crate::hooks::ApprovalCallback>,
     ) -> EventContext {
+        self.execute_hooks_for_event_with_callbacks(event, context, approval_fn, None, None)
+    }
+
+    pub fn execute_hooks_for_event_with_callbacks(
+        &self,
+        event: &Event,
+        context: &EventContext,
+        approval_fn: Option<&ApprovalCallback>,
+        prompt_fn: Option<&PromptCallback>,
+        secret_prompt_fn: Option<&PromptCallback>,
+    ) -> EventContext {
         let mut enriched_context = context.clone();
 
         if let Some(hooks) = self.hooks.hooks_for_event(event) {
             for hook in hooks {
-                if let Ok(results) =
-                    HookExecutor::execute_hook_with_approval(hook, context, approval_fn)
-                {
+                if let Ok(results) = HookExecutor::execute_hook_with_callbacks(
+                    hook,
+                    context,
+                    approval_fn,
+                    prompt_fn,
+                    secret_prompt_fn,
+                ) {
                     // Inject hook outputs into context metadata
                     for result in results {
                         if let Some(key) = result.inject_key {
@@ -622,5 +636,10 @@ actions:
         } else {
             panic!("Expected text content block");
         }
+    }
+
+    #[test]
+    fn execute_hooks_supports_prompt_callbacks() {
+        let _ = Agent::execute_hooks_for_event_with_callbacks;
     }
 }
