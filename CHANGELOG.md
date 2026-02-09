@@ -89,7 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Issue listing via bd command
   - JSON parsing for issue data
 - Created `src/context.rs` module for context collection:
-  - `SessionContext` struct aggregating jj + bd + kanban data
+  - `SessionContext` struct aggregating jj + bd + kan data
   - Prompt formatting for context injection
   - Optional fields for graceful degradation
 - Created `src/events.rs` module for event system:

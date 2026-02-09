@@ -7,6 +7,7 @@ pub mod context;
 pub mod events;
 pub mod hooks;
 pub mod jj;
+pub mod kan;
 pub mod observation;
 pub mod observation_manager;
 pub mod providers;

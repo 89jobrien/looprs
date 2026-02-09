@@ -35,13 +35,13 @@ pub fn get_recent_commits(count: usize) -> Option<Vec<String>> {
     let output = Command::new("jj")
         .args([
             "log",
-            "-r",
-            &format!("main::{}", if count > 0 { ".." } else { "main" }),
             "--no-pager",
+            "-r",
+            "main..",
             "-n",
             &count.to_string(),
             "-T",
-            r#"{short_description}"#,
+            r#"description.first_line()"#,
         ])
         .output()
         .ok()?;

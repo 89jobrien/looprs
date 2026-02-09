@@ -117,13 +117,26 @@ async fn run_interactive(
     let session_context_str = context.format_for_prompt().unwrap_or_default();
     let event_ctx = EventContext::new().with_session_context(session_context_str);
     agent.events.fire(Event::SessionStart, &event_ctx);
-    agent.execute_hooks_for_event(&Event::SessionStart, &event_ctx);
+    let enriched_ctx = agent.execute_hooks_for_event(&Event::SessionStart, &event_ctx);
 
     // Display context if available (unless quiet mode)
     if !cli_args.quiet {
         if !context.is_empty() {
             if let Some(formatted) = context.format_for_prompt() {
                 println!("{}\n{}", "─".dimmed(), formatted.dimmed());
+            }
+        }
+
+        // Display hook-injected context if available
+        if !enriched_ctx.metadata.is_empty() {
+            println!("\n{}", "Hook-injected context:".dimmed());
+            for (key, value) in &enriched_ctx.metadata {
+                let preview = if value.len() > 100 {
+                    format!("{}...", &value[..100])
+                } else {
+                    value.clone()
+                };
+                println!("  {} {}", key.cyan(), preview.dimmed());
             }
         }
 
@@ -178,7 +191,7 @@ async fn run_interactive(
     // Fire SessionEnd event and save observations
     let event_ctx = EventContext::new();
     agent.events.fire(Event::SessionEnd, &event_ctx);
-    agent.execute_hooks_for_event(&Event::SessionEnd, &event_ctx);
+    let _ = agent.execute_hooks_for_event(&Event::SessionEnd, &event_ctx);
 
     // Save observations to bd
     if let Err(e) = agent.observations.save_to_bd() {

@@ -46,14 +46,23 @@ impl Agent {
         self.messages.clear();
     }
 
-    pub fn execute_hooks_for_event(&self, event: &Event, context: &EventContext) {
+    pub fn execute_hooks_for_event(&self, event: &Event, context: &EventContext) -> EventContext {
+        let mut enriched_context = context.clone();
+        
         if let Some(hooks) = self.hooks.hooks_for_event(event) {
             for hook in hooks {
-                if let Ok(_results) = HookExecutor::execute_hook(hook, context) {
-                    // Hook executed (results could be injected into context in future)
+                if let Ok(results) = HookExecutor::execute_hook(hook, context) {
+                    // Inject hook outputs into context metadata
+                    for result in results {
+                        if let Some(key) = result.inject_key {
+                            enriched_context.metadata.insert(key, result.output);
+                        }
+                    }
                 }
             }
         }
+        
+        enriched_context
     }
 
     pub async fn run_turn(&mut self) -> Result<()> {
@@ -78,12 +87,21 @@ impl Agent {
 
         let event_ctx = EventContext::new().with_user_message(user_msg);
         self.events.fire(Event::UserPromptSubmit, &event_ctx);
-        self.execute_hooks_for_event(&Event::UserPromptSubmit, &event_ctx);
+        let enriched_ctx = self.execute_hooks_for_event(&Event::UserPromptSubmit, &event_ctx);
 
-        let system_prompt = format!(
+        // Build system prompt with base instructions + hook-injected context
+        let mut system_prompt = format!(
             "You are a concise coding assistant. Current working directory: {}",
             self.tool_ctx.working_dir.display()
         );
+
+        // Add any context injected by hooks
+        if !enriched_ctx.metadata.is_empty() {
+            system_prompt.push_str("\n\n## Additional Context from Hooks:");
+            for (key, value) in &enriched_ctx.metadata {
+                system_prompt.push_str(&format!("\n### {}\n{}", key, value));
+            }
+        }
 
         loop {
             let max_tokens = get_max_tokens_for_model(self.provider.model());

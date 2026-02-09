@@ -1,4 +1,4 @@
-use crate::{bd, jj};
+use crate::{bd, jj, kan};
 use serde::{Deserialize, Serialize};
 
 /// Context available at session start
@@ -7,15 +7,17 @@ pub struct SessionContext {
     pub jj_status: Option<jj::JjStatus>,
     pub jj_recent_commits: Option<Vec<String>>,
     pub bd_open_issues: Option<Vec<bd::BdIssue>>,
+    pub kan_status: Option<kan::KanStatus>,
 }
 
 impl SessionContext {
-    /// Collect context from jj and bd if available
+    /// Collect context from jj, bd, and kan if available
     pub fn collect() -> Self {
         SessionContext {
             jj_status: jj::get_status(),
             jj_recent_commits: jj::get_recent_commits(5),
             bd_open_issues: bd::list_open_issues(),
+            kan_status: kan::get_status(),
         }
     }
 
@@ -58,6 +60,20 @@ impl SessionContext {
             parts.push(format!("## Open Issues\n{issues_str}"));
         }
 
+        // Format kan status if available
+        if let Some(ref kan) = self.kan_status {
+            let columns_str = kan
+                .by_column
+                .iter()
+                .map(|col| format!("  - {}: {}", col.name, col.count))
+                .collect::<Vec<_>>()
+                .join("\n");
+            parts.push(format!(
+                "## Kanban Board\n  Total tasks: {}\n{columns_str}",
+                kan.total_tasks
+            ));
+        }
+
         if parts.is_empty() {
             None
         } else {
@@ -70,6 +86,7 @@ impl SessionContext {
         self.jj_status.is_none()
             && self.jj_recent_commits.is_none()
             && self.bd_open_issues.is_none()
+            && self.kan_status.is_none()
     }
 }
 
@@ -90,6 +107,7 @@ mod tests {
             jj_status: None,
             jj_recent_commits: None,
             bd_open_issues: None,
+            kan_status: None,
         };
         assert!(ctx.format_for_prompt().is_none());
     }
@@ -104,6 +122,7 @@ mod tests {
             }),
             jj_recent_commits: None,
             bd_open_issues: None,
+            kan_status: None,
         };
 
         let formatted = ctx.format_for_prompt();
@@ -124,6 +143,7 @@ mod tests {
                 status: "open".to_string(),
                 priority: Some("high".to_string()),
             }]),
+            kan_status: None,
         };
 
         let formatted = ctx.format_for_prompt();

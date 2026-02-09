@@ -99,13 +99,13 @@ name: inject_context
 trigger: SessionStart
 actions:
   - type: command
-    command: "jj log --no-pager -r 'main::' | head -5"
+    command: "jj log --no-pager -r 'main..' -n 5"
     inject_as: recent_commits
   - type: command
-    command: "bd list --open"
+    command: "bd list --open --json"
     inject_as: open_issues
   - type: command
-    command: "kanban_board --json"
+    command: "kan status --json"
     inject_as: board_state
 ```
 
