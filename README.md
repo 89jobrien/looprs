@@ -463,7 +463,6 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 ### Done ✅
 - [x] Multi-provider LLM support (Anthropic, OpenAI, Local)
 - [x] Fast search: grep + ripgrep, glob + fd
-- [x] Extensibility framework (commands, skills, agents, rules, hooks, file refs)
 - [x] Provider configuration (env vars + config file)
 - [x] jj (jujutsu) integration - repo state + recent commits
 - [x] bd (beads.db) integration - open issues
@@ -472,26 +471,29 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 - [x] **Session observations** - Auto-capture tool use, store in bd
 - [x] **Hook file loading** - Parse YAML from `~/.looprs/hooks/`
 - [x] **Hook execution** - Fire hooks on events, execute shell commands
-
-### Phase 2b: Context Injection ✅ **COMPLETE**
-- [x] **Repo-level `.looprs/hooks/` support** - Load hooks from the current repo (in addition to `~/.looprs/hooks/`), with repo precedence for same-name hooks
-- [x] **Context injection** - Inject hook outputs into LLM prompts via `inject_as` field, with automatic truncation for large values
-- [x] **Approval gates** - User approval for automated actions via `requires_approval` and `approval_prompt` fields
-- [ ] **Hook output storage** - Persist hook results for debugging (deferred)
+- [x] **Repo-level `.looprs/hooks/` support** - Load hooks from repo with precedence
+- [x] **Context injection** - Inject hook outputs into LLM prompts via `inject_as` field
+- [x] **Approval gates** - User approval for automated actions
+- [x] **Command parser** - Custom slash commands from `.looprs/commands/`
+- [x] **File reference resolver** - `@filename` syntax automatically injects file contents
 
 ### Phase 3: Extensibility Parsers (In Progress)
-- [x] **Command parser** - Custom slash commands from `.looprs/commands/` with prompt, shell, and message actions
-- [x] **File reference resolver** - `@filename` syntax automatically injects file contents into prompts with security checks
-- [ ] Skill loader with level tracking (`$` prefix)
-- [ ] Agent dispatcher (YAML-based roles)
-- [ ] Rule evaluator (constraint checking)
-- [ ] File reference resolver (`@` prefix)
+- [ ] **Skill loader** - Load skills following Anthropic Agent Skills standard (SKILL.md format)
+  - YAML frontmatter with name + description
+  - Bundled resources (scripts/, references/, assets/)
+  - Progressive disclosure (metadata → body → resources)
+  - Auto-triggering based on description field
+- [ ] **Agent dispatcher** - YAML-based role switching
+- [ ] **Rule evaluator** - Constraint checking from markdown rules
 
 ### Phase 4: Advanced Features
 - [ ] Session persistence (conversation history)
-- [ ] Plugin system (custom tools/commands)
+- [ ] Multi-turn context management
+- [ ] Streaming response support
+- [ ] Tool result caching
 - [ ] Performance profiling
-- [ ] Concurrent hook execution
+- [ ] Plugin system for custom tools
+- [ ] Hook output storage (debugging)
 
 ## Dev
 

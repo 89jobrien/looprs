@@ -1,161 +1,175 @@
 # Skills
 
-Reusable, composable capabilities with progressive disclosure.
+Modular, self-contained packages that extend looprs capabilities with specialized knowledge, workflows, and tool integrations. Skills follow the Anthropic Agent Skills standard.
+
+## About Skills
+
+Skills are "onboarding guides" for specific domains or tasks—they transform looprs from a general-purpose agent into a specialized agent equipped with procedural knowledge.
+
+**Core principle:** Default assumption is that Claude is already very smart. Only add context Claude doesn't already have.
 
 ## Directory Structure
 
+Skills are organized by category in subdirectories:
+
 ```
 skills/
-├── rust/                       # Rust-specific skills
-│   ├── error-handling.json
-│   ├── testing.json
-│   └── performance.json
-├── code-quality/               # General code quality
-│   ├── refactoring.json
-│   ├── testing.json
-│   └── documentation.json
-├── development/                # Development workflows
-│   ├── debugging.json
-│   └── optimization.json
+├── rust/                       # Rust-specific workflows
+│   ├── error-handling/
+│   │   ├── SKILL.md           # Main skill file
+│   │   ├── scripts/           # Executable code (optional)
+│   │   ├── references/        # Documentation (optional)
+│   │   └── assets/            # Templates/files (optional)
+│   └── testing/
+│       └── SKILL.md
+├── development/                # General development
+│   ├── debugging/
+│   └── refactoring/
 └── README.md                   # This file
 ```
 
 ## Skill Format
 
-```json
-{
-  "name": "skill_name",
-  "description": "What this skill teaches",
-  "category": "rust|python|testing|refactoring|documentation",
-  "tags": ["tag1", "tag2"],
-  "prerequisites": ["$other_skill"],
-  "difficulty": "beginner|intermediate|advanced",
-  "stages": [
-    {
-      "level": 1,
-      "title": "Foundation",
-      "description": "Basic concepts and patterns",
-      "key_concepts": ["concept1", "concept2"],
-      "examples": [
-        {
-          "title": "Simple Example",
-          "code": "code snippet",
-          "explanation": "What this teaches"
-        }
-      ],
-      "practice": "Here's a challenge to try"
-    },
-    {
-      "level": 2,
-      "title": "Intermediate",
-      "description": "Common patterns and best practices",
-      "key_concepts": ["concept1"],
-      "examples": [
-        {
-          "title": "Real-world Pattern",
-          "code": "code snippet",
-          "explanation": "When and why to use this"
-        }
-      ],
-      "practice": "Complex challenge"
-    },
-    {
-      "level": 3,
-      "title": "Advanced",
-      "description": "Advanced usage and optimization",
-      "key_concepts": ["concept1"],
-      "examples": [],
-      "practice": "Expert challenge"
-    }
-  ],
-  "related_skills": ["$skill1", "$skill2"],
-  "resources": [
-    {
-      "title": "Reference",
-      "url": "https://..."
-    }
-  ]
-}
+Each skill is a folder containing a `SKILL.md` file with YAML frontmatter:
+
+```markdown
+---
+name: skill-name
+description: Complete description of what this skill does and when to use it
+---
+
+# Skill Name
+
+Concise instructions for Claude to follow (<500 lines preferred).
+
+## Quick Start
+[Basic usage pattern]
+
+## Workflows
+[Step-by-step procedures]
+
+## Advanced
+[Edge cases, optimization, troubleshooting]
 ```
 
-## Progressive Disclosure
+### Required Fields
 
-Skills are designed with 3 levels:
+- **name**: Unique identifier (lowercase, hyphens for spaces)
+- **description**: Primary trigger mechanism - includes BOTH what the skill does AND when to use it
 
-1. **Foundation** - Core concepts, simple examples
-2. **Intermediate** - Practical patterns, common use cases
-3. **Advanced** - Optimization, edge cases, expert patterns
+### Optional Bundled Resources
 
-Users progress through levels as they request more detail.
+**scripts/** - Executable code (Python/Bash/etc.)
+- Use when code is repeatedly rewritten or needs deterministic reliability
+- May be executed without loading into context
+- Example: `scripts/format_code.py`
+
+**references/** - Documentation loaded as needed
+- Use for detailed information that shouldn't bloat SKILL.md
+- Only loaded when Claude determines it's needed
+- Example: `references/api_docs.md`, `references/patterns.md`
+
+**assets/** - Files used in output (not loaded into context)
+- Templates, images, boilerplate that gets copied/modified
+- Example: `assets/template.rs`, `assets/logo.png`
+
+## Design Principles
+
+### 1. Concise is Key
+
+Context window is a public good. Challenge each piece of information:
+- "Does Claude really need this explanation?"
+- "Does this paragraph justify its token cost?"
+
+Prefer concise examples over verbose explanations.
+
+### 2. Progressive Disclosure
+
+Three-level loading system:
+1. **Metadata (name + description)** - Always in context (~100 words)
+2. **SKILL.md body** - When skill triggers (<500 lines)
+3. **Bundled resources** - As needed by Claude
+
+Keep SKILL.md under 500 lines. Split content into reference files when approaching this limit.
+
+### 3. Set Appropriate Degrees of Freedom
+
+Match specificity to task fragility:
+- **High freedom**: Multiple approaches valid, use text instructions
+- **Medium freedom**: Preferred pattern exists, use pseudocode/parameterized scripts
+- **Low freedom**: Operations fragile/critical, use specific scripts with few parameters
 
 ## Usage
 
-Invoke skills with `$` prefix:
+Skills are automatically triggered when Claude determines they're relevant based on the description field. You can also explicitly invoke:
 
-- `$skill_name` - Load skill (starts at user's level)
-- `$skill_name:1` - Load specific stage
-- `$skill_name explain` - Get explanation
-- `$skill_name example` - Show practical example
-- `$skill_name practice` - Get practice challenge
+```
+Use the rust-error-handling skill to refactor this code
+```
+
+Skills can reference bundled resources:
+```
+See references/patterns.md for advanced examples
+Run scripts/format_code.py to apply formatting
+```
 
 ## Example: Rust Error Handling
 
-`skills/rust/error-handling.json`:
-```json
-{
-  "name": "error-handling",
-  "description": "Master Result<T,E> and error propagation",
-  "category": "rust",
-  "difficulty": "beginner",
-  "stages": [
-    {
-      "level": 1,
-      "title": "Result Basics",
-      "key_concepts": ["Result", "Ok/Err", "Pattern Matching"],
-      "examples": [
-        {
-          "title": "Using Result",
-          "code": "fn parse_number(s: &str) -> Result<i32, ParseIntError> {\n    s.parse()\n}",
-          "explanation": "Result is an enum with Ok and Err variants"
-        }
-      ],
-      "practice": "Write a function that returns Result<String, Box<dyn Error>>"
-    },
-    {
-      "level": 2,
-      "title": "Error Propagation",
-      "key_concepts": ["? operator", "From trait", "Error context"],
-      "examples": [
-        {
-          "title": "Using ? operator",
-          "code": "fn process() -> Result<(), Box<dyn Error>> {\n    let num = \"42\".parse::<i32>()?;\n    Ok(())\n}",
-          "explanation": "? automatically converts and returns errors"
-        }
-      ],
-      "practice": "Convert a chain of .unwrap() calls to use ?"
-    },
-    {
-      "level": 3,
-      "title": "Custom Error Types",
-      "key_concepts": ["thiserror", "anyhow", "Error traits"],
-      "examples": [],
-      "practice": "Create a custom error type with conversion impl"
-    }
-  ],
-  "related_skills": ["$rust-testing", "$rust-performance"]
+`skills/rust/error-handling/SKILL.md`:
+```markdown
+---
+name: rust-error-handling
+description: Guide for Rust error handling with Result<T,E>, error propagation, and custom error types. Use when working with Rust code that needs error handling, Result types, the ? operator, or custom error implementations.
+---
+
+# Rust Error Handling
+
+## Quick Start
+
+Use `Result<T, E>` for operations that can fail:
+\`\`\`rust
+fn parse_config(path: &str) -> Result<Config, ConfigError> {
+    let content = fs::read_to_string(path)?;
+    let config: Config = toml::from_str(&content)?;
+    Ok(config)
 }
+\`\`\`
+
+## Error Propagation
+
+The `?` operator automatically converts and returns errors:
+- Returns early on Err
+- Requires From<SourceError> for TargetError
+- Only works in functions returning Result or Option
+
+## Custom Error Types
+
+Use `thiserror` for user-facing errors, `anyhow` for internal errors.
+
+For detailed patterns, see references/error_patterns.md
 ```
 
-Usage:
-- `$error-handling` → Shows Foundation level
-- `$error-handling:2` → Shows Intermediate level  
-- `$error-handling explain` → Detailed explanation
+`skills/rust/error-handling/references/error_patterns.md`:
+```markdown
+# Rust Error Patterns
 
-## Next: Implement Skill System
+## Using thiserror
+[Detailed examples...]
 
-The system will need to:
-1. Load skills from JSON files
-2. Track user's current level per skill
-3. Parse `$skill_name` syntax
-4. Render progressive disclosure (show detail gradually)
-5. Link skills together
+## Using anyhow
+[Detailed examples...]
+
+## Error Context
+[Detailed examples...]
+```
+
+## Creating Skills
+
+See `skill-creator` skill in Anthropic's marketplace for detailed guidance on creating effective skills.
+
+Key steps:
+1. Understand concrete usage examples
+2. Plan reusable resources (scripts, references, assets)
+3. Write concise SKILL.md with clear description
+4. Test with real usage
+5. Iterate based on feedback
