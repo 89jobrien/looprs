@@ -39,7 +39,22 @@ impl Agent {
     }
 
     pub fn add_user_message(&mut self, text: impl Into<String>) {
-        self.messages.push(Message::user(text));
+        let text_str = text.into();
+        
+        // Resolve file references (@filename) if present
+        let resolved = if crate::file_refs::has_file_references(&text_str) {
+            match crate::file_refs::resolve_file_references(&text_str, &self.tool_ctx.working_dir) {
+                Ok(resolved_text) => resolved_text,
+                Err(e) => {
+                    eprintln!("Warning: Error resolving file references: {e}");
+                    text_str // Use original text if resolution fails
+                }
+            }
+        } else {
+            text_str
+        };
+        
+        self.messages.push(Message::user(resolved));
     }
 
     pub fn clear_history(&mut self) {
@@ -514,6 +529,36 @@ actions:
         let ctx = EventContext::new();
         agent.events.fire(Event::SessionStart, &ctx);
         // Should not panic
+    }
+
+    #[test]
+    fn test_file_reference_resolution() {
+        use std::io::Write;
+        use tempfile::TempDir;
+        
+        let temp_dir = TempDir::new().unwrap();
+        let test_file = temp_dir.path().join("test.txt");
+        let mut file = std::fs::File::create(&test_file).unwrap();
+        writeln!(file, "Hello from file!").unwrap();
+        
+        let provider = MockProvider::simple_text("test");
+        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        
+        // Override working directory to temp dir for this test
+        agent.tool_ctx.working_dir = temp_dir.path().to_path_buf();
+        
+        // Add message with file reference
+        agent.add_user_message("Check @test.txt please");
+        
+        // Should have resolved the file reference
+        assert_eq!(agent.messages.len(), 1);
+        let msg_content = agent.messages[0].content.first().unwrap();
+        if let crate::api::ContentBlock::Text { text } = msg_content {
+            assert!(text.contains("Hello from file!"));
+            assert!(text.contains("// File: test.txt"));
+        } else {
+            panic!("Expected text content block");
+        }
     }
 }
 

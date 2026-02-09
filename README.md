@@ -99,6 +99,44 @@ action:
 - `shell` - Execute shell command, optionally inject output into context
 - `message` - Display text to console
 
+### File References
+
+Reference files in your prompts using `@filename` syntax. The file contents will be automatically injected into the conversation.
+
+**Usage:**
+```
+❯ Refactor @src/main.rs for better error handling
+# File contents are injected with syntax highlighting context
+
+❯ Compare @file1.rs and @file2.rs
+# Multiple files can be referenced in one message
+
+❯ /refactor @src/utils.rs
+# Works in custom commands too
+```
+
+**Features:**
+- Automatic path resolution from current working directory
+- Security: blocks path traversal attempts (`../../../etc/passwd`)
+- Supports subdirectories: `@src/modules/parser.rs`
+- Graceful degradation: missing files show warning but don't break session
+
+**Example output:**
+```
+Check @test.rs please
+
+→ Resolved to:
+
+Check 
+```
+// File: test.rs
+fn test_example() {
+    assert_eq!(1 + 1, 2);
+}
+```
+ please
+```
+
 ### Hook Loading
 
 Hooks are loaded from two locations with **repo precedence**:
@@ -332,7 +370,7 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 
 ### Phase 3: Extensibility Parsers (In Progress)
 - [x] **Command parser** - Custom slash commands from `.looprs/commands/` with prompt, shell, and message actions
-- [ ] File reference resolver (`@` prefix)
+- [x] **File reference resolver** - `@filename` syntax automatically injects file contents into prompts with security checks
 - [ ] Skill loader with level tracking (`$` prefix)
 - [ ] Agent dispatcher (YAML-based roles)
 - [ ] Rule evaluator (constraint checking)
