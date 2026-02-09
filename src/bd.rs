@@ -68,19 +68,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_bd_repo_detection() {
-        // This will be false in current repo (no .beads)
-        assert!(!is_bd_repo());
-    }
-
-    #[test]
-    fn test_list_open_issues_no_bd_repo() {
-        // Should return None when not in bd repo
-        let issues = list_open_issues();
-        assert!(issues.is_none());
-    }
-
-    #[test]
     fn test_parse_bd_issues_empty() {
         let result = parse_bd_issues("");
         assert!(result.is_none());

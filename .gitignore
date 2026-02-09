@@ -6,3 +6,5 @@ thoughts/
 
 .env
 .looprs/provider.json
+.beads/
+.github/

@@ -1,0 +1,15 @@
+name: demo_approval_gate
+trigger: SessionStart
+actions:
+  - type: message
+    text: "Welcome! This hook demonstrates approval gates."
+  
+  - type: command
+    command: "git --no-pager log -1 --oneline"
+    inject_as: "last_commit"
+    
+  - type: command
+    command: "git --no-pager status --short"
+    requires_approval: true
+    approval_prompt: "Show git status (may include sensitive file names)?"
+    inject_as: "git_status"
