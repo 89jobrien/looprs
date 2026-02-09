@@ -1,4 +1,4 @@
-use super::{Action, Hook};
+use super::{Action, Hook, PromptCallback};
 use crate::app_config::AppConfig;
 use crate::events::EventContext;
 use std::collections::HashMap;
@@ -20,7 +20,7 @@ pub struct HookResult {
 impl HookExecutor {
     /// Execute a single hook and collect results (no approval gates)
     pub fn execute_hook(hook: &Hook, context: &EventContext) -> anyhow::Result<Vec<HookResult>> {
-        Self::execute_hook_with_approval(hook, context, None)
+        Self::execute_hook_with_callbacks(hook, context, None, None, None)
     }
 
     /// Execute a hook with optional approval callback
@@ -28,6 +28,17 @@ impl HookExecutor {
         hook: &Hook,
         context: &EventContext,
         approval_fn: Option<&ApprovalCallback>,
+    ) -> anyhow::Result<Vec<HookResult>> {
+        Self::execute_hook_with_callbacks(hook, context, approval_fn, None, None)
+    }
+
+    /// Execute a hook with approval and prompt callbacks
+    pub fn execute_hook_with_callbacks(
+        hook: &Hook,
+        context: &EventContext,
+        approval_fn: Option<&ApprovalCallback>,
+        prompt_fn: Option<&PromptCallback>,
+        secret_prompt_fn: Option<&PromptCallback>,
     ) -> anyhow::Result<Vec<HookResult>> {
         let mut results = Vec::new();
         let mut local_ctx: HashMap<String, String> = HashMap::new();
@@ -41,8 +52,14 @@ impl HookExecutor {
 
         // Execute each action
         for (idx, action) in hook.actions.iter().enumerate() {
-            if let Some(result) = Self::execute_action(action, context, approval_fn, &mut local_ctx)?
-            {
+            if let Some(result) = Self::execute_action(
+                action,
+                context,
+                approval_fn,
+                prompt_fn,
+                secret_prompt_fn,
+                &mut local_ctx,
+            )? {
                 results.push(HookResult {
                     hook_name: hook.name.clone(),
                     action_index: idx,
@@ -60,6 +77,8 @@ impl HookExecutor {
         action: &Action,
         context: &EventContext,
         approval_fn: Option<&ApprovalCallback>,
+        prompt_fn: Option<&PromptCallback>,
+        secret_prompt_fn: Option<&PromptCallback>,
         local_ctx: &mut HashMap<String, String>,
     ) -> anyhow::Result<Option<(String, Option<String>)>> {
         match action {
@@ -103,7 +122,14 @@ impl HookExecutor {
                     let mut last_result: Option<(String, Option<String>)> = None;
                     for action in actions {
                         if let Some(result) =
-                            Self::execute_action(action, context, approval_fn, local_ctx)?
+                            Self::execute_action(
+                                action,
+                                context,
+                                approval_fn,
+                                prompt_fn,
+                                secret_prompt_fn,
+                                local_ctx,
+                            )?
                         {
                             last_result = Some(result);
                         }
@@ -124,20 +150,56 @@ impl HookExecutor {
                 local_ctx.insert(set_key.clone(), approved.to_string());
                 Ok(None)
             }
-            Action::Prompt { .. } => {
-                crate::ui::warn("Warning: Hook action 'prompt' not implemented yet");
+            Action::Prompt { prompt, set_key } => {
+                if let Some(callback) = prompt_fn {
+                    if let Some(value) = callback(prompt) {
+                        local_ctx.insert(set_key.clone(), value);
+                    }
+                } else {
+                    crate::ui::warn(
+                        "Warning: Prompt action requires a prompt callback; skipping",
+                    );
+                }
                 Ok(None)
             }
-            Action::SecretPrompt { .. } => {
-                crate::ui::warn("Warning: Hook action 'secret_prompt' not implemented yet");
+            Action::SecretPrompt { prompt, set_key } => {
+                if let Some(callback) = secret_prompt_fn {
+                    if let Some(value) = callback(prompt) {
+                        local_ctx.insert(set_key.clone(), value);
+                    }
+                } else {
+                    crate::ui::warn(
+                        "Warning: Secret prompt action requires a prompt callback; skipping",
+                    );
+                }
                 Ok(None)
             }
-            Action::SetEnv { .. } => {
-                crate::ui::warn("Warning: Hook action 'set_env' not implemented yet");
+            Action::SetEnv { name, from_key } => {
+                if let Some(value) = local_ctx.get(from_key) {
+                    if !value.is_empty() {
+                        unsafe {
+                            std::env::set_var(name, value);
+                        }
+                    }
+                } else {
+                    crate::ui::warn(format!(
+                        "Warning: set_env missing key '{from_key}'; skipping"
+                    ));
+                }
                 Ok(None)
             }
-            Action::SetConfig { .. } => {
-                crate::ui::warn("Warning: Hook action 'set_config' not implemented yet");
+            Action::SetConfig { path, value } => {
+                if path == "onboarding.demo_seen" {
+                    let Some(flag) = value.as_bool() else {
+                        crate::ui::warn(format!(
+                            "Warning: set_config expected boolean for {path}"
+                        ));
+                        return Ok(None);
+                    };
+                    AppConfig::set_onboarding_demo_seen(flag)?;
+                } else {
+                    crate::ui::warn(format!("Warning: Unknown config path '{path}'"));
+                }
                 Ok(None)
             }
         }
@@ -545,5 +607,29 @@ actions:
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].output, "always_runs");
         assert_eq!(results[1].output, "also_always_runs");
+    }
+
+    #[test]
+    fn secret_prompt_does_not_inject_metadata() {
+        let yaml = r#"name: test
+trigger: SessionStart
+actions:
+  - type: secret_prompt
+    prompt: "Key"
+    set_key: key
+  - type: set_env
+    name: OPENAI_API_KEY
+    from_key: key
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new();
+
+        let secret: crate::hooks::PromptCallback = Box::new(|_| Some("secret".to_string()));
+        let results =
+            HookExecutor::execute_hook_with_callbacks(&hook, &context, None, None, Some(&secret))
+                .unwrap();
+
+        assert!(results.iter().all(|r| r.inject_key.is_none()));
     }
 }
