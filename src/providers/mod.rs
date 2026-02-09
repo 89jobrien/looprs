@@ -61,6 +61,9 @@ pub trait LLMProvider: Send + Sync {
 /// 4. Try local Ollama
 /// 5. Error if none found
 pub async fn create_provider() -> Result<Box<dyn LLMProvider>> {
+    // Load .env file if available
+    let _ = dotenvy::dotenv();
+
     // Load config file if available
     let config_file = crate::config_file::ProviderConfig::load().ok();
 
