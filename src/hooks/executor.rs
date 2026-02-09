@@ -115,7 +115,7 @@ impl HookExecutor {
             }
             Action::Message { text } => {
                 crate::ui::info(text);
-                Ok(None)
+                Ok(Some((text.clone(), None)))
             }
             Action::Conditional {
                 condition,
