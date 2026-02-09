@@ -7,8 +7,8 @@ use std::env;
 use looprs::observation_manager::load_recent_observations;
 use looprs::providers::create_provider;
 use looprs::{
-    console_approval_prompt, Agent, ApprovalCallback, Event, EventContext, HookRegistry,
-    SessionContext,
+    console_approval_prompt, Agent, ApprovalCallback, Command, CommandRegistry, Event,
+    EventContext, HookRegistry, SessionContext,
 };
 
 mod args;
@@ -63,13 +63,45 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Load custom commands from both user and repo directories
+    let user_commands_dir = env::home_dir()
+        .unwrap_or_default()
+        .join(".looprs")
+        .join("commands");
+    
+    let repo_commands_dir = env::current_dir()
+        .ok()
+        .map(|d| d.join(".looprs").join("commands"));
+
+    let mut command_registry = CommandRegistry::new();
+    
+    // Load user commands
+    if user_commands_dir.exists() {
+        if let Ok(user_commands) = CommandRegistry::load_from_directory(&user_commands_dir) {
+            for cmd in user_commands.list() {
+                command_registry.register(cmd.clone());
+            }
+        }
+    }
+    
+    // Load repo commands (will override user commands with same name)
+    if let Some(dir) = repo_commands_dir {
+        if dir.exists() {
+            if let Ok(repo_commands) = CommandRegistry::load_from_directory(&dir) {
+                for cmd in repo_commands.list() {
+                    command_registry.register(cmd.clone());
+                }
+            }
+        }
+    }
+
     // Handle scriptable (non-interactive) mode
     if cli_args.is_scriptable() {
         return run_scriptable(&cli_args, &model, &provider_name, agent).await;
     }
 
     // Interactive mode
-    run_interactive(&cli_args, &model, &provider_name, agent).await
+    run_interactive(&cli_args, &model, &provider_name, agent, command_registry).await
 }
 
 async fn run_scriptable(
@@ -119,6 +151,7 @@ async fn run_interactive(
     model: &str,
     provider_name: &str,
     mut agent: Agent,
+    command_registry: CommandRegistry,
 ) -> Result<()> {
     let mut rl = DefaultEditor::new()?;
 
@@ -192,6 +225,24 @@ async fn run_interactive(
                         agent.clear_history();
                         println!("{}", "● Conversation cleared".dimmed());
                     }
+                    CliCommand::CustomCommand(cmd_input) => {
+                        // Parse command name and args
+                        let parts: Vec<&str> = cmd_input.split_whitespace().collect();
+                        if parts.is_empty() {
+                            continue;
+                        }
+                        
+                        let cmd_name = parts[0];
+                        
+                        if let Some(cmd) = command_registry.get(cmd_name) {
+                            if let Err(e) = execute_command(cmd, &cmd_input, &mut agent).await {
+                                eprintln!("{} {}", "✗".red().bold(), e.to_string().red());
+                            }
+                        } else {
+                            println!("{} Unknown command: /{}", "✗".yellow(), cmd_name);
+                            println!("Try: /help to see available commands");
+                        }
+                    }
                     CliCommand::Message(msg) => {
                         agent.add_user_message(msg);
 
@@ -251,3 +302,51 @@ EXAMPLES:
 "#
     );
 }
+
+/// Execute a custom command
+async fn execute_command(cmd: &Command, _input: &str, agent: &mut Agent) -> Result<()> {
+    use looprs::CommandAction;
+    use std::process::Command as ProcessCommand;
+
+    match &cmd.action {
+        CommandAction::Prompt { template, .. } => {
+            // Send prompt template as message to LLM
+            agent.add_user_message(template);
+            agent.run_turn().await?;
+        }
+        CommandAction::Shell {
+            command,
+            inject_output,
+        } => {
+            println!("{} Running: {}", "●".dimmed(), command.dimmed());
+            let output = ProcessCommand::new("sh")
+                .arg("-c")
+                .arg(command)
+                .output()?;
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+
+            if !output.status.success() {
+                eprintln!("{stderr}");
+                anyhow::bail!("Command failed with status: {}", output.status);
+            }
+
+            if *inject_output && !stdout.is_empty() {
+                let trimmed = stdout.trim();
+                println!("\n{trimmed}");
+                println!("\n{}", "Output injected into context".dimmed());
+                agent.add_user_message(format!("Command output:\n```\n{trimmed}\n```"));
+            } else if !stdout.is_empty() {
+                let trimmed = stdout.trim();
+                println!("{trimmed}");
+            }
+        }
+        CommandAction::Message { text } => {
+            println!("{text}");
+        }
+    }
+
+    Ok(())
+}
+

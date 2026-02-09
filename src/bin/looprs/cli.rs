@@ -1,6 +1,7 @@
 pub enum CliCommand {
     Quit,
     Clear,
+    CustomCommand(String), // Custom command from .looprs/commands/
     Message(String),
 }
 
@@ -9,6 +10,14 @@ pub fn parse_input(line: &str) -> Option<CliCommand> {
 
     if trimmed.is_empty() {
         return None;
+    }
+
+    // Check for custom commands (/ prefix)
+    if trimmed.starts_with('/') && trimmed.len() > 1 {
+        let command_name = trimmed[1..].split_whitespace().next().unwrap_or("");
+        if !command_name.is_empty() && command_name != "q" && command_name != "c" {
+            return Some(CliCommand::CustomCommand(trimmed[1..].to_string()));
+        }
     }
 
     match trimmed {
@@ -39,6 +48,18 @@ mod tests {
     #[test]
     fn parse_message_commands() {
         assert!(matches!(parse_input("hello"), Some(CliCommand::Message(_))));
+    }
+
+    #[test]
+    fn parse_custom_commands() {
+        assert!(matches!(
+            parse_input("/refactor"),
+            Some(CliCommand::CustomCommand(_))
+        ));
+        assert!(matches!(
+            parse_input("/lint --fix"),
+            Some(CliCommand::CustomCommand(_))
+        ));
     }
 
     #[test]

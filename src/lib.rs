@@ -2,6 +2,7 @@ mod agent;
 mod api;
 pub mod approval;
 pub mod bd;
+pub mod commands;
 mod config;
 mod config_file;
 pub mod context;
@@ -16,6 +17,7 @@ mod tools;
 
 pub use crate::agent::Agent;
 pub use crate::approval::console_approval_prompt;
+pub use crate::commands::{Command, CommandAction, CommandRegistry};
 pub use crate::config::ApiConfig;
 pub use crate::config_file::ProviderConfig;
 pub use crate::context::SessionContext;

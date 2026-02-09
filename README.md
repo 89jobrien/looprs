@@ -58,6 +58,47 @@ Both are detected automatically. Falls back to pure Rust if not installed.
 
 The `.looprs/` directory defines your agent configuration (provider, rules, skills, etc.).
 
+### Custom Commands
+
+Define slash commands to execute common workflows. Commands are loaded from both user and repo directories with **repo precedence**.
+
+**Example: `.looprs/commands/refactor.yaml`**
+```yaml
+name: refactor
+description: Refactor code for readability
+aliases:
+  - r
+action:
+  type: prompt
+  template: "Refactor this code for better readability..."
+```
+
+**Example: `.looprs/commands/test.yaml`**
+```yaml
+name: test
+description: Run tests
+aliases:
+  - t
+action:
+  type: shell
+  command: cargo test
+  inject_output: true  # Add output to conversation context
+```
+
+**Usage:**
+```
+❯ /refactor
+# Sends prompt template to LLM
+
+❯ /test
+# Runs cargo test, shows output, injects into context if inject_output: true
+```
+
+**Action types:**
+- `prompt` - Send template as message to LLM
+- `shell` - Execute shell command, optionally inject output into context
+- `message` - Display text to console
+
 ### Hook Loading
 
 Hooks are loaded from two locations with **repo precedence**:
@@ -70,8 +111,8 @@ When both define a hook with the same name for the same event, **repo hooks over
 .looprs/
 ├── provider.json          # Provider settings
 ├── config.json            # Global config
-├── hooks/                 # Repo-level hooks (override user hooks)
 ├── commands/              # Custom commands (/)
+├── hooks/                 # Repo-level hooks (override user hooks)
 ├── skills/                # Skills with progressive disclosure ($)
 ├── agents/                # Agent role definitions (YAML)
 └── rules/                 # Constraints and guidelines (Markdown)
@@ -283,15 +324,16 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 - [x] **Hook file loading** - Parse YAML from `~/.looprs/hooks/`
 - [x] **Hook execution** - Fire hooks on events, execute shell commands
 
-### Phase 2b: Context Injection (In Progress)
+### Phase 2b: Context Injection ✅ **COMPLETE**
 - [x] **Repo-level `.looprs/hooks/` support** - Load hooks from the current repo (in addition to `~/.looprs/hooks/`), with repo precedence for same-name hooks
 - [x] **Context injection** - Inject hook outputs into LLM prompts via `inject_as` field, with automatic truncation for large values
 - [x] **Approval gates** - User approval for automated actions via `requires_approval` and `approval_prompt` fields
-- [ ] **Hook output storage** - Persist hook results for debugging
+- [ ] **Hook output storage** - Persist hook results for debugging (deferred)
 
-### Phase 3: Extensibility Parsers
-- [ ] Command parser for `/` prefix
-- [ ] Skill loader with level tracking
+### Phase 3: Extensibility Parsers (In Progress)
+- [x] **Command parser** - Custom slash commands from `.looprs/commands/` with prompt, shell, and message actions
+- [ ] File reference resolver (`@` prefix)
+- [ ] Skill loader with level tracking (`$` prefix)
 - [ ] Agent dispatcher (YAML-based roles)
 - [ ] Rule evaluator (constraint checking)
 - [ ] File reference resolver (`@` prefix)
