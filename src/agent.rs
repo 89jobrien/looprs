@@ -3,6 +3,7 @@ use colored::*;
 
 use crate::api::ContentBlock;
 use crate::api::Message;
+use crate::config::get_max_tokens_for_model;
 use crate::events::{Event, EventContext, EventManager};
 use crate::hooks::HookExecutor;
 use crate::hooks::HookRegistry;
@@ -85,11 +86,12 @@ impl Agent {
         );
 
         loop {
+            let max_tokens = get_max_tokens_for_model(self.provider.model());
             let req = InferenceRequest {
                 model: self.provider.model().to_string(),
                 messages: self.messages.clone(),
                 tools: get_tool_definitions(),
-                max_tokens: 8192,
+                max_tokens,
                 system: system_prompt.clone(),
             };
 

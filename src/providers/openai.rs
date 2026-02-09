@@ -18,7 +18,7 @@ impl OpenAIProvider {
             .timeout(Duration::from_secs(120))
             .build()?;
 
-        let model = std::env::var("MODEL").unwrap_or_else(|_| "gpt-4".to_string());
+        let model = std::env::var("MODEL").unwrap_or_else(|_| "gpt-5.2".to_string());
 
         Ok(Self { client, key, model })
     }
