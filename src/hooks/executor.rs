@@ -101,6 +101,11 @@ impl HookExecutor {
                 }
                 Ok(None)
             }
+            Action::Confirm { .. }
+            | Action::Prompt { .. }
+            | Action::SecretPrompt { .. }
+            | Action::SetEnv { .. }
+            | Action::SetConfig { .. } => Ok(None),
         }
     }
 
