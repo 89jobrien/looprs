@@ -14,11 +14,16 @@ pub struct AnthropicProvider {
 
 impl AnthropicProvider {
     pub fn new(key: String) -> Result<Self> {
+        let model = std::env::var("MODEL").ok();
+        Self::new_with_model(key, model)
+    }
+
+    pub fn new_with_model(key: String, model: Option<String>) -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(120))
             .build()?;
 
-        let model = std::env::var("MODEL").unwrap_or_else(|_| "claude-3-opus-20240229".to_string());
+        let model = model.unwrap_or_else(|| "claude-3-opus-20240229".to_string());
 
         Ok(Self { client, key, model })
     }

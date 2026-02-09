@@ -20,11 +20,16 @@ pub struct OpenAIProvider {
 
 impl OpenAIProvider {
     pub fn new(key: String) -> Result<Self> {
+        let model = std::env::var("MODEL").ok();
+        Self::new_with_model(key, model)
+    }
+
+    pub fn new_with_model(key: String, model: Option<String>) -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(120))
             .build()?;
 
-        let model = std::env::var("MODEL").unwrap_or_else(|_| "gpt-5.2".to_string());
+        let model = model.unwrap_or_else(|| "gpt-5-mini".to_string());
 
         Ok(Self { client, key, model })
     }

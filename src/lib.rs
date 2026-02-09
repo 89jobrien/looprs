@@ -29,3 +29,4 @@ pub use crate::file_refs::{has_file_references, list_file_references, resolve_fi
 pub use crate::hooks::{ApprovalCallback, Hook, HookExecutor, HookRegistry};
 pub use crate::observation::Observation;
 pub use crate::observation_manager::ObservationManager;
+pub use crate::providers::{ProviderOverrides, create_provider_with_overrides};

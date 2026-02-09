@@ -14,13 +14,18 @@ pub struct LocalProvider {
 
 impl LocalProvider {
     pub fn new() -> Result<Self> {
+        let model = std::env::var("MODEL").ok();
+        Self::new_with_model(model)
+    }
+
+    pub fn new_with_model(model: Option<String>) -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(120))
             .build()?;
 
         let host =
             std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://localhost:11434".to_string());
-        let model = std::env::var("MODEL").unwrap_or_else(|_| "llama2".to_string());
+        let model = model.unwrap_or_else(|| "llama2".to_string());
 
         Ok(Self {
             client,

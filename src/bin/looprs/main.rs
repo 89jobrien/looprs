@@ -5,7 +5,7 @@ use rustyline::error::ReadlineError;
 use std::env;
 
 use looprs::observation_manager::load_recent_observations;
-use looprs::providers::create_provider;
+use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
 use looprs::{
     console_approval_prompt, Agent, ApprovalCallback, Command, CommandRegistry, Event,
     EventContext, HookRegistry, SessionContext,
@@ -31,7 +31,10 @@ async fn main() -> Result<()> {
         }
     };
 
-    let provider = create_provider().await?;
+    let provider = create_provider_with_overrides(ProviderOverrides {
+        model: cli_args.model.clone(),
+    })
+    .await?;
 
     let model = provider.model().to_string();
     let provider_name = provider.name().to_string();

@@ -54,6 +54,12 @@ pub trait LLMProvider: Send + Sync {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct ProviderOverrides {
+    /// Model override (e.g. from CLI -m/--model)
+    pub model: Option<String>,
+}
+
 /// Create a provider based on configuration priority:
 /// 1. Environment variables (highest priority)
 /// 2. .looprs/provider.json config file
@@ -61,6 +67,12 @@ pub trait LLMProvider: Send + Sync {
 /// 4. Try local Ollama
 /// 5. Error if none found
 pub async fn create_provider() -> Result<Box<dyn LLMProvider>> {
+    create_provider_with_overrides(ProviderOverrides::default()).await
+}
+
+pub async fn create_provider_with_overrides(
+    overrides: ProviderOverrides,
+) -> Result<Box<dyn LLMProvider>> {
     // Load .env file if available
     let _ = dotenvy::dotenv();
 
@@ -69,30 +81,42 @@ pub async fn create_provider() -> Result<Box<dyn LLMProvider>> {
 
     // Step 1: Check explicit PROVIDER env var (highest priority)
     if let Ok(provider_name) = env::var("PROVIDER") {
-        return create_provider_by_name(&provider_name).await;
+        return create_provider_by_name(&provider_name, &config_file, overrides).await;
     }
 
     // Step 2: Check config file provider setting
     if let Some(ref config) = config_file {
         if let Some(provider_name) = &config.provider {
-            return create_provider_by_name(provider_name).await;
+            return create_provider_by_name(provider_name, &config_file, overrides).await;
         }
     }
 
     // Step 3: Try providers in priority order based on available API keys
     if env::var("ANTHROPIC_API_KEY").is_ok() {
         let key = env::var("ANTHROPIC_API_KEY")?;
-        return Ok(Box::new(anthropic::AnthropicProvider::new(key)?));
+        let cfg_model = config_file
+            .as_ref()
+            .and_then(|c| c.merged_settings("anthropic").model);
+        let model = overrides.model.or(env::var("MODEL").ok()).or(cfg_model);
+        return Ok(Box::new(anthropic::AnthropicProvider::new_with_model(key, model)?));
     }
 
     if env::var("OPENAI_API_KEY").is_ok() {
         let key = env::var("OPENAI_API_KEY")?;
-        return Ok(Box::new(openai::OpenAIProvider::new(key)?));
+        let cfg_model = config_file
+            .as_ref()
+            .and_then(|c| c.merged_settings("openai").model);
+        let model = overrides.model.or(env::var("MODEL").ok()).or(cfg_model);
+        return Ok(Box::new(openai::OpenAIProvider::new_with_model(key, model)?));
     }
 
     // Step 4: Try local Ollama
     if local::LocalProvider::is_available().await {
-        return Ok(Box::new(local::LocalProvider::new()?));
+        let cfg_model = config_file
+            .as_ref()
+            .and_then(|c| c.merged_settings("local").model);
+        let model = overrides.model.or(env::var("MODEL").ok()).or(cfg_model);
+        return Ok(Box::new(local::LocalProvider::new_with_model(model)?));
     }
 
     // Step 5: Error if none found
@@ -107,19 +131,37 @@ pub async fn create_provider() -> Result<Box<dyn LLMProvider>> {
 }
 
 /// Create a provider by explicit name
-async fn create_provider_by_name(name: &str) -> Result<Box<dyn LLMProvider>> {
+async fn create_provider_by_name(
+    name: &str,
+    config_file: &Option<crate::config_file::ProviderConfig>,
+    overrides: ProviderOverrides,
+) -> Result<Box<dyn LLMProvider>> {
     match name.to_lowercase().as_str() {
         "anthropic" => {
             let key = env::var("ANTHROPIC_API_KEY")
                 .map_err(|_| anyhow::anyhow!("PROVIDER=anthropic but ANTHROPIC_API_KEY not set"))?;
-            Ok(Box::new(anthropic::AnthropicProvider::new(key)?))
+            let cfg_model = config_file
+                .as_ref()
+                .and_then(|c| c.merged_settings("anthropic").model);
+            let model = overrides.model.or(env::var("MODEL").ok()).or(cfg_model);
+            Ok(Box::new(anthropic::AnthropicProvider::new_with_model(key, model)?))
         }
         "openai" => {
             let key = env::var("OPENAI_API_KEY")
                 .map_err(|_| anyhow::anyhow!("PROVIDER=openai but OPENAI_API_KEY not set"))?;
-            Ok(Box::new(openai::OpenAIProvider::new(key)?))
+            let cfg_model = config_file
+                .as_ref()
+                .and_then(|c| c.merged_settings("openai").model);
+            let model = overrides.model.or(env::var("MODEL").ok()).or(cfg_model);
+            Ok(Box::new(openai::OpenAIProvider::new_with_model(key, model)?))
         }
-        "local" | "ollama" => Ok(Box::new(local::LocalProvider::new()?)),
+        "local" | "ollama" => {
+            let cfg_model = config_file
+                .as_ref()
+                .and_then(|c| c.merged_settings("local").model);
+            let model = overrides.model.or(env::var("MODEL").ok()).or(cfg_model);
+            Ok(Box::new(local::LocalProvider::new_with_model(model)?))
+        }
         "openrouter" => Err(anyhow::anyhow!("OpenRouter provider not yet implemented")),
         other => Err(anyhow::anyhow!("Unknown provider: {other}")),
     }
