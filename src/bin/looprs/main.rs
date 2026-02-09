@@ -139,6 +139,13 @@ async fn main() -> Result<()> {
         let _ = skill_registry.load_from_directory(&user_skills_dir);
     }
 
+    // Load rules from both user and repo directories (repo overrides user)
+    let rules = looprs::RuleRegistry::load_all();
+    if rules.count() > 0 {
+        println!("📋 Loaded {} project rule(s)", rules.count());
+    }
+    agent.rules = rules;
+
     // Handle scriptable (non-interactive) mode
     if cli_args.is_scriptable() {
         return run_scriptable(&cli_args, &model, &provider_name, agent).await;

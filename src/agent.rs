@@ -8,6 +8,7 @@ use crate::hooks::HookRegistry;
 use crate::observation_manager::ObservationManager;
 use crate::providers::InferenceRequest;
 use crate::providers::LLMProvider;
+use crate::rules::RuleRegistry;
 use crate::tools::{ToolContext, execute_tool, get_tool_definitions};
 use crate::ui;
 use crate::file_refs::FileRefPolicy;
@@ -26,6 +27,7 @@ pub struct Agent {
     pub events: EventManager,
     pub observations: ObservationManager,
     pub hooks: HookRegistry,
+    pub rules: RuleRegistry,
     runtime: RuntimeSettings,
     file_ref_policy: FileRefPolicy,
 }
@@ -47,6 +49,7 @@ impl Agent {
             events: EventManager::new(),
             observations: ObservationManager::new(),
             hooks: HookRegistry::new(),
+            rules: RuleRegistry::new(),
             runtime,
             file_ref_policy,
         })
@@ -154,11 +157,17 @@ impl Agent {
         self.events.fire(Event::UserPromptSubmit, &event_ctx);
         let enriched_ctx = self.execute_hooks_for_event(&Event::UserPromptSubmit, &event_ctx);
 
-        // Build system prompt with base instructions + hook-injected context
+        // Build system prompt with base instructions + hook-injected context + rules
         let mut system_prompt = format!(
             "You are a concise coding assistant. Current working directory: {}",
             self.tool_ctx.working_dir.display()
         );
+
+        // Add project rules and guidelines
+        let rules_section = self.rules.format_for_prompt();
+        if !rules_section.is_empty() {
+            system_prompt.push_str(&rules_section);
+        }
 
         // Add any context injected by hooks
         if !enriched_ctx.metadata.is_empty() {
