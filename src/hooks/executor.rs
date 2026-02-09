@@ -141,19 +141,7 @@ impl HookExecutor {
 
     /// Check if a tool is available in PATH
     fn check_tool_available(tool: &str) -> anyhow::Result<bool> {
-        match Command::new("sh")
-            .arg("-c")
-            .arg(format!("which {tool} 2>/dev/null"))
-            .output()
-        {
-            Ok(output) => Ok(output.status.success()),
-            Err(e) => {
-                crate::ui::warn(format!(
-                    "Warning: Could not check tool availability for '{tool}': {e}"
-                ));
-                Ok(false)
-            }
-        }
+        Ok(crate::plugins::system().has_in_path(tool))
     }
 }
 
