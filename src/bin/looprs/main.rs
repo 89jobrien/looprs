@@ -6,7 +6,10 @@ use std::env;
 
 use looprs::observation_manager::load_recent_observations;
 use looprs::providers::create_provider;
-use looprs::{Agent, Event, EventContext, HookRegistry, SessionContext};
+use looprs::{
+    console_approval_prompt, Agent, ApprovalCallback, Event, EventContext, HookRegistry,
+    SessionContext,
+};
 
 mod args;
 mod cli;
@@ -32,13 +35,30 @@ async fn main() -> Result<()> {
 
     let mut agent = Agent::new(provider)?;
 
-    // Load hooks from .looprs/hooks/ directory (unless --no-hooks)
+    // Load hooks from both user (~/.looprs/hooks/) and repo (.looprs/hooks/) directories
+    // Repo hooks override user hooks with same name (unless --no-hooks)
     if !cli_args.no_hooks {
-        let hooks_dir = env::home_dir()
+        let user_hooks_dir = env::home_dir()
             .unwrap_or_default()
             .join(".looprs")
             .join("hooks");
-        if let Ok(hooks) = HookRegistry::load_from_directory(&hooks_dir) {
+        
+        let repo_hooks_dir = env::current_dir()
+            .ok()
+            .map(|d| d.join(".looprs").join("hooks"));
+
+        let user_dir = if user_hooks_dir.exists() {
+            Some(user_hooks_dir)
+        } else {
+            None
+        };
+
+        let repo_dir = repo_hooks_dir.filter(|d| d.exists());
+
+        if let Ok(hooks) = HookRegistry::load_dual_source(
+            user_dir.as_ref(),
+            repo_dir.as_ref(),
+        ) {
             agent = agent.with_hooks(hooks);
         }
     }
@@ -113,11 +133,15 @@ async fn run_interactive(
         env::current_dir()?.display().to_string().dimmed()
     );
 
-    // Fire SessionStart event (this will also execute hooks)
+    // Fire SessionStart event (this will also execute hooks with approval gates)
     let session_context_str = context.format_for_prompt().unwrap_or_default();
     let event_ctx = EventContext::new().with_session_context(session_context_str);
     agent.events.fire(Event::SessionStart, &event_ctx);
-    let enriched_ctx = agent.execute_hooks_for_event(&Event::SessionStart, &event_ctx);
+    
+    // Create approval callback for interactive prompts
+    let approval_callback: ApprovalCallback = Box::new(console_approval_prompt);
+    let enriched_ctx =
+        agent.execute_hooks_for_event_with_approval(&Event::SessionStart, &event_ctx, Some(&approval_callback));
 
     // Display context if available (unless quiet mode)
     if !cli_args.quiet {

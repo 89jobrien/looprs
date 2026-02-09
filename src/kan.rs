@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+
+#[cfg(not(test))]
 use std::process::Command;
 
 /// Represents a kan board status
@@ -19,7 +21,7 @@ pub fn get_status() -> Option<KanStatus> {
     // In test environments, return None immediately to avoid hanging
     #[cfg(test)]
     {
-        return None;
+        None
     }
 
     #[cfg(not(test))]
@@ -67,10 +69,8 @@ mod tests {
 
     #[test]
     fn test_kan_detection() {
-        // kan may or may not be available
-        let available = is_kan_available();
-        // Just verify it doesn't panic
-        assert!(available || !available);
+        // kan may or may not be available - just verify it doesn't panic
+        let _available = is_kan_available();
     }
 
     #[test]

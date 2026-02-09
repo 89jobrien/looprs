@@ -58,17 +58,23 @@ Both are detected automatically. Falls back to pure Rust if not installed.
 
 The `.looprs/` directory defines your agent configuration (provider, rules, skills, etc.).
 
-> Note: **Hooks are currently loaded from `~/.looprs/hooks/` (user-level)**. Repo-level hooks in `.looprs/hooks/` are **planned** but not yet implemented.
+### Hook Loading
+
+Hooks are loaded from two locations with **repo precedence**:
+- **User hooks**: `~/.looprs/hooks/` (global, shared across all projects)
+- **Repo hooks**: `.looprs/hooks/` (project-specific, checked into version control)
+
+When both define a hook with the same name for the same event, **repo hooks override user hooks**.
 
 ```
 .looprs/
 ├── provider.json          # Provider settings
 ├── config.json            # Global config
+├── hooks/                 # Repo-level hooks (override user hooks)
 ├── commands/              # Custom commands (/)
 ├── skills/                # Skills with progressive disclosure ($)
 ├── agents/                # Agent role definitions (YAML)
 └── rules/                 # Constraints and guidelines (Markdown)
-# (planned) hooks/         # Repo-level hooks (see Roadmap)
 ```
 
 ### SessionStart Context
@@ -178,9 +184,26 @@ actions:
 - etc. for all 8 event types
 
 **Action types:**
-- `command` - Execute shell command, optionally inject output into context
+- `command` - Execute shell command, optionally inject output into context with `inject_as`
+  - Injected values are added to the LLM system prompt under "Additional Context from Hooks"
+  - Large values (>2000 chars) are automatically truncated to prevent prompt bloat
+  - **Approval gates**: Add `requires_approval: true` to prompt user before execution
+  - Custom prompt: Use `approval_prompt: "Your message"` for user-friendly approval text
 - `message` - Print message to console
 - `conditional` - Run sub-actions if condition passes
+
+**Approval gates example:**
+```yaml
+name: sensitive_operation
+trigger: SessionStart
+actions:
+  - type: command
+    command: "git push origin main"
+    requires_approval: true
+    approval_prompt: "Push changes to remote repository?"
+```
+
+User will see: `🔒 Approval required: Push changes to remote repository? [y/N]`
 
 **Conditions:**
 - `on_branch:main` - Only execute if on specified branch (currently accepts "main" or "*")
@@ -260,10 +283,10 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 - [x] **Hook file loading** - Parse YAML from `~/.looprs/hooks/`
 - [x] **Hook execution** - Fire hooks on events, execute shell commands
 
-### Phase 2b: Context Injection (Next)
-- [ ] **Repo-level `.looprs/hooks/` support** - Load hooks from the current repo (in addition to `~/.looprs/hooks/`), with documented precedence/merge behavior
-- [ ] **Context injection** - Inject hook outputs into LLM prompts
-- [ ] **Approval gates** - User approval for automated actions
+### Phase 2b: Context Injection (In Progress)
+- [x] **Repo-level `.looprs/hooks/` support** - Load hooks from the current repo (in addition to `~/.looprs/hooks/`), with repo precedence for same-name hooks
+- [x] **Context injection** - Inject hook outputs into LLM prompts via `inject_as` field, with automatic truncation for large values
+- [x] **Approval gates** - User approval for automated actions via `requires_approval` and `approval_prompt` fields
 - [ ] **Hook output storage** - Persist hook results for debugging
 
 ### Phase 3: Extensibility Parsers

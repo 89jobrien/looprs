@@ -4,6 +4,9 @@ use std::process::Command;
 
 pub struct HookExecutor;
 
+/// Approval callback type - returns true if user approves, false if declined
+pub type ApprovalCallback = Box<dyn Fn(&str) -> bool + Send + Sync>;
+
 #[derive(Debug, Clone)]
 pub struct HookResult {
     pub hook_name: String,
@@ -13,8 +16,17 @@ pub struct HookResult {
 }
 
 impl HookExecutor {
-    /// Execute a single hook and collect results
+    /// Execute a single hook and collect results (no approval gates)
     pub fn execute_hook(hook: &Hook, context: &EventContext) -> anyhow::Result<Vec<HookResult>> {
+        Self::execute_hook_with_approval(hook, context, None)
+    }
+
+    /// Execute a hook with optional approval callback
+    pub fn execute_hook_with_approval(
+        hook: &Hook,
+        context: &EventContext,
+        approval_fn: Option<&ApprovalCallback>,
+    ) -> anyhow::Result<Vec<HookResult>> {
         let mut results = Vec::new();
 
         // Check condition if present
@@ -26,7 +38,7 @@ impl HookExecutor {
 
         // Execute each action
         for (idx, action) in hook.actions.iter().enumerate() {
-            if let Some(result) = Self::execute_action(action, context)? {
+            if let Some(result) = Self::execute_action(action, context, approval_fn)? {
                 results.push(HookResult {
                     hook_name: hook.name.clone(),
                     action_index: idx,
@@ -43,9 +55,37 @@ impl HookExecutor {
     fn execute_action(
         action: &Action,
         context: &EventContext,
+        approval_fn: Option<&ApprovalCallback>,
     ) -> anyhow::Result<Option<(String, Option<String>)>> {
         match action {
-            Action::Command { command, inject_as } => {
+            Action::Command {
+                command,
+                inject_as,
+                requires_approval,
+                approval_prompt,
+            } => {
+                // Check if approval is required
+                if *requires_approval {
+                    let prompt = approval_prompt
+                        .as_ref()
+                        .map(|s| s.as_str())
+                        .unwrap_or_else(|| command.as_str());
+
+                    if let Some(callback) = approval_fn {
+                        if !callback(prompt) {
+                            // User declined - skip this action
+                            return Ok(None);
+                        }
+                    } else {
+                        // No approval callback provided but approval required
+                        // For safety, skip the action
+                        eprintln!(
+                            "Warning: Action requires approval but no callback provided. Skipping: {command}"
+                        );
+                        return Ok(None);
+                    }
+                }
+
                 let output = Self::run_command(command)?;
                 Ok(Some((output, inject_as.clone())))
             }
@@ -56,7 +96,7 @@ impl HookExecutor {
             } => {
                 if Self::eval_condition(condition, context)? {
                     for action in actions {
-                        Self::execute_action(action, context)?;
+                        Self::execute_action(action, context, approval_fn)?;
                     }
                 }
                 Ok(None)
@@ -110,6 +150,15 @@ impl HookExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
+
+    fn create_test_hook_yaml(content: &str) -> tempfile::NamedTempFile {
+        use std::io::Write;
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+        file.flush().unwrap();
+        file
+    }
 
     #[test]
     fn test_run_command_success() {
@@ -134,7 +183,7 @@ mod tests {
     #[test]
     fn test_check_tool_available() {
         let has_echo = HookExecutor::check_tool_available("echo").unwrap();
-        assert!(has_echo); // echo should always be available
+        assert!(has_echo);
     }
 
     #[test]
@@ -142,5 +191,135 @@ mod tests {
         let has_nonexistent =
             HookExecutor::check_tool_available("totally_nonexistent_tool_xyz").unwrap_or(false);
         assert!(!has_nonexistent);
+    }
+
+    #[test]
+    fn test_approval_required_approved() {
+        let yaml = r#"name: test_approval
+trigger: SessionStart
+actions:
+  - type: command
+    command: echo approved
+    requires_approval: true
+    approval_prompt: Run this command?
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new();
+
+        let approve_fn: ApprovalCallback = Box::new(|_| true);
+        let results =
+            HookExecutor::execute_hook_with_approval(&hook, &context, Some(&approve_fn)).unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].output, "approved");
+    }
+
+    #[test]
+    fn test_approval_required_declined() {
+        let yaml = r#"name: test_decline
+trigger: SessionStart
+actions:
+  - type: command
+    command: echo should_not_run
+    requires_approval: true
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new();
+
+        let decline_fn: ApprovalCallback = Box::new(|_| false);
+        let results =
+            HookExecutor::execute_hook_with_approval(&hook, &context, Some(&decline_fn)).unwrap();
+
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_approval_required_no_callback() {
+        let yaml = r#"name: test_no_callback
+trigger: SessionStart
+actions:
+  - type: command
+    command: echo should_not_run
+    requires_approval: true
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new();
+
+        let results = HookExecutor::execute_hook_with_approval(&hook, &context, None).unwrap();
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_no_approval_required() {
+        let yaml = r#"name: test_no_approval
+trigger: SessionStart
+actions:
+  - type: command
+    command: echo no_approval_needed
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new();
+
+        let results = HookExecutor::execute_hook(&hook, &context).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].output, "no_approval_needed");
+    }
+
+    #[test]
+    fn test_approval_custom_prompt() {
+        let yaml = r#"name: test_custom
+trigger: SessionStart
+actions:
+  - type: command
+    command: echo test
+    requires_approval: true
+    approval_prompt: Custom approval message
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new();
+
+        let captured = Arc::new(Mutex::new(String::new()));
+        let captured_clone = Arc::clone(&captured);
+
+        let callback: ApprovalCallback = Box::new(move |prompt| {
+            *captured_clone.lock().unwrap() = prompt.to_string();
+            true
+        });
+
+        HookExecutor::execute_hook_with_approval(&hook, &context, Some(&callback)).unwrap();
+        assert_eq!(*captured.lock().unwrap(), "Custom approval message");
+    }
+
+    #[test]
+    fn test_multiple_actions_mixed_approval() {
+        let yaml = r#"name: test_mixed
+trigger: SessionStart
+actions:
+  - type: command
+    command: echo always_runs
+  - type: command
+    command: echo needs_approval
+    requires_approval: true
+  - type: command
+    command: echo also_always_runs
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new();
+
+        // Decline the approval-required action
+        let decline_fn: ApprovalCallback = Box::new(|_| false);
+        let results =
+            HookExecutor::execute_hook_with_approval(&hook, &context, Some(&decline_fn)).unwrap();
+
+        // Should have 2 results (skipped the approval-required one)
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].output, "always_runs");
+        assert_eq!(results[1].output, "also_always_runs");
     }
 }
