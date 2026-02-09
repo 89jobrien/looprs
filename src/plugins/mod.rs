@@ -1,6 +1,8 @@
+pub mod binaries;
 mod registry;
 mod resolve;
 mod runner;
+mod tool;
 
 use std::ffi::OsString;
 use std::process::Output;
@@ -9,6 +11,7 @@ use std::sync::{Arc, OnceLock};
 pub use registry::{ToolRegistry, ToolResolver};
 pub use resolve::PathResolver;
 pub use runner::{MockRunner, OsRunner, Runner};
+pub use tool::NamedTool;
 
 /// Central access point for external CLI tools.
 ///
