@@ -1,5 +1,5 @@
-use super::ToolContext;
 use super::error::ToolError;
+use super::ToolContext;
 use regex::Regex;
 use serde_json::Value;
 use std::fs;
@@ -15,7 +15,7 @@ pub(super) fn tool_grep(args: &Value, ctx: &ToolContext) -> Result<String, ToolE
         .ok_or(ToolError::MissingParameter("pat"))?;
     let path_prefix = args["path"].as_str().unwrap_or(".");
 
-    let base = ctx.resolve_path(path_prefix);
+    let base = ctx.resolve_path(path_prefix)?;
 
     // Try rg first if available
     if availability::is_rg_available() {
@@ -65,7 +65,7 @@ fn grep_fallback(pat_str: &str, base: &std::path::Path) -> Result<String, ToolEr
     let glob_pattern = base.join("**/*");
     let pattern_str = glob_pattern
         .to_str()
-        .ok_or(ToolError::MissingParameter("Invalid path"))?;
+        .ok_or_else(|| ToolError::InvalidPath(base.display().to_string()))?;
 
     let mut hits = Vec::new();
 

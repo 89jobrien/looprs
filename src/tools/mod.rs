@@ -8,7 +8,7 @@ mod read;
 mod write;
 
 use anyhow::Result;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -27,14 +27,61 @@ impl ToolContext {
         })
     }
 
-    pub fn resolve_path(&self, path: &str) -> PathBuf {
+    /// Resolve a user-provided path within the working directory.
+    ///
+    /// Security: this is a jail. Relative paths may not escape `working_dir`.
+    /// Absolute paths are denied by default.
+    pub fn resolve_path(&self, path: &str) -> Result<PathBuf, ToolError> {
         let p = Path::new(path);
+
         if p.is_absolute() {
-            p.to_path_buf()
-        } else {
-            self.working_dir.join(p)
+            return Err(ToolError::PathOutsideWorkingDir(path.to_string()));
+        }
+
+        // Canonicalize base (exists) to get stable absolute prefix.
+        let base = self.working_dir.canonicalize().map_err(ToolError::Io)?;
+
+        let rel = normalize_relative(p)
+            .map_err(|_| ToolError::PathOutsideWorkingDir(path.to_string()))?;
+        let joined = base.join(rel);
+
+        // If the target exists, canonicalize to defend against symlink escapes.
+        // For non-existent targets (e.g., writes), we fall back to lexical checks.
+        if let Ok(canon) = joined.canonicalize() {
+            if !canon.starts_with(&base) {
+                return Err(ToolError::PathOutsideWorkingDir(path.to_string()));
+            }
+            return Ok(canon);
+        }
+
+        if !joined.starts_with(&base) {
+            return Err(ToolError::PathOutsideWorkingDir(path.to_string()));
+        }
+
+        Ok(joined)
+    }
+}
+
+fn normalize_relative(p: &Path) -> Result<PathBuf, ()> {
+    use std::path::Component;
+
+    let mut out = PathBuf::new();
+
+    for comp in p.components() {
+        match comp {
+            Component::CurDir => {}
+            Component::Normal(part) => out.push(part),
+            Component::ParentDir => {
+                if !out.pop() {
+                    return Err(());
+                }
+            }
+            // Reject anything that would imply an absolute/anchored path.
+            Component::RootDir | Component::Prefix(_) => return Err(()),
         }
     }
+
+    Ok(out)
 }
 
 pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
@@ -170,4 +217,37 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
             }),
         },
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_path_blocks_absolute_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = ToolContext {
+            working_dir: dir.path().to_path_buf(),
+        };
+
+        let err = ctx.resolve_path("/etc/passwd").unwrap_err();
+        match err {
+            ToolError::PathOutsideWorkingDir(_) => {}
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_path_blocks_parent_traversal() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = ToolContext {
+            working_dir: dir.path().to_path_buf(),
+        };
+
+        let err = ctx.resolve_path("../escape.txt").unwrap_err();
+        match err {
+            ToolError::PathOutsideWorkingDir(_) => {}
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
 }

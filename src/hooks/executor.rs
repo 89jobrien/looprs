@@ -132,18 +132,24 @@ impl HookExecutor {
             return Self::check_tool_available(tool);
         }
 
-        // If we don't recognize the condition, assume it passes (graceful degradation)
-        Ok(true)
+        // Unknown condition -> fail closed.
+        eprintln!("Warning: Unknown hook condition '{condition}'; skipping hook for safety");
+        Ok(false)
     }
 
     /// Check if a tool is available in PATH
     fn check_tool_available(tool: &str) -> anyhow::Result<bool> {
-        let output = Command::new("sh")
+        match Command::new("sh")
             .arg("-c")
             .arg(format!("which {tool} 2>/dev/null"))
-            .output()?;
-
-        Ok(output.status.success())
+            .output()
+        {
+            Ok(output) => Ok(output.status.success()),
+            Err(e) => {
+                eprintln!("Warning: Could not check tool availability for '{tool}': {e}");
+                Ok(false)
+            }
+        }
     }
 }
 
@@ -181,6 +187,12 @@ mod tests {
     }
 
     #[test]
+    fn test_condition_unknown_fails_closed() {
+        let context = EventContext::new();
+        assert!(!HookExecutor::eval_condition("unknown_condition:foo", &context).unwrap());
+    }
+
+    #[test]
     fn test_check_tool_available() {
         let has_echo = HookExecutor::check_tool_available("echo").unwrap();
         assert!(has_echo);
@@ -191,6 +203,42 @@ mod tests {
         let has_nonexistent =
             HookExecutor::check_tool_available("totally_nonexistent_tool_xyz").unwrap_or(false);
         assert!(!has_nonexistent);
+    }
+
+    #[test]
+    fn test_hook_with_unknown_condition_is_skipped() {
+        let yaml = r#"name: test_unknown_condition
+trigger: SessionStart
+condition: unknown_condition:foo
+actions:
+  - type: command
+    command: echo should_not_run
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new();
+
+        let results = HookExecutor::execute_hook(&hook, &context).unwrap();
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_conditional_action_with_unknown_condition_is_skipped() {
+        let yaml = r#"name: test_unknown_action_condition
+trigger: SessionStart
+actions:
+  - type: conditional
+    condition: unknown_condition:foo
+    then:
+      - type: command
+        command: echo should_not_run
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new();
+
+        let results = HookExecutor::execute_hook(&hook, &context).unwrap();
+        assert_eq!(results.len(), 0);
     }
 
     #[test]

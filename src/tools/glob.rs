@@ -1,5 +1,5 @@
-use super::ToolContext;
 use super::error::ToolError;
+use super::ToolContext;
 use serde_json::Value;
 use std::fs;
 
@@ -9,11 +9,21 @@ pub(super) fn tool_glob(args: &Value, ctx: &ToolContext) -> Result<String, ToolE
         .ok_or(ToolError::MissingParameter("pat"))?;
     let path_prefix = args["path"].as_str().unwrap_or(".");
 
-    let base = ctx.resolve_path(path_prefix);
+    // Prevent escaping the base directory via the pattern itself.
+    let pat_path = std::path::Path::new(pattern);
+    if pat_path.is_absolute()
+        || pat_path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Err(ToolError::PathOutsideWorkingDir(pattern.to_string()));
+    }
+
+    let base = ctx.resolve_path(path_prefix)?;
     let full_pattern = base.join(pattern);
     let pattern_str = full_pattern
         .to_str()
-        .ok_or(ToolError::MissingParameter("Invalid path"))?;
+        .ok_or_else(|| ToolError::InvalidPath(pattern.to_string()))?;
 
     let mut paths: Vec<_> = glob::glob(pattern_str)?.filter_map(Result::ok).collect();
 

@@ -25,4 +25,10 @@ pub enum ToolError {
 
     #[error("Glob pattern error: {0}")]
     GlobPattern(#[from] glob::PatternError),
+
+    #[error("Path escapes working directory: {0}")]
+    PathOutsideWorkingDir(String),
+
+    #[error("Invalid path: {0}")]
+    InvalidPath(String),
 }

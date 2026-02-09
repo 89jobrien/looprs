@@ -1,5 +1,5 @@
-use super::ToolContext;
 use super::error::ToolError;
+use super::ToolContext;
 use serde_json::Value;
 use std::fs;
 
@@ -10,7 +10,7 @@ pub(super) fn tool_read(args: &Value, ctx: &ToolContext) -> Result<String, ToolE
     let offset = args["offset"].as_u64().unwrap_or(0) as usize;
     let limit = args["limit"].as_u64();
 
-    let full_path = ctx.resolve_path(path);
+    let full_path = ctx.resolve_path(path)?;
     let content =
         fs::read_to_string(&full_path).map_err(|_| ToolError::FileNotFound(path.to_string()))?;
 
@@ -53,5 +53,20 @@ mod tests {
 
         let out = tool_read(&args, &ctx).unwrap();
         assert!(out.contains("2| b"));
+    }
+
+    #[test]
+    fn read_blocks_path_traversal() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = ToolContext {
+            working_dir: dir.path().to_path_buf(),
+        };
+        let args = json!({"path": "../escape.txt"});
+
+        let err = tool_read(&args, &ctx).unwrap_err();
+        match err {
+            ToolError::PathOutsideWorkingDir(_) => {}
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 }
