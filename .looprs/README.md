@@ -13,7 +13,8 @@ Repo-level configuration for looprs. These files are loaded in addition to user-
 │   └── lint.yaml
 ├── hooks/                    # Repo hooks (YAML)
 │   ├── SessionStart.yaml
-│   └── demo_approval.yaml
+│   ├── demo_approval.yaml
+│   └── demo_onboarding.yaml
 ├── skills/                   # Example skills (see skills/README.md)
 │   └── examples/
 ├── config.json               # Repo config (loaded by looprs)
