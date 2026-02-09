@@ -152,4 +152,15 @@ mod tests {
         assert!(saved.contains("\"version\": \"1.0.0\""));
         assert!(saved.contains("\"demo_seen\": true"));
     }
+
+    #[test]
+    fn set_onboarding_demo_seen_creates_parent_dir() {
+        let tmp = TempDir::new().unwrap();
+        let config_path = tmp.path().join("nested/.looprs/config.json");
+
+        AppConfig::set_onboarding_demo_seen_at(&config_path, true).unwrap();
+
+        let saved = fs::read_to_string(&config_path).unwrap();
+        assert!(saved.contains("\"demo_seen\": true"));
+    }
 }
