@@ -31,9 +31,12 @@ impl AppConfig {
     }
 
     pub fn set_onboarding_demo_seen(value: bool) -> anyhow::Result<()> {
+        Self::set_onboarding_demo_seen_at(Path::new(".looprs/config.json"), value)
+    }
+
+    fn set_onboarding_demo_seen_at(path: &Path, value: bool) -> anyhow::Result<()> {
         use serde_json::{json, Value};
 
-        let path = Path::new(".looprs/config.json");
         let mut root: Value = if path.exists() {
             serde_json::from_str(&fs::read_to_string(path)?)?
         } else {
@@ -122,26 +125,7 @@ impl Default for OnboardingConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
     use tempfile::TempDir;
-
-    struct DirGuard {
-        original: PathBuf,
-    }
-
-    impl DirGuard {
-        fn change_to(path: &std::path::Path) -> Self {
-            let original = std::env::current_dir().expect("read current dir");
-            std::env::set_current_dir(path).expect("set current dir");
-            Self { original }
-        }
-    }
-
-    impl Drop for DirGuard {
-        fn drop(&mut self) {
-            let _ = std::env::set_current_dir(&self.original);
-        }
-    }
 
     #[test]
     fn onboarding_demo_seen_defaults_false() {
@@ -152,17 +136,18 @@ mod tests {
     #[test]
     fn set_onboarding_demo_seen_preserves_unknown_fields() {
         let tmp = TempDir::new().unwrap();
-        let _guard = DirGuard::change_to(tmp.path());
-        fs::create_dir_all(".looprs").unwrap();
+        let config_dir = tmp.path().join(".looprs");
+        fs::create_dir_all(&config_dir).unwrap();
+        let config_path = config_dir.join("config.json");
         fs::write(
-            ".looprs/config.json",
+            &config_path,
             r#"{ "version": "1.0.0", "onboarding": {"demo_seen": false} }"#,
         )
         .unwrap();
 
-        AppConfig::set_onboarding_demo_seen(true).unwrap();
+        AppConfig::set_onboarding_demo_seen_at(&config_path, true).unwrap();
 
-        let saved = fs::read_to_string(".looprs/config.json").unwrap();
+        let saved = fs::read_to_string(&config_path).unwrap();
         assert!(saved.contains("\"version\": \"1.0.0\""));
         assert!(saved.contains("\"demo_seen\": true"));
     }
