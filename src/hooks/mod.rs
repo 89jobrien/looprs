@@ -45,8 +45,8 @@ pub enum Action {
 /// HookRegistry holds all loaded hooks keyed by event type
 pub struct HookRegistry {
     hooks_by_event: HashMap<String, Vec<Hook>>,
-    user_hooks: Vec<Hook>,  // Loaded from ~/.looprs/hooks/
-    repo_hooks: Vec<Hook>,  // Loaded from .looprs/hooks/ (cwd)
+    user_hooks: Vec<Hook>, // Loaded from ~/.looprs/hooks/
+    repo_hooks: Vec<Hook>, // Loaded from .looprs/hooks/ (cwd)
 }
 
 impl HookRegistry {
@@ -81,7 +81,11 @@ impl HookRegistry {
                             .push(hook);
                     }
                     Err(e) => {
-                        eprintln!("Warning: Failed to load hook {}: {}", path.display(), e);
+                        crate::ui::warn(format!(
+                            "Warning: Failed to load hook {}: {}",
+                            path.display(),
+                            e
+                        ));
                     }
                 }
             }
@@ -92,7 +96,10 @@ impl HookRegistry {
 
     /// Load hooks from both user and repo directories with precedence
     /// Repo hooks override user hooks for the same event name
-    pub fn load_dual_source(user_dir: Option<&PathBuf>, repo_dir: Option<&PathBuf>) -> anyhow::Result<Self> {
+    pub fn load_dual_source(
+        user_dir: Option<&PathBuf>,
+        repo_dir: Option<&PathBuf>,
+    ) -> anyhow::Result<Self> {
         let mut registry = HookRegistry::new();
 
         // Load user hooks first
@@ -117,7 +124,11 @@ impl HookRegistry {
             return Ok(());
         }
 
-        let target = if is_user { &mut self.user_hooks } else { &mut self.repo_hooks };
+        let target = if is_user {
+            &mut self.user_hooks
+        } else {
+            &mut self.repo_hooks
+        };
 
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
@@ -131,7 +142,11 @@ impl HookRegistry {
                         target.push(hook);
                     }
                     Err(e) => {
-                        eprintln!("Warning: Failed to load hook {}: {}", path.display(), e);
+                        crate::ui::warn(format!(
+                            "Warning: Failed to load hook {}: {}",
+                            path.display(),
+                            e
+                        ));
                     }
                 }
             }
@@ -155,7 +170,8 @@ impl HookRegistry {
 
         // Add repo hooks - if same (trigger, name), replace user hook
         for repo_hook in &self.repo_hooks {
-            let event_hooks = self.hooks_by_event
+            let event_hooks = self
+                .hooks_by_event
                 .entry(repo_hook.trigger.clone())
                 .or_default();
 
@@ -201,7 +217,11 @@ mod tests {
     use std::io::Write;
     use tempfile::TempDir;
 
-    fn create_test_hook_file(dir: &std::path::Path, filename: &str, content: &str) -> anyhow::Result<()> {
+    fn create_test_hook_file(
+        dir: &std::path::Path,
+        filename: &str,
+        content: &str,
+    ) -> anyhow::Result<()> {
         let path = dir.join(filename);
         let mut file = std::fs::File::create(path)?;
         file.write_all(content.as_bytes())?;
@@ -233,17 +253,22 @@ trigger: SessionStart
 actions:
   - type: message
     text: "From user""#,
-        ).unwrap();
+        )
+        .unwrap();
 
-        let registry = HookRegistry::load_dual_source(
-            Some(&user_dir.path().to_path_buf()),
-            None,
-        ).unwrap();
+        let registry =
+            HookRegistry::load_dual_source(Some(&user_dir.path().to_path_buf()), None).unwrap();
 
         assert_eq!(registry.user_hooks.len(), 1);
         assert_eq!(registry.repo_hooks.len(), 0);
-        assert_eq!(registry.hooks_by_event.get("SessionStart").unwrap().len(), 1);
-        assert_eq!(registry.hooks_by_event.get("SessionStart").unwrap()[0].name, "user_hook");
+        assert_eq!(
+            registry.hooks_by_event.get("SessionStart").unwrap().len(),
+            1
+        );
+        assert_eq!(
+            registry.hooks_by_event.get("SessionStart").unwrap()[0].name,
+            "user_hook"
+        );
     }
 
     #[test]
@@ -257,17 +282,22 @@ trigger: SessionStart
 actions:
   - type: message
     text: "From repo""#,
-        ).unwrap();
+        )
+        .unwrap();
 
-        let registry = HookRegistry::load_dual_source(
-            None,
-            Some(&repo_dir.path().to_path_buf()),
-        ).unwrap();
+        let registry =
+            HookRegistry::load_dual_source(None, Some(&repo_dir.path().to_path_buf())).unwrap();
 
         assert_eq!(registry.user_hooks.len(), 0);
         assert_eq!(registry.repo_hooks.len(), 1);
-        assert_eq!(registry.hooks_by_event.get("SessionStart").unwrap().len(), 1);
-        assert_eq!(registry.hooks_by_event.get("SessionStart").unwrap()[0].name, "repo_hook");
+        assert_eq!(
+            registry.hooks_by_event.get("SessionStart").unwrap().len(),
+            1
+        );
+        assert_eq!(
+            registry.hooks_by_event.get("SessionStart").unwrap()[0].name,
+            "repo_hook"
+        );
     }
 
     #[test]
@@ -284,7 +314,8 @@ trigger: SessionStart
 actions:
   - type: message
     text: "User greeting""#,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Repo hook with same name (should override)
         create_test_hook_file(
@@ -295,21 +326,23 @@ trigger: SessionStart
 actions:
   - type: message
     text: "Repo greeting""#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let registry = HookRegistry::load_dual_source(
             Some(&user_dir.path().to_path_buf()),
             Some(&repo_dir.path().to_path_buf()),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(registry.user_hooks.len(), 1);
         assert_eq!(registry.repo_hooks.len(), 1);
-        
+
         // Should only have 1 hook (repo overrode user)
         let hooks = registry.hooks_by_event.get("SessionStart").unwrap();
         assert_eq!(hooks.len(), 1);
         assert_eq!(hooks[0].name, "greeting");
-        
+
         // Verify it's the repo version by checking action text
         if let Action::Message { text } = &hooks[0].actions[0] {
             assert_eq!(text, "Repo greeting");
@@ -332,7 +365,8 @@ trigger: SessionStart
 actions:
   - type: message
     text: "User""#,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Repo hook with different name
         create_test_hook_file(
@@ -343,20 +377,22 @@ trigger: SessionStart
 actions:
   - type: message
     text: "Repo""#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let registry = HookRegistry::load_dual_source(
             Some(&user_dir.path().to_path_buf()),
             Some(&repo_dir.path().to_path_buf()),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(registry.user_hooks.len(), 1);
         assert_eq!(registry.repo_hooks.len(), 1);
-        
+
         // Should have both hooks
         let hooks = registry.hooks_by_event.get("SessionStart").unwrap();
         assert_eq!(hooks.len(), 2);
-        
+
         let names: Vec<&str> = hooks.iter().map(|h| h.name.as_str()).collect();
         assert!(names.contains(&"user_hook"));
         assert!(names.contains(&"repo_hook"));
@@ -376,7 +412,8 @@ trigger: SessionStart
 actions:
   - type: message
     text: "Start""#,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Repo hook for SessionEnd
         create_test_hook_file(
@@ -387,15 +424,20 @@ trigger: SessionEnd
 actions:
   - type: message
     text: "End""#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let registry = HookRegistry::load_dual_source(
             Some(&user_dir.path().to_path_buf()),
             Some(&repo_dir.path().to_path_buf()),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(registry.hooks_by_event.len(), 2);
-        assert_eq!(registry.hooks_by_event.get("SessionStart").unwrap().len(), 1);
+        assert_eq!(
+            registry.hooks_by_event.get("SessionStart").unwrap().len(),
+            1
+        );
         assert_eq!(registry.hooks_by_event.get("SessionEnd").unwrap().len(), 1);
     }
 }

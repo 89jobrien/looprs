@@ -15,14 +15,12 @@ pub fn resolve_file_references(text: &str, base_dir: &Path) -> Result<String> {
         // Resolve the reference
         match resolve_reference(&reference, base_dir) {
             Ok(content) => {
-                result.push_str(&format!(
-                    "\n```\n// File: {reference}\n{content}\n```\n"
-                ));
+                result.push_str(&format!("\n```\n// File: {reference}\n{content}\n```\n"));
             }
             Err(e) => {
                 // If file not found, keep the original reference and add error note
                 result.push_str(&format!("@{reference}"));
-                eprintln!("Warning: Could not resolve @{reference}: {e}");
+                crate::ui::warn(format!("Warning: Could not resolve @{reference}: {e}"));
             }
         }
 
@@ -233,7 +231,7 @@ mod tests {
     #[test]
     fn test_path_traversal_blocked() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Try to escape the working directory
         let result = resolve_reference("../../../etc/passwd", temp_dir.path());
         assert!(result.is_err());

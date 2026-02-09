@@ -84,13 +84,13 @@ impl ObservationManager {
                     // Saved successfully
                 }
                 Ok(output) => {
-                    eprintln!(
+                    crate::ui::warn(format!(
                         "Warning: Failed to save observation: {}",
                         String::from_utf8_lossy(&output.stderr)
-                    );
+                    ));
                 }
                 Err(e) => {
-                    eprintln!("Warning: Error saving observation to bd: {e}");
+                    crate::ui::warn(format!("Warning: Error saving observation to bd: {e}"));
                 }
             }
         }

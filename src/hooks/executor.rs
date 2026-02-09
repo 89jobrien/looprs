@@ -79,9 +79,9 @@ impl HookExecutor {
                     } else {
                         // No approval callback provided but approval required
                         // For safety, skip the action
-                        eprintln!(
+                        crate::ui::warn(format!(
                             "Warning: Action requires approval but no callback provided. Skipping: {command}"
-                        );
+                        ));
                         return Ok(None);
                     }
                 }
@@ -112,7 +112,7 @@ impl HookExecutor {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("Hook command failed: {stderr}");
+            crate::ui::warn(format!("Hook command failed: {stderr}"));
         }
 
         Ok(stdout.trim().to_string())
@@ -133,7 +133,9 @@ impl HookExecutor {
         }
 
         // Unknown condition -> fail closed.
-        eprintln!("Warning: Unknown hook condition '{condition}'; skipping hook for safety");
+        crate::ui::warn(format!(
+            "Warning: Unknown hook condition '{condition}'; skipping hook for safety"
+        ));
         Ok(false)
     }
 
@@ -146,7 +148,9 @@ impl HookExecutor {
         {
             Ok(output) => Ok(output.status.success()),
             Err(e) => {
-                eprintln!("Warning: Could not check tool availability for '{tool}': {e}");
+                crate::ui::warn(format!(
+                    "Warning: Could not check tool availability for '{tool}': {e}"
+                ));
                 Ok(false)
             }
         }

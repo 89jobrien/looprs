@@ -10,6 +10,7 @@ use looprs::{
     console_approval_prompt, Agent, ApprovalCallback, Command, CommandRegistry, Event,
     EventContext, HookRegistry, SessionContext,
 };
+use looprs::ui;
 
 mod args;
 mod cli;
@@ -18,11 +19,13 @@ use cli::{CliCommand, parse_input};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    ui::init_logging();
+
     // Parse command-line arguments
     let cli_args = match CliArgs::parse() {
         Ok(args) => args,
         Err(e) => {
-            eprintln!("Error: {e}");
+            ui::error(format!("Error: {e}"));
             print_usage();
             std::process::exit(1);
         }
@@ -112,19 +115,13 @@ async fn run_scriptable(
 ) -> Result<()> {
     // Get the prompt
     let Some(prompt) = cli_args.get_prompt()? else {
-        eprintln!("Error: No prompt provided");
+        ui::error("Error: No prompt provided");
         std::process::exit(1);
     };
 
     // Display header unless quiet mode
     if !cli_args.quiet {
-        println!(
-            "{} {} | {} | {}",
-            ">>".bold(),
-            "looprs".bold(),
-            format!("{provider_name}/{model}").cyan(),
-            env::current_dir()?.display().to_string().dimmed()
-        );
+        ui::header(provider_name, model, &env::current_dir()?.display().to_string());
     }
 
     // Add prompt and run single turn
@@ -136,9 +133,9 @@ async fn run_scriptable(
                 "success": false,
                 "error": e.to_string()
             });
-            println!("{}", serde_json::to_string_pretty(&error_json)?);
+            ui::info_full(serde_json::to_string_pretty(&error_json)?);
         } else {
-            eprintln!("\n{} {}", "✗".red().bold(), e.to_string().red());
+            ui::error(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));
         }
         std::process::exit(1);
     }
@@ -158,13 +155,7 @@ async fn run_interactive(
     // Collect session context (jj status, bd issues, etc.)
     let context = SessionContext::collect();
 
-    println!(
-        "{} {} | {} | {}",
-        ">>".bold(),
-        "looprs".bold(),
-        format!("{provider_name}/{model}").cyan(),
-        env::current_dir()?.display().to_string().dimmed()
-    );
+    ui::header(provider_name, model, &env::current_dir()?.display().to_string());
 
     // Fire SessionStart event (this will also execute hooks with approval gates)
     let session_context_str = context.format_for_prompt().unwrap_or_default();
@@ -180,33 +171,33 @@ async fn run_interactive(
     if !cli_args.quiet {
         if !context.is_empty() {
             if let Some(formatted) = context.format_for_prompt() {
-                println!("{}\n{}", "─".dimmed(), formatted.dimmed());
+                ui::info(format!("{}\n{}", "─".dimmed(), formatted.dimmed()));
             }
         }
 
         // Display hook-injected context if available
         if !enriched_ctx.metadata.is_empty() {
-            println!("\n{}", "Hook-injected context:".dimmed());
+            ui::section_title("Hook-injected context:");
             for (key, value) in &enriched_ctx.metadata {
                 let preview = if value.len() > 100 {
                     format!("{}...", &value[..100])
                 } else {
                     value.clone()
                 };
-                println!("  {} {}", key.cyan(), preview.dimmed());
+                ui::kv_preview(key, &preview);
             }
         }
 
         // Display recent observations if available
         if let Some(observations) = load_recent_observations(5) {
-            println!("\n{}", "Recent observations:".dimmed());
+            ui::section_title("Recent observations:");
             for (i, obs) in observations.iter().enumerate() {
-                println!("  {} {}", (i + 1).to_string().cyan(), obs.dimmed());
+                ui::info(format!("  {} {}", (i + 1).to_string().cyan(), obs.dimmed()));
             }
         }
     }
 
-    println!("{}", "Commands: /q (quit), /c (clear history)".dimmed());
+    ui::info("Commands: /q (quit), /c (clear history)");
 
     loop {
         let readline = rl.readline(&format!("{} ", "❯".purple().bold()));
@@ -223,7 +214,7 @@ async fn run_interactive(
                     CliCommand::Quit => break,
                     CliCommand::Clear => {
                         agent.clear_history();
-                        println!("{}", "● Conversation cleared".dimmed());
+                        ui::info("● Conversation cleared");
                     }
                     CliCommand::CustomCommand(cmd_input) => {
                         // Parse command name and args
@@ -236,28 +227,28 @@ async fn run_interactive(
                         
                         if let Some(cmd) = command_registry.get(cmd_name) {
                             if let Err(e) = execute_command(cmd, &cmd_input, &mut agent).await {
-                                eprintln!("{} {}", "✗".red().bold(), e.to_string().red());
+                                ui::error(format!("{} {}", "✗".red().bold(), e.to_string().red()));
                             }
                         } else {
-                            println!("{} Unknown command: /{}", "✗".yellow(), cmd_name);
-                            println!("Try: /help to see available commands");
+                            ui::warn(format!("{} Unknown command: /{}", "✗".yellow(), cmd_name));
+                            ui::info("Try: /help to see available commands");
                         }
                     }
                     CliCommand::Message(msg) => {
                         agent.add_user_message(msg);
 
                         if let Err(e) = agent.run_turn().await {
-                            eprintln!("\n{} {}", "✗".red().bold(), e.to_string().red());
+                            ui::error(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));
                         }
                     }
                 }
             }
             Err(ReadlineError::Interrupted | ReadlineError::Eof) => {
-                println!("\n{}", "Goodbye!".dimmed());
+                ui::goodbye();
                 break;
             }
             Err(e) => {
-                eprintln!("Input error: {e:?}");
+                ui::error(format!("Input error: {e:?}"));
                 break;
             }
         }
@@ -270,20 +261,20 @@ async fn run_interactive(
 
     // Save observations to bd
     if let Err(e) = agent.observations.save_to_bd() {
-        eprintln!("Warning: Failed to save observations: {e}");
+        ui::warn(format!("Warning: Failed to save observations: {e}"));
     } else if agent.observations.count() > 0 {
-        println!(
+        ui::info(format!(
             "\n{} Saved {} observations to bd",
             "✓".green(),
             agent.observations.count()
-        );
+        ));
     }
 
     Ok(())
 }
 
 fn print_usage() {
-    eprintln!(
+    ui::error_full(
         r#"Usage: looprs [OPTIONS]
 
 OPTIONS:
@@ -318,7 +309,7 @@ async fn execute_command(cmd: &Command, _input: &str, agent: &mut Agent) -> Resu
             command,
             inject_output,
         } => {
-            println!("{} Running: {}", "●".dimmed(), command.dimmed());
+            ui::running_command(command);
             let output = ProcessCommand::new("sh")
                 .arg("-c")
                 .arg(command)
@@ -328,25 +319,24 @@ async fn execute_command(cmd: &Command, _input: &str, agent: &mut Agent) -> Resu
             let stderr = String::from_utf8_lossy(&output.stderr);
 
             if !output.status.success() {
-                eprintln!("{stderr}");
+                ui::error(stderr.as_ref());
                 anyhow::bail!("Command failed with status: {}", output.status);
             }
 
             if *inject_output && !stdout.is_empty() {
                 let trimmed = stdout.trim();
-                println!("\n{trimmed}");
-                println!("\n{}", "Output injected into context".dimmed());
+                ui::output_preview(trimmed);
+                ui::info("Output injected into context");
                 agent.add_user_message(format!("Command output:\n```\n{trimmed}\n```"));
             } else if !stdout.is_empty() {
                 let trimmed = stdout.trim();
-                println!("{trimmed}");
+                ui::output_preview(trimmed);
             }
         }
         CommandAction::Message { text } => {
-            println!("{text}");
+            ui::info(text);
         }
     }
 
     Ok(())
 }
-

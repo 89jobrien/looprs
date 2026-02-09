@@ -1,6 +1,4 @@
 use anyhow::Result;
-use colored::*;
-
 use crate::api::ContentBlock;
 use crate::api::Message;
 use crate::config::get_max_tokens_for_model;
@@ -11,6 +9,7 @@ use crate::observation_manager::ObservationManager;
 use crate::providers::InferenceRequest;
 use crate::providers::LLMProvider;
 use crate::tools::{ToolContext, execute_tool, get_tool_definitions};
+use crate::ui;
 
 pub struct Agent {
     provider: Box<dyn LLMProvider>,
@@ -46,7 +45,7 @@ impl Agent {
             match crate::file_refs::resolve_file_references(&text_str, &self.tool_ctx.working_dir) {
                 Ok(resolved_text) => resolved_text,
                 Err(e) => {
-                    eprintln!("Warning: Error resolving file references: {e}");
+                    ui::warn(format!("Warning: Error resolving file references: {e}"));
                     text_str // Use original text if resolution fails
                 }
             }
@@ -161,7 +160,7 @@ impl Agent {
             for block in response.content {
                 match block {
                     ContentBlock::Text { ref text } => {
-                        println!("\n{} {}", "●".blue().bold(), text.blue());
+                        ui::assistant_text(text);
                         assistant_blocks.push(block);
                     }
                     ContentBlock::ToolUse {
@@ -175,12 +174,7 @@ impl Agent {
                             .take(60)
                             .collect::<String>();
 
-                        println!(
-                            "\n{} {}({})",
-                            "⚙".yellow().bold(),
-                            name.yellow().bold(),
-                            preview.dimmed()
-                        );
+                        ui::tool_call(name, &preview);
 
                         assistant_blocks.push(block.clone());
                         tools_to_execute.push((id.clone(), name.clone(), input.clone()));
@@ -207,7 +201,7 @@ impl Agent {
 
                 let content = match result {
                     Ok(ref output) => {
-                        println!("  {} {}", "└─".green(), "OK".green());
+                        ui::tool_ok();
                         // Capture observation
                         self.observations
                             .capture(name.clone(), input.clone(), output.clone());
@@ -221,7 +215,7 @@ impl Agent {
                     }
                     Err(e) => {
                         let err_msg = format!("error: {e}");
-                        println!("  {} {}", "└─".red(), err_msg.red());
+                        ui::tool_err(&err_msg);
                         // Fire OnError event
                         let event_ctx = EventContext::new()
                             .with_tool_name(name.clone())
@@ -561,4 +555,3 @@ actions:
         }
     }
 }
-

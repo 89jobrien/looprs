@@ -14,7 +14,9 @@ pub mod kan;
 pub mod observation;
 pub mod observation_manager;
 pub mod providers;
+mod sanitize;
 mod tools;
+pub mod ui;
 
 pub use crate::agent::Agent;
 pub use crate::approval::console_approval_prompt;
