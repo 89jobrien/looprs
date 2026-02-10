@@ -17,6 +17,7 @@ pub mod observation;
 pub mod observation_manager;
 pub mod plugins;
 pub mod providers;
+pub mod pipeline;
 pub mod rules;
 mod sanitize;
 pub mod seed;

@@ -11,6 +11,7 @@ pub struct AppConfig {
     pub defaults: DefaultsConfig,
     pub file_references: FileReferencesConfig,
     pub onboarding: OnboardingConfig,
+    pub pipeline: PipelineConfig,
 }
 
 impl AppConfig {
@@ -82,6 +83,78 @@ pub struct OnboardingConfig {
     pub demo_seen: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PipelineConfig {
+    pub enabled: bool,
+    pub log_dir: String,
+    pub reward_threshold: f32,
+    pub require_tools: bool,
+    pub auto_revert: bool,
+    pub fail_fast: bool,
+    pub block_on_failure: bool,
+    pub checks: PipelineChecksConfig,
+    pub compaction: PipelineCompactionConfig,
+}
+
+impl Default for PipelineConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            log_dir: ".looprs/agent_logs/".to_string(),
+            reward_threshold: 0.0,
+            require_tools: false,
+            auto_revert: true,
+            fail_fast: false,
+            block_on_failure: false,
+            checks: PipelineChecksConfig::default(),
+            compaction: PipelineCompactionConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PipelineChecksConfig {
+    pub run_build: bool,
+    pub run_tests: bool,
+    pub run_lint: bool,
+    pub run_typecheck: bool,
+    pub run_bench: bool,
+}
+
+impl Default for PipelineChecksConfig {
+    fn default() -> Self {
+        Self {
+            run_build: false,
+            run_tests: false,
+            run_lint: false,
+            run_typecheck: false,
+            run_bench: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PipelineCompactionConfig {
+    pub include_diff: bool,
+    pub include_recent: bool,
+    pub include_globs: Vec<String>,
+    pub top_k: usize,
+}
+
+impl Default for PipelineCompactionConfig {
+    fn default() -> Self {
+        Self {
+            include_diff: true,
+            include_recent: true,
+            include_globs: Vec::new(),
+            top_k: 8,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,5 +190,14 @@ mod tests {
             cfg.onboarding.demo_seen,
             "state file should override config"
         );
+    }
+
+    #[test]
+    fn test_pipeline_config_defaults_roundtrip() {
+        let config = AppConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        let decoded: AppConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.pipeline.enabled, false);
+        assert_eq!(decoded.pipeline.log_dir, ".looprs/agent_logs/");
     }
 }
