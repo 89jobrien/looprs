@@ -66,14 +66,7 @@ impl ObservationManager {
             let title = obs.to_bd_title();
             let description = obs.to_bd_description();
 
-            let args: Vec<OsString> = vec![
-                "create".into(),
-                title.into(),
-                "--description".into(),
-                description.into(),
-                "--tags".into(),
-                "observation,automated".into(),
-            ];
+            let args = Self::bd_create_args(&title, &description);
             let output = Bd::system().output(args);
 
             // Log but don't fail if individual observation save fails
@@ -94,6 +87,17 @@ impl ObservationManager {
         }
 
         Ok(())
+    }
+
+    fn bd_create_args(title: &str, description: &str) -> Vec<OsString> {
+        vec![
+            "create".into(),
+            title.into(),
+            "--description".into(),
+            description.into(),
+            "--labels".into(),
+            "observation,automated".into(),
+        ]
     }
 
     /// Clear all observations (usually called after saving to bd)
@@ -202,5 +206,17 @@ mod tests {
 
         mgr.clear();
         assert_eq!(mgr.count(), 0);
+    }
+
+    #[test]
+    fn test_bd_create_args_uses_labels_not_tags() {
+        let args = ObservationManager::bd_create_args("title", "desc");
+
+        let args_strs: Vec<String> = args
+            .iter()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+        assert!(args_strs.contains(&"--labels".to_string()));
+        assert!(!args_strs.contains(&"--tags".to_string()));
     }
 }

@@ -9,6 +9,7 @@ pub struct CliArgs {
     pub quiet: bool,            // -q/--quiet
     pub no_hooks: bool,         // --no-hooks
     pub json_output: bool,      // --json
+    pub machine_log: bool,      // --machine-log
 }
 
 impl CliArgs {
@@ -28,6 +29,7 @@ impl CliArgs {
             quiet: false,
             no_hooks: false,
             json_output: false,
+            machine_log: false,
         };
 
         let mut i = 0;
@@ -64,6 +66,9 @@ impl CliArgs {
                 }
                 "--json" => {
                     result.json_output = true;
+                }
+                "--machine-log" => {
+                    result.machine_log = true;
                 }
                 unknown => {
                     return Err(anyhow!("Unknown argument: {unknown}"));
@@ -112,6 +117,7 @@ mod tests {
         assert!(!parsed.quiet);
         assert!(!parsed.no_hooks);
         assert!(!parsed.json_output);
+        assert!(!parsed.machine_log);
     }
 
     #[test]
@@ -173,6 +179,14 @@ mod tests {
     fn parse_json() {
         let parsed = CliArgs::parse_from(&args(&["--json"])).unwrap();
         assert!(parsed.json_output);
+        assert!(!parsed.machine_log);
+    }
+
+    #[test]
+    fn parse_machine_log() {
+        let parsed = CliArgs::parse_from(&args(&["--machine-log"])).unwrap();
+        assert!(parsed.machine_log);
+        assert!(!parsed.json_output);
     }
 
     #[test]
@@ -184,6 +198,7 @@ mod tests {
             "gpt-5.2-codex",
             "-q",
             "--json",
+            "--machine-log",
         ]))
         .unwrap();
 
@@ -191,6 +206,7 @@ mod tests {
         assert_eq!(parsed.model, Some("gpt-5.2-codex".to_string()));
         assert!(parsed.quiet);
         assert!(parsed.json_output);
+        assert!(parsed.machine_log);
         assert!(!parsed.no_hooks);
     }
 
@@ -204,6 +220,7 @@ mod tests {
             "-q",
             "--no-hooks",
             "--json",
+            "--machine-log",
         ]))
         .unwrap();
 
@@ -212,6 +229,7 @@ mod tests {
         assert!(parsed.quiet);
         assert!(parsed.no_hooks);
         assert!(parsed.json_output);
+        assert!(parsed.machine_log);
     }
 
     #[test]

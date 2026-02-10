@@ -1,76 +1,66 @@
 {
-  "version": "1.0.0",
-  "project": "looprs",
-  "description": "Extensibility configuration for looprs agent",
-  
-  "extensions": {
-    "commands_enabled": true,
-    "skills_enabled": true,
-    "agents_enabled": true,
-    "rules_enabled": true,
-    "hooks_enabled": true
+  "agents": {
+    "context_sharing": true,
+    "max_parallel": 3,
+    "orchestration": "sequential"
   },
-  
+  "commands": {
+    "case_sensitive": false,
+    "max_depth": 3,
+    "prefix": "/",
+    "separator": "::"
+  },
   "defaults": {
     "agent": "base-agent",
     "max_context_tokens": 8192,
     "temperature": 0.7,
     "timeout_seconds": 120
   },
-  
+  "description": "Extensibility configuration for looprs agent",
+  "extensions": {
+    "agents_enabled": true,
+    "commands_enabled": true,
+    "hooks_enabled": true,
+    "rules_enabled": true,
+    "skills_enabled": true
+  },
   "file_references": {
-    "prefix": "@",
+    "allowed_extensions": ["rs", "py", "ts", "js", "go", "java", "md", "txt", "json", "yaml", "toml"],
     "max_size_mb": 10,
-    "allowed_extensions": [
-      "rs", "py", "ts", "js", "go", "java",
-      "md", "txt", "json", "yaml", "toml"
-    ]
+    "prefix": "@"
   },
-  
-  "commands": {
-    "prefix": "/",
-    "case_sensitive": false,
-    "separator": "::",
-    "max_depth": 3
-  },
-  
-  "skills": {
-    "prefix": "$",
-    "case_sensitive": false,
-    "progressive_disclosure": true,
-    "auto_load_prerequisites": true
-  },
-  
-  "agents": {
-    "orchestration": "sequential",
-    "max_parallel": 3,
-    "context_sharing": true
-  },
-  
-  "rules": {
-    "enforce_on": ["code-review", "refactoring"],
-    "warn_on": ["testing", "performance"],
-    "strict_mode": false
-  },
-  
   "hooks": {
+    "concurrent_hooks": false,
     "enabled": true,
-    "max_execution_time_ms": 5000,
-    "concurrent_hooks": false
+    "max_execution_time_ms": 5000
   },
-  
   "logging": {
     "level": "info",
     "log_commands": true,
     "log_errors": true,
     "log_performance": true
   },
-  
+  "onboarding": {
+    "demo_seen": true
+  },
   "paths": {
-    "commands": ".looprs/commands",
-    "skills": ".looprs/skills",
     "agents": ".looprs/agents",
+    "commands": ".looprs/commands",
+    "hooks": ".looprs/hooks",
     "rules": ".looprs/rules",
-    "hooks": ".looprs/hooks"
-  }
+    "skills": ".looprs/skills"
+  },
+  "project": "looprs",
+  "rules": {
+    "enforce_on": ["code-review", "refactoring"],
+    "strict_mode": false,
+    "warn_on": ["testing", "performance"]
+  },
+  "skills": {
+    "auto_load_prerequisites": true,
+    "case_sensitive": false,
+    "prefix": "$",
+    "progressive_disclosure": true
+  },
+  "version": "1.0.0"
 }

@@ -27,9 +27,6 @@ use repl::{MatchSets, ReplHelper, bind_repl_keys};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    ui::init_logging();
-
-    // Subcommand: seed [DIR] — write example config files (default: .looprs)
     let args: Vec<String> = env::args().collect();
     if matches!(args.get(1).map(String::as_str), Some("seed")) {
         let dir_str = args.get(2).map(String::as_str).unwrap_or(".looprs");
@@ -57,6 +54,16 @@ async fn main() -> Result<()> {
             std::process::exit(1);
         }
     };
+
+    // Enable machine-readable logging if requested
+    if cli_args.machine_log {
+        // SAFETY: process-wide environment mutation for logging mode toggle.
+        unsafe {
+            std::env::set_var("LOOPRS_MACHINE_LOG", "1");
+        }
+    }
+
+    ui::init_logging();
 
     let app_config = AppConfig::load().unwrap_or_default();
 
