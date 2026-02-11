@@ -96,8 +96,8 @@ Typical release workflow:
 # 1. Make sure your changes are committed
 git status
 
-# 2. Preview the version bump
-make version-patch --dry-run  # or use: bash scripts/bump-version.sh patch --dry-run
+# 2. Preview the version bump (dry-run)
+bash scripts/bump-version.sh patch --dry-run
 
 # 3. Apply the version bump
 make version-patch
