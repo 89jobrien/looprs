@@ -1,7 +1,8 @@
-.PHONY: help build test check fmt lint clean install run watch setup
+.PHONY: help build test check fmt lint clean install run watch setup version-patch version-minor version-major
 
 CARGO := cargo
 RUST_VERSION := 1.88
+VERSION_SCRIPT := ./scripts/bump-version.sh
 
 help:
 	@echo "looprs - Rust Coding Assistant REPL"
@@ -19,6 +20,11 @@ help:
 	@echo "  make run         Run the REPL (requires API key)"
 	@echo "  make watch       Watch for changes and run tests (requires bacon)"
 	@echo "  make all         Run check, fmt-check, lint, and test"
+	@echo ""
+	@echo "Release commands:"
+	@echo "  make version-patch   Bump patch version (0.1.11 -> 0.1.12)"
+	@echo "  make version-minor   Bump minor version (0.1.11 -> 0.2.0)"
+	@echo "  make version-major   Bump major version (0.1.11 -> 1.0.0)"
 	@echo ""
 	@echo "Setup commands:"
 	@echo "  make setup       Install dev dependencies (bacon)"
@@ -75,3 +81,13 @@ verify-rust:
 
 ci: verify-rust check fmt-check lint test-all
 	@echo "✓ CI checks passed!"
+
+# Version management commands
+version-patch:
+	@bash $(VERSION_SCRIPT) patch
+
+version-minor:
+	@bash $(VERSION_SCRIPT) minor
+
+version-major:
+	@bash $(VERSION_SCRIPT) major
