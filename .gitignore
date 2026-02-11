@@ -9,3 +9,5 @@ thoughts/
 .beads/
 .github/
 .bacon-locations
+/.cursor/skills
+.DS_Store
