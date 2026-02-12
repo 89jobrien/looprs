@@ -418,7 +418,7 @@ actions:
     approval_prompt: "Push changes to remote repository?"
 ```
 
-User will see: `🔒 Approval required: Push changes to remote repository? [y/N]`
+User will see: `Approval required: Push changes to remote repository? [y/N]`
 
 **Conditions:**
 - `on_branch:main` - Only execute if on specified branch (currently accepts "main" or "*")
@@ -485,7 +485,7 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 
 ## Roadmap
 
-### Done ✅
+### Done
 - [x] Multi-provider LLM support (Anthropic, OpenAI, Local)
 - [x] Fast search: grep + ripgrep, glob + fd
 - [x] Provider configuration (env vars + config file)
@@ -503,7 +503,7 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 - [x] **File reference resolver** - `@filename` syntax automatically injects file contents
 
 ### Phase 3: Extensibility Parsers (In Progress)
-- [x] **Skill loader** - Load skills following Anthropic Agent Skills standard ✅
+- [x] **Skill loader** - Load skills following Anthropic Agent Skills standard
   - YAML frontmatter with name, description, triggers
   - `$skill-name` syntax for explicit invocation
   - Auto-triggering via keyword matching
