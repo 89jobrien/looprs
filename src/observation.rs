@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::types::ToolId;
+
 /// A captured observation from tool usage in a session
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Observation {
@@ -11,6 +13,7 @@ pub struct Observation {
     pub input: Value,
     /// Output from the tool (as string)
     pub output: String,
+    pub tool_use_id: Option<ToolId>,
     /// When this observation was captured (unix timestamp)
     pub timestamp: u64,
     /// Session ID this observation belongs to
@@ -21,7 +24,13 @@ pub struct Observation {
 
 impl Observation {
     /// Create a new observation
-    pub fn new(tool_name: String, input: Value, output: String, session_id: String) -> Self {
+    pub fn new(
+        tool_name: String,
+        input: Value,
+        output: String,
+        tool_use_id: Option<ToolId>,
+        session_id: String,
+    ) -> Self {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -31,6 +40,7 @@ impl Observation {
             tool_name,
             input,
             output,
+            tool_use_id,
             timestamp,
             session_id,
             context: None,
@@ -61,8 +71,12 @@ impl Observation {
         };
 
         format!(
-            "**Tool:** {}\n**Time:** {}\n\n**Input:**\n```\n{}\n```\n\n**Output:**\n```\n{}\n```{}",
+            "**Tool:** {}\n{}**Time:** {}\n\n**Input:**\n```\n{}\n```\n\n**Output:**\n```\n{}\n```{}",
             self.tool_name,
+            self.tool_use_id
+                .as_ref()
+                .map(|id| format!("**Tool Use ID:** {id}\n"))
+                .unwrap_or_default(),
             time_str,
             input_str,
             output_preview,
@@ -94,10 +108,15 @@ mod tests {
             "bash".to_string(),
             serde_json::json!({"command": "cargo test"}),
             "test result: ok".to_string(),
+            Some(ToolId::new("tool_123")),
             "sess-123".to_string(),
         );
 
         assert_eq!(obs.tool_name, "bash");
+        assert_eq!(
+            obs.tool_use_id.map(|v| v.as_str().to_string()),
+            Some("tool_123".to_string())
+        );
         assert_eq!(obs.session_id, "sess-123");
         assert!(obs.context.is_none());
     }
@@ -108,6 +127,7 @@ mod tests {
             "bash".to_string(),
             serde_json::json!({"command": "cargo test"}),
             "test result: ok".to_string(),
+            None,
             "sess-123".to_string(),
         )
         .with_context("Testing changes to agent.rs".to_string());
@@ -121,6 +141,7 @@ mod tests {
             "bash".to_string(),
             serde_json::json!({}),
             "output".to_string(),
+            None,
             "sess-123".to_string(),
         )
         .with_context("Fixed parser edge case".to_string());
@@ -136,12 +157,14 @@ mod tests {
             "bash".to_string(),
             serde_json::json!({"command": "test"}),
             "success".to_string(),
+            Some(ToolId::new("tool_7")),
             "sess-123".to_string(),
         )
         .with_context("Test execution".to_string());
 
         let desc = obs.to_bd_description();
         assert!(desc.contains("bash"));
+        assert!(desc.contains("tool_7"));
         assert!(desc.contains("success"));
         assert!(desc.contains("Test execution"));
     }

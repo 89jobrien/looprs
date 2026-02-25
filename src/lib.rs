@@ -25,6 +25,7 @@ pub mod seed;
 pub mod skills;
 pub mod state;
 mod tools;
+pub mod trace;
 pub mod types;
 pub mod ui;
 

@@ -5,6 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::observation::Observation;
 use crate::plugins::{NamedTool, binaries::Bd};
+use crate::types::ToolId;
 
 /// Manages observation capture and storage across a session
 pub struct ObservationManager {
@@ -34,8 +35,20 @@ impl ObservationManager {
     }
 
     /// Capture a tool execution as an observation
-    pub fn capture(&mut self, tool_name: String, input: Value, output: String) {
-        let obs = Observation::new(tool_name, input, output, self.session_id.clone());
+    pub fn capture(
+        &mut self,
+        tool_name: String,
+        input: Value,
+        output: String,
+        tool_use_id: Option<ToolId>,
+    ) {
+        let obs = Observation::new(
+            tool_name,
+            input,
+            output,
+            tool_use_id,
+            self.session_id.clone(),
+        );
         self.observations.push(obs);
     }
 
@@ -175,10 +188,18 @@ mod tests {
             "bash".to_string(),
             serde_json::json!({"command": "test"}),
             "output".to_string(),
+            Some(ToolId::new("tool_1")),
         );
 
         assert_eq!(mgr.count(), 1);
         assert_eq!(mgr.observations()[0].tool_name, "bash");
+        assert_eq!(
+            mgr.observations()[0]
+                .tool_use_id
+                .as_ref()
+                .map(|id| id.as_str()),
+            Some("tool_1")
+        );
     }
 
     #[test]
@@ -188,11 +209,13 @@ mod tests {
             "bash".to_string(),
             serde_json::json!({}),
             "out1".to_string(),
+            None,
         );
         mgr.capture(
             "grep".to_string(),
             serde_json::json!({}),
             "out2".to_string(),
+            Some(ToolId::new("tool_2")),
         );
 
         assert_eq!(mgr.count(), 2);
@@ -201,7 +224,12 @@ mod tests {
     #[test]
     fn test_observation_manager_clear() {
         let mut mgr = ObservationManager::new();
-        mgr.capture("bash".to_string(), serde_json::json!({}), "out".to_string());
+        mgr.capture(
+            "bash".to_string(),
+            serde_json::json!({}),
+            "out".to_string(),
+            None,
+        );
         assert_eq!(mgr.count(), 1);
 
         mgr.clear();

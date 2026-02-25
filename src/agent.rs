@@ -260,6 +260,13 @@ impl Agent {
                 self.provider.infer(&req).await?
             };
 
+            #[cfg(not(test))]
+            if let Err(e) =
+                crate::trace::append_turn_trace(self.observations.session_id(), &req, &response)
+            {
+                ui::warn(format!("Warning: Failed to append turn trace: {e}"));
+            }
+
             // Fire InferenceComplete event
             let event_ctx = EventContext::new();
             self.events.fire(Event::InferenceComplete, &event_ctx);
@@ -316,6 +323,7 @@ impl Agent {
                             name.as_str().to_string(),
                             input.clone(),
                             output.clone(),
+                            Some(id.clone()),
                         );
                         // Fire PostToolUse event on success
                         let event_ctx = EventContext::new()
