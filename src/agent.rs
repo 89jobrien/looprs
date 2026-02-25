@@ -109,6 +109,24 @@ impl Agent {
         self.messages.clear();
     }
 
+    pub fn latest_assistant_text(&self) -> Option<String> {
+        self.messages
+            .iter()
+            .rev()
+            .find(|m| m.role == "assistant")
+            .map(|m| {
+                m.content
+                    .iter()
+                    .filter_map(|block| match block {
+                        ContentBlock::Text { text } => Some(text.as_str()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n\n")
+            })
+            .filter(|text| !text.is_empty())
+    }
+
     pub fn working_dir(&self) -> &std::path::Path {
         &self.tool_ctx.working_dir
     }
@@ -477,6 +495,42 @@ mod tests {
 
         agent.clear_history();
         assert_eq!(agent.messages.len(), 0);
+    }
+
+    #[test]
+    fn test_latest_assistant_text_none_when_no_assistant() {
+        let provider = MockProvider::simple_text("test");
+        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        agent.add_user_message("Hello");
+        assert_eq!(agent.latest_assistant_text(), None);
+    }
+
+    #[tokio::test]
+    async fn test_latest_assistant_text_returns_last_text_blocks() {
+        let provider = MockProvider::new(vec![InferenceResponse {
+            content: vec![
+                ContentBlock::Text {
+                    text: "First".to_string(),
+                },
+                ContentBlock::Text {
+                    text: "Second".to_string(),
+                },
+            ],
+            stop_reason: "end_turn".to_string(),
+            usage: Usage {
+                input_tokens: 2,
+                output_tokens: 3,
+            },
+        }]);
+        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        agent.add_user_message("Hello");
+
+        agent.run_turn().await.unwrap();
+
+        assert_eq!(
+            agent.latest_assistant_text(),
+            Some("First\n\nSecond".to_string())
+        );
     }
 
     #[test]
