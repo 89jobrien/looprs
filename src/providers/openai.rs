@@ -39,8 +39,7 @@ impl OpenAIProvider {
 
     /// Check if a model supports temperature parameter
     fn supports_temperature(model: &str) -> bool {
-        // Reasoning models don't support temperature
-        !Self::is_reasoning_model(model)
+        !Self::is_reasoning_model(model) && !model.starts_with("gpt-5")
     }
 
     fn convert_to_openai_messages(msg: &crate::api::Message) -> Vec<Value> {
@@ -292,7 +291,8 @@ mod tests {
 
         // Other models support temperature
         assert!(OpenAIProvider::supports_temperature("gpt-4"));
-        assert!(OpenAIProvider::supports_temperature("gpt-5"));
+        assert!(!OpenAIProvider::supports_temperature("gpt-5"));
+        assert!(!OpenAIProvider::supports_temperature("gpt-5-mini"));
         assert!(OpenAIProvider::supports_temperature("gpt-4o"));
     }
 }
