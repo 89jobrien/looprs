@@ -11,3 +11,5 @@ thoughts/
 .bacon-locations
 /.cursor/skills
 .DS_Store
+*.md
+!README.md
