@@ -3,8 +3,10 @@ use std::env;
 use std::time::Duration;
 
 pub mod anthropic;
+pub mod anthropic_sdk;
 pub mod local;
 pub mod openai;
+pub mod openai_sdk;
 
 use crate::api::{ContentBlock, Message, ToolDefinition};
 use crate::errors::ProviderError;
@@ -188,6 +190,21 @@ async fn create_provider_by_name(
                 key, model,
             )?))
         }
+        "anthropic-sdk" | "claude-sdk" => {
+            let key = env::var("ANTHROPIC_API_KEY")
+                .map_err(|_| ProviderError::MissingApiKey("anthropic".to_string()))?;
+            let cfg_model = config_file
+                .as_ref()
+                .and_then(|c| c.merged_settings("anthropic").model)
+                .map(ModelId::new);
+            let model = overrides
+                .model
+                .or(env::var("MODEL").ok().map(ModelId::new))
+                .or(cfg_model);
+            Ok(Box::new(anthropic_sdk::AnthropicSdkProvider::new_with_model(
+                key, model,
+            )?))
+        }
         "openai" => {
             let key = env::var("OPENAI_API_KEY")
                 .map_err(|_| ProviderError::MissingApiKey("openai".to_string()))?;
@@ -200,6 +217,21 @@ async fn create_provider_by_name(
                 .or(env::var("MODEL").ok().map(ModelId::new))
                 .or(cfg_model);
             Ok(Box::new(openai::OpenAIProvider::new_with_model(
+                key, model,
+            )?))
+        }
+        "openai-sdk" => {
+            let key = env::var("OPENAI_API_KEY")
+                .map_err(|_| ProviderError::MissingApiKey("openai".to_string()))?;
+            let cfg_model = config_file
+                .as_ref()
+                .and_then(|c| c.merged_settings("openai").model)
+                .map(ModelId::new);
+            let model = overrides
+                .model
+                .or(env::var("MODEL").ok().map(ModelId::new))
+                .or(cfg_model);
+            Ok(Box::new(openai_sdk::OpenAISdkProvider::new_with_model(
                 key, model,
             )?))
         }

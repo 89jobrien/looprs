@@ -75,8 +75,8 @@ impl ProviderConfig {
     /// Get settings for a specific provider
     pub fn get_provider_settings(&self, provider_name: &str) -> Option<&ProviderSettings> {
         match provider_name {
-            "anthropic" => self.anthropic.as_ref(),
-            "openai" => self.openai.as_ref(),
+            "anthropic" | "anthropic-sdk" | "claude-sdk" => self.anthropic.as_ref(),
+            "openai" | "openai-sdk" => self.openai.as_ref(),
             "local" | "ollama" => self.local.as_ref(),
             _ => None,
         }
