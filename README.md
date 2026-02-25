@@ -513,6 +513,72 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 - [ ] **Agent dispatcher** - YAML-based role switching
 - [ ] **Rule evaluator** - Constraint checking from markdown rules
 
+### Phase 3.5: /crates Integration (Planned)
+- Goal: Integrate selected functionality from `/Users/joe/dev/crates` into looprs through
+  adapter boundaries that preserve current architecture.
+
+Scope (in):
+- `codex-cli-sdk-main` and `claude-cli-sdk-main` provider-facing capabilities that can map cleanly
+  to `LLMProvider` and `Agent` turn execution.
+- Selective `lsp-ai` utility reuse (for example splitter/tree-sitter utilities), not full LSP server
+  embedding.
+- Event normalization into existing looprs lifecycle (`SessionStart`, `UserPromptSubmit`,
+  `InferenceComplete`, `PreToolUse`, `PostToolUse`, `OnError`, `OnWarning`, `SessionEnd`).
+
+Scope (out):
+- No wholesale vendoring of `/Users/joe/dev/crates` repositories into looprs.
+- No replacement of looprs core orchestration in `src/agent.rs`.
+- No commitment to expose every upstream SDK feature in the first pass.
+
+Plan:
+- [ ] **Phase A - Inventory and contracts**
+  - Document concrete adapter contracts at provider, event, and tool boundaries.
+  - Map external streaming/approval semantics to looprs event hooks.
+- [ ] **Phase B - Provider adapters**
+  - Implement thin adapters that translate crate SDK request/response flows into looprs provider
+    interfaces.
+  - Keep provider selection and overrides behavior consistent with current `src/providers/mod.rs`.
+- [ ] **Phase C - Tool and plugin integration**
+  - Register only validated tool surfaces through the existing tool registry path in
+    `src/tools/mod.rs`.
+  - Wire optional external runtime checks through the plugin model in `src/plugins/mod.rs`.
+- [ ] **Phase D - Verification and rollout**
+  - Add integration tests for adapter behavior and event sequencing.
+  - Validate with `make test`, `make lint`, and `make build` before enabling by default.
+
+Risks and mitigations:
+- SDK lifecycle mismatch → normalize through explicit event translation adapters.
+- Dependency churn in external crates → isolate behind thin compatibility shims.
+- Scope creep → gate new surfaces behind explicit checklists and phased acceptance criteria.
+
+### Phase 3.6: Planning with Files Workflow (Planned)
+- Goal: Make file-based planning a first-class workflow in looprs so long sessions stay
+  recoverable, testable, and goal-aligned.
+
+Planned work:
+- [ ] **Plan bootstrap commands**
+  - Add repo command templates for `task_plan.md`, `findings.md`, and `progress.md` setup.
+  - Provide one command to initialize all planning files in project root.
+- [ ] **Goal recitation before execution**
+  - Inject compact plan state into prompt context before `UserPromptSubmit` and major tool turns.
+  - Keep this stable and append-only to reduce drift during long tool loops.
+- [ ] **Phase completion guardrails**
+  - Add a SessionEnd completion check that warns when phase status is still pending/in_progress.
+  - Surface a clear summary of incomplete phases instead of silent exit.
+- [ ] **Error ledger and anti-repeat behavior**
+  - Record failed attempts with resolution notes in progress artifacts.
+  - Warn on immediate repeat of the same failed action pattern.
+- [ ] **Session catch-up support**
+  - Add a recovery command that summarizes git diff + observations + open issues after context loss.
+  - Use this summary to refresh plan files quickly after `/clear` or restart.
+
+Acceptance criteria:
+- [ ] New session can initialize planning files in one command.
+- [ ] Prompts include compact current-phase context during long runs.
+- [ ] SessionEnd warns when plan phases are incomplete.
+- [ ] Progress artifacts capture errors + attempted resolutions for replay.
+- [ ] Recovery flow can rebuild state from repo + observation context.
+
 ### Phase 4: Advanced Features
 - [ ] Session persistence (conversation history)
 - [ ] Multi-turn context management
@@ -521,6 +587,65 @@ Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 - [ ] Performance profiling
 - [ ] Plugin system for custom tools
 - [ ] Hook output storage (debugging)
+
+### Phase 4.1: Validated Implementation Backlog (2026-02)
+
+This section captures the latest validated roadmap planning so implementation can proceed without
+re-scoping.
+
+Validated with:
+- Local codebase seam mapping across `src/*`, `.looprs/*`, and existing roadmap/docs
+- External implementation references from active OSS agent frameworks and CLIs
+- Context7-backed documentation review for persistence, streaming, structured outputs, evals,
+  tracing, guardrails, and multi-agent orchestration
+
+Priority order (recommended):
+1. **Onboarding hardening slice**
+   - Config/state ownership, hook action schema, executor callbacks, CLI wiring, docs
+   - Primary files:
+     - `src/app_config.rs`, `src/state.rs`
+     - `src/hooks/mod.rs`, `src/hooks/parser.rs`, `src/hooks/executor.rs`
+     - `src/approval.rs`, `src/agent.rs`, `src/bin/looprs/main.rs`
+     - `.looprs/hooks/demo_onboarding.yaml`
+2. **Reliability foundation**
+   - Session persistence/resume, trace + replay, hook-run auditability
+   - Primary files:
+     - `src/observation_manager.rs`, `src/observation.rs`, `src/context.rs`, `src/events.rs`
+3. **Capability expansion**
+   - Provider streaming, typed tool contracts, structured output enforcement, eval harness
+   - Primary files:
+     - `src/providers/*`, `src/tools/*`, `src/api.rs`, `src/commands.rs`
+4. **Safety and scale**
+   - Policy guardrails/approvals, plugin and tool registry hardening, multi-agent orchestration
+   - Primary files:
+     - `src/approval.rs`, `src/hooks/executor.rs`, `src/plugins/*`, `src/agents.rs`, `src/agent.rs`
+
+Execution constraints from planning:
+- Preserve core orchestration continuity in:
+  - `Agent::run_turn`
+  - `run_interactive`, `run_scriptable`, `execute_command`, `prepare_user_prompt`
+- Prefer additive integration via existing events/hooks over parallel lifecycle systems
+- Keep repo/user precedence behavior for `.looprs` resources intact
+
+Verification gates for each implementation step:
+- Run targeted tests for changed modules first
+- Then run:
+  - `make fmt`
+  - `make lint`
+  - `make test`
+  - `make build`
+
+Documentation references used for this validated backlog:
+- OpenAI function calling, structured outputs, streaming, eval guidance
+- LangGraph persistence/checkpoint patterns
+- OpenTelemetry tracing concepts
+- OPA policy decision patterns
+- Multi-agent design patterns from established OSS frameworks
+
+Detailed implementation plans already in-repo:
+- `docs/plans/2026-02-09-onboarding-demo-design.md`
+- `docs/plans/2026-02-09-onboarding-demo-implementation-plan.md`
+- `specs/config-ownership-and-seed-command.md`
 
 ## Dev
 
