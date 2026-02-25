@@ -5,6 +5,7 @@ use std::fs;
 use std::path::Path;
 
 use super::SkillRegistry;
+use super::discovery::find_skills_in_dir;
 
 impl SkillRegistry {
     /// Load skills from a directory (recursively finds SKILL.md files)
@@ -15,27 +16,15 @@ impl SkillRegistry {
 
         let mut count = 0;
 
-        // Walk directory recursively looking for SKILL.md files
-        for entry in walkdir::WalkDir::new(dir)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
-
-            // Look for SKILL.md files
-            if path.file_name().and_then(|n| n.to_str()) == Some("SKILL.md") {
-                // Try to parse and register
-                match self.load_skill_file(path) {
-                    Ok(_) => count += 1,
-                    Err(e) => {
-                        // Log error but continue loading other skills
-                        eprintln!(
-                            "Warning: Failed to load skill from {}: {}",
-                            path.display(),
-                            e
-                        );
-                    }
+        for discovered in find_skills_in_dir(dir, "internal", 3) {
+            match self.load_skill_file(&discovered.skill_file) {
+                Ok(_) => count += 1,
+                Err(e) => {
+                    eprintln!(
+                        "Warning: Failed to load skill from {}: {}",
+                        discovered.skill_file.display(),
+                        e
+                    );
                 }
             }
         }

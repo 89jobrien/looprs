@@ -1,6 +1,7 @@
 // Skills module - loads SKILL.md files with YAML frontmatter
 // Following Anthropic Agent Skills standard
 
+pub mod discovery;
 pub mod loader;
 pub mod parser;
 
