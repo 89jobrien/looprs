@@ -12,6 +12,8 @@ pub struct AppConfig {
     pub file_references: FileReferencesConfig,
     pub onboarding: OnboardingConfig,
     pub pipeline: PipelineConfig,
+    pub agents: AgentsConfig,
+    pub paths: PathsConfig,
 }
 
 impl AppConfig {
@@ -115,6 +117,28 @@ impl Default for PipelineConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+pub struct AgentsConfig {
+    pub context_sharing: bool,
+    pub max_parallel: usize,
+    pub orchestration: String,
+    pub delegate_by_default: bool,
+    pub default_agent: Option<String>,
+}
+
+impl Default for AgentsConfig {
+    fn default() -> Self {
+        Self {
+            context_sharing: true,
+            max_parallel: 3,
+            orchestration: "sequential".to_string(),
+            delegate_by_default: true,
+            default_agent: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PipelineChecksConfig {
     pub run_build: bool,
     pub run_tests: bool,
@@ -151,6 +175,28 @@ impl Default for PipelineCompactionConfig {
             include_recent: true,
             include_globs: Vec::new(),
             top_k: 8,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PathsConfig {
+    pub agents: String,
+    pub commands: String,
+    pub hooks: String,
+    pub rules: String,
+    pub skills: String,
+}
+
+impl Default for PathsConfig {
+    fn default() -> Self {
+        Self {
+            agents: ".looprs/agents".to_string(),
+            commands: ".looprs/commands".to_string(),
+            hooks: ".looprs/hooks".to_string(),
+            rules: ".looprs/rules".to_string(),
+            skills: ".looprs/skills".to_string(),
         }
     }
 }

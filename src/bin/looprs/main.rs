@@ -3,6 +3,7 @@ use colored::*;
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
+use std::collections::HashMap;
 use std::env;
 
 use looprs::ModelId;
@@ -12,9 +13,9 @@ use looprs::observation_manager::load_recent_observations;
 use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
 use looprs::ui;
 use looprs::{
-    Agent, ApprovalCallback, Command, CommandRegistry, Event, EventContext, HookRegistry,
-    PromptCallback, SessionContext, SkillRegistry, console_approval_prompt, console_prompt,
-    console_secret_prompt,
+    Agent, AgentRegistry, ApprovalCallback, Command, CommandRegistry, Event, EventContext,
+    HookRegistry, PromptCallback, SessionContext, SkillRegistry, console_approval_prompt,
+    console_prompt, console_secret_prompt,
 };
 use looprs::{ProviderConfig, ProviderSettings};
 
@@ -168,9 +169,36 @@ async fn main() -> Result<()> {
     }
     agent.rules = rules;
 
+    let user_agents_dir = env::home_dir()
+        .unwrap_or_default()
+        .join(".looprs")
+        .join("agents");
+
+    let repo_agents_dir = env::current_dir()
+        .ok()
+        .map(|d| d.join(&app_config.paths.agents));
+
+    let user_agents = if user_agents_dir.exists() {
+        Some(user_agents_dir)
+    } else {
+        None
+    };
+    let repo_agents = repo_agents_dir.filter(|d| d.exists());
+    let agent_registry =
+        AgentRegistry::load_dual_source(user_agents.as_ref(), repo_agents.as_ref())
+            .unwrap_or_else(|_| AgentRegistry::new());
+
     // Handle scriptable (non-interactive) mode
     if cli_args.is_scriptable() {
-        return run_scriptable(&cli_args, &model, &provider_name, agent).await;
+        return run_scriptable(
+            &cli_args,
+            &model,
+            &provider_name,
+            app_config,
+            agent_registry,
+            agent,
+        )
+        .await;
     }
 
     // Interactive mode
@@ -183,6 +211,7 @@ async fn main() -> Result<()> {
         agent,
         command_registry,
         skill_registry,
+        agent_registry,
     )
     .await
 }
@@ -191,6 +220,8 @@ async fn run_scriptable(
     cli_args: &CliArgs,
     model: &str,
     provider_name: &str,
+    app_config: AppConfig,
+    agent_registry: AgentRegistry,
     mut agent: Agent,
 ) -> Result<()> {
     // Get the prompt
@@ -208,8 +239,15 @@ async fn run_scriptable(
         );
     }
 
-    // Add prompt and run single turn
-    agent.add_user_message(prompt);
+    let (prepared_prompt, metadata, selected_agent) =
+        prepare_user_prompt(&prompt, &app_config, &agent_registry);
+    if !metadata.is_empty() {
+        agent.set_turn_metadata(metadata);
+    }
+    if let Some(agent_name) = selected_agent {
+        ui::info(format!("Delegated prompt to agent role: {agent_name}"));
+    }
+    agent.add_user_message(prepared_prompt);
 
     if let Err(e) = agent.run_turn().await {
         if cli_args.json_output {
@@ -237,6 +275,7 @@ async fn run_interactive(
     mut agent: Agent,
     command_registry: CommandRegistry,
     skill_registry: SkillRegistry,
+    agent_registry: AgentRegistry,
 ) -> Result<()> {
     let command_items = build_command_items(&command_registry);
     let skill_items = build_skill_items(&skill_registry);
@@ -333,19 +372,26 @@ async fn run_interactive(
                     CliCommand::InvokeSkill(skill_name, trailing) => {
                         if let Some(skill) = skill_registry.get(&skill_name) {
                             ui::info(format!("📚 Loading skill: {}", skill.name));
-                            if let Some(trailing_text) = trailing {
+                            let skill_message = if let Some(trailing_text) = trailing {
                                 let skill_message = format!(
                                     "=== Skill: {} ===\n{}\n\nUser message: {}",
                                     skill.name, skill.content, trailing_text
                                 );
-                                agent.add_user_message(skill_message);
+                                skill_message
                             } else {
-                                let skill_message = format!(
-                                    "Skill '{}' activated:\n\n{}",
-                                    skill.name, skill.content
-                                );
-                                agent.add_user_message(skill_message);
+                                format!("Skill '{}' activated:\n\n{}", skill.name, skill.content)
+                            };
+
+                            let (prepared_message, metadata, selected_agent) =
+                                prepare_user_prompt(&skill_message, &app_config, &agent_registry);
+                            if !metadata.is_empty() {
+                                agent.set_turn_metadata(metadata);
                             }
+                            if let Some(agent_name) = selected_agent {
+                                ui::info(format!("Delegated prompt to agent role: {agent_name}"));
+                            }
+
+                            agent.add_user_message(prepared_message);
 
                             if let Err(e) = agent.run_turn().await {
                                 ui::error(format!(
@@ -397,7 +443,15 @@ async fn run_interactive(
                         let cmd_name = parts[0];
 
                         if let Some(cmd) = command_registry.get(cmd_name) {
-                            if let Err(e) = execute_command(cmd, &cmd_input, &mut agent).await {
+                            if let Err(e) = execute_command(
+                                cmd,
+                                &cmd_input,
+                                &mut agent,
+                                &app_config,
+                                &agent_registry,
+                            )
+                            .await
+                            {
                                 ui::error(format!("{} {}", "✗".red().bold(), e.to_string().red()));
                             }
                         } else {
@@ -409,7 +463,7 @@ async fn run_interactive(
                         // Check for auto-triggering skills
                         let matching_skills = skill_registry.find_matching(&msg);
 
-                        if !matching_skills.is_empty() {
+                        let final_message = if !matching_skills.is_empty() {
                             ui::info(format!(
                                 "📚 Auto-triggered {} skill(s)",
                                 matching_skills.len()
@@ -427,11 +481,21 @@ async fn run_interactive(
                                 ));
                             }
                             full_message.push_str(&format!("User message: {msg}"));
-
-                            agent.add_user_message(full_message);
+                            full_message
                         } else {
-                            agent.add_user_message(msg);
+                            msg
+                        };
+
+                        let (prepared_message, metadata, selected_agent) =
+                            prepare_user_prompt(&final_message, &app_config, &agent_registry);
+                        if !metadata.is_empty() {
+                            agent.set_turn_metadata(metadata);
                         }
+                        if let Some(agent_name) = selected_agent {
+                            ui::info(format!("Delegated prompt to agent role: {agent_name}"));
+                        }
+
+                        agent.add_user_message(prepared_message);
 
                         if let Err(e) = agent.run_turn().await {
                             ui::error(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));
@@ -797,15 +861,80 @@ fn save_configs(_app_config: &AppConfig, _provider_config: &ProviderConfig) -> R
     Ok(())
 }
 
+fn prepare_user_prompt(
+    raw_prompt: &str,
+    app_config: &AppConfig,
+    agent_registry: &AgentRegistry,
+) -> (String, HashMap<String, String>, Option<String>) {
+    if agent_registry.is_empty() {
+        return (raw_prompt.to_string(), HashMap::new(), None);
+    }
+
+    let selection = agent_registry.select_for_prompt(
+        raw_prompt,
+        app_config.agents.default_agent.as_deref(),
+        app_config.agents.delegate_by_default,
+    );
+
+    let Some(agent) = selection else {
+        return (raw_prompt.to_string(), HashMap::new(), None);
+    };
+
+    let mut metadata = HashMap::new();
+    metadata.insert("orchestration.mode".to_string(), "delegated".to_string());
+    metadata.insert("orchestration.agent".to_string(), agent.name.clone());
+    metadata.insert(
+        "orchestration.strategy".to_string(),
+        app_config.agents.orchestration.clone(),
+    );
+
+    let role = agent
+        .role
+        .clone()
+        .unwrap_or_else(|| "Specialized assistant".to_string());
+    let description = agent.description.clone().unwrap_or_default();
+    let system_prompt = agent.system_prompt.clone().unwrap_or_default();
+    let constraints = if agent.constraints.is_empty() {
+        String::new()
+    } else {
+        agent
+            .constraints
+            .iter()
+            .map(|c| format!("- {c}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
+    let rewritten = format!(
+        "[Delegation]\nAgent: {}\nRole: {}\nDescription: {}\nSystem Prompt:\n{}\nConstraints:\n{}\n\nTask:\n{}",
+        agent.name, role, description, system_prompt, constraints, raw_prompt
+    );
+
+    (rewritten, metadata, Some(agent.name.clone()))
+}
+
 /// Execute a custom command
-async fn execute_command(cmd: &Command, _input: &str, agent: &mut Agent) -> Result<()> {
+async fn execute_command(
+    cmd: &Command,
+    _input: &str,
+    agent: &mut Agent,
+    app_config: &AppConfig,
+    agent_registry: &AgentRegistry,
+) -> Result<()> {
     use looprs::CommandAction;
     use std::process::Command as ProcessCommand;
 
     match &cmd.action {
         CommandAction::Prompt { template, .. } => {
-            // Send prompt template as message to LLM
-            agent.add_user_message(template);
+            let (prepared_prompt, metadata, selected_agent) =
+                prepare_user_prompt(template, app_config, agent_registry);
+            if !metadata.is_empty() {
+                agent.set_turn_metadata(metadata);
+            }
+            if let Some(agent_name) = selected_agent {
+                ui::info(format!("Delegated prompt to agent role: {agent_name}"));
+            }
+            agent.add_user_message(prepared_prompt);
             agent.run_turn().await?;
         }
         CommandAction::Shell {
@@ -827,7 +956,16 @@ async fn execute_command(cmd: &Command, _input: &str, agent: &mut Agent) -> Resu
                 let trimmed = stdout.trim();
                 ui::output_preview(trimmed);
                 ui::info("Output injected into context");
-                agent.add_user_message(format!("Command output:\n```\n{trimmed}\n```"));
+                let output_prompt = format!("Command output:\n```\n{trimmed}\n```");
+                let (prepared_prompt, metadata, selected_agent) =
+                    prepare_user_prompt(&output_prompt, app_config, agent_registry);
+                if !metadata.is_empty() {
+                    agent.set_turn_metadata(metadata);
+                }
+                if let Some(agent_name) = selected_agent {
+                    ui::info(format!("Delegated prompt to agent role: {agent_name}"));
+                }
+                agent.add_user_message(prepared_prompt);
             } else if !stdout.is_empty() {
                 let trimmed = stdout.trim();
                 ui::output_preview(trimmed);

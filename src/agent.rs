@@ -11,6 +11,7 @@ use crate::providers::LLMProvider;
 use crate::rules::RuleRegistry;
 use crate::tools::{ToolContext, execute_tool, get_tool_definitions};
 use crate::ui;
+use std::collections::HashMap;
 use tokio::time::{Duration, timeout};
 
 #[derive(Debug, Clone, Default)]
@@ -29,6 +30,7 @@ pub struct Agent {
     pub rules: RuleRegistry,
     runtime: RuntimeSettings,
     file_ref_policy: FileRefPolicy,
+    pending_metadata: HashMap<String, String>,
 }
 
 impl Agent {
@@ -55,6 +57,7 @@ impl Agent {
             rules: RuleRegistry::new(),
             runtime,
             file_ref_policy,
+            pending_metadata: HashMap::new(),
         })
     }
 
@@ -75,6 +78,10 @@ impl Agent {
         self.file_ref_policy = policy;
     }
 
+    pub fn set_turn_metadata(&mut self, metadata: HashMap<String, String>) {
+        self.pending_metadata.extend(metadata);
+    }
+
     pub fn add_user_message(&mut self, text: impl Into<String>) {
         let text_str = text.into();
 
@@ -88,11 +95,11 @@ impl Agent {
                 Ok(resolved_text) => resolved_text,
                 Err(e) => {
                     ui::warn(format!("Warning: Error resolving file references: {e}"));
-                    text_str // Use original text if resolution fails
+                    text_str.clone()
                 }
             }
         } else {
-            text_str
+            text_str.clone()
         };
 
         self.messages.push(Message::user(resolved));
@@ -152,6 +159,21 @@ impl Agent {
     }
 
     pub async fn run_turn(&mut self) -> Result<(), AgentError> {
+        let delegated_agent = self.pending_metadata.get("orchestration.agent").cloned();
+        if let Some(agent_name) = delegated_agent.clone() {
+            let strategy = self
+                .pending_metadata
+                .get("orchestration.strategy")
+                .cloned()
+                .unwrap_or_else(|| "sequential".to_string());
+            let event_ctx = EventContext::new()
+                .with_tool_name(agent_name)
+                .with_metadata("orchestration.strategy".to_string(), strategy)
+                .with_metadata("orchestration.mode".to_string(), "delegated".to_string());
+            self.events.fire(Event::DelegationStart, &event_ctx);
+            self.execute_hooks_for_event(&Event::DelegationStart, &event_ctx);
+        }
+
         // Fire UserPromptSubmit event
         let user_msg = self
             .messages
@@ -171,9 +193,15 @@ impl Agent {
             })
             .unwrap_or_default();
 
-        let event_ctx = EventContext::new().with_user_message(user_msg);
+        let mut event_ctx = EventContext::new().with_user_message(user_msg);
+        for (key, value) in &self.pending_metadata {
+            event_ctx.metadata.insert(key.clone(), value.clone());
+        }
         self.events.fire(Event::UserPromptSubmit, &event_ctx);
-        let enriched_ctx = self.execute_hooks_for_event(&Event::UserPromptSubmit, &event_ctx);
+        let mut enriched_ctx = self.execute_hooks_for_event(&Event::UserPromptSubmit, &event_ctx);
+        for (key, value) in std::mem::take(&mut self.pending_metadata) {
+            enriched_ctx.metadata.insert(key, value);
+        }
 
         // Build system prompt with base instructions + hook-injected context + rules
         let mut system_prompt = format!(
@@ -317,6 +345,14 @@ impl Agent {
             }
 
             self.messages.push(Message::tool_results(tool_results));
+        }
+
+        if let Some(agent_name) = delegated_agent {
+            let event_ctx = EventContext::new()
+                .with_tool_name(agent_name)
+                .with_metadata("orchestration.mode".to_string(), "delegated".to_string());
+            self.events.fire(Event::DelegationComplete, &event_ctx);
+            self.execute_hooks_for_event(&Event::DelegationComplete, &event_ctx);
         }
 
         Ok(())

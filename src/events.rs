@@ -19,6 +19,8 @@ pub enum Event {
     OnError,
     /// Warning issued (non-fatal issue)
     OnWarning,
+    DelegationStart,
+    DelegationComplete,
 }
 
 impl Event {
@@ -33,6 +35,8 @@ impl Event {
             Event::InferenceComplete => "InferenceComplete",
             Event::OnError => "OnError",
             Event::OnWarning => "OnWarning",
+            Event::DelegationStart => "DelegationStart",
+            Event::DelegationComplete => "DelegationComplete",
         }
     }
 }

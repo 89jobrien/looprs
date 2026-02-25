@@ -1,4 +1,5 @@
 mod agent;
+pub mod agents;
 mod api;
 pub mod app_config;
 pub mod approval;
@@ -28,6 +29,7 @@ pub mod types;
 pub mod ui;
 
 pub use crate::agent::{Agent, RuntimeSettings};
+pub use crate::agents::{AgentDefinition, AgentRegistry};
 pub use crate::approval::{console_approval_prompt, console_prompt, console_secret_prompt};
 pub use crate::commands::{Command, CommandAction, CommandRegistry};
 pub use crate::config_file::{ProviderConfig, ProviderSettings};
