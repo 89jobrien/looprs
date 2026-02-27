@@ -1,5 +1,6 @@
 use colored::*;
 
+use crate::observability;
 use crate::sanitize;
 
 /// Environment variable that enables machine-readable JSON logs when set to "1" or "true".
@@ -13,6 +14,17 @@ pub fn init_logging() {
         builder.filter_level(log::LevelFilter::Warn);
     }
     let _ = builder.try_init();
+
+    let root = observability::observability_root();
+    if std::fs::create_dir_all(&root).is_ok() {
+        let _ = observability::append_named_jsonl(
+            "runtime",
+            &serde_json::json!({
+                "kind": "logging_init",
+                "observability_root": root.display().to_string(),
+            }),
+        );
+    }
 }
 
 fn machine_log_enabled() -> bool {
@@ -38,6 +50,7 @@ fn emit_machine_event(kind: &str, data: serde_json::Value) {
 
     if let Ok(line) = serde_json::to_string(&event) {
         eprintln!("{line}");
+        let _ = observability::append_named_jsonl("ui_events", &event);
     }
 }
 

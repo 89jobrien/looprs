@@ -15,6 +15,7 @@ mod fs_mode;
 pub mod hooks;
 pub mod jj;
 pub mod kan;
+pub mod observability;
 pub mod observation;
 pub mod observation_manager;
 pub mod pipeline;

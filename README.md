@@ -50,6 +50,19 @@ Or use `.looprs/provider.json` for persistent config. SDK aliases reuse the same
 `openai-sdk -> openai` and `anthropic-sdk/claude-sdk -> anthropic`.
 See `.env.example` for all options.
 
+### Observability and External SSD Logs
+
+looprs writes structured runtime trace/events as JSONL. You can redirect observability output to an external SSD with:
+
+```bash
+export LOOPRS_OBSERVABILITY_DIR="/Volumes/YourSSD/looprs-observability"
+```
+
+By default, observability output goes to:
+
+- `.looprs/observability/traces/*.jsonl` (turn traces)
+- `.looprs/observability/ui_events.jsonl` (UI/machine events when enabled)
+
 ## Built-In Tools
 
 **File operations:**

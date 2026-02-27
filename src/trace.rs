@@ -5,6 +5,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::observability;
 use crate::providers::{InferenceRequest, InferenceResponse};
 
 pub fn append_turn_trace(
@@ -12,7 +13,8 @@ pub fn append_turn_trace(
     request: &InferenceRequest,
     response: &InferenceResponse,
 ) -> Result<()> {
-    append_turn_trace_in_dir(Path::new("."), session_id, request, response)
+    let base = observability::trace_dir();
+    append_turn_trace_in_dir(base.as_path(), session_id, request, response)
 }
 
 pub fn append_turn_trace_in_dir(
@@ -26,8 +28,8 @@ pub fn append_turn_trace_in_dir(
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    let trace_dir = base_dir.join(".looprs").join("traces");
-    fs::create_dir_all(&trace_dir)?;
+    let trace_dir = base_dir;
+    fs::create_dir_all(trace_dir)?;
 
     let trace_file = trace_dir.join(format!("{session_id}.jsonl"));
 
@@ -61,10 +63,7 @@ pub fn append_turn_trace_in_dir(
 }
 
 pub fn session_trace_path(base_dir: &Path, session_id: &str) -> PathBuf {
-    base_dir
-        .join(".looprs")
-        .join("traces")
-        .join(format!("{session_id}.jsonl"))
+    base_dir.join(format!("{session_id}.jsonl"))
 }
 
 #[cfg(test)]
