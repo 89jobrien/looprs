@@ -1,7 +1,5 @@
 name: test
 description: Run all tests
-aliases:
-  - t
 action:
   type: shell
   command: cargo test --lib

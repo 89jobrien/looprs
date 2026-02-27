@@ -185,6 +185,16 @@ The `.looprs/` directory defines your agent configuration (provider, rules, skil
 
 ## Architecture
 
+### Ownership Model
+
+See [`docs/ownership-model.md`](./docs/ownership-model.md) for the canonical ownership boundaries across:
+
+- `src/` (core runtime/orchestration)
+- `crates/` (surface-specific app modules, including desktop)
+- `.looprs/` and `~/.looprs/` (extension/config surfaces with repo precedence)
+
+Use that document as the source of truth when deciding where new code should live.
+
 ### Core Modules
 
 - `src/bin/looprs/` - CLI application

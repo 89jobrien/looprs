@@ -1,7 +1,5 @@
 name: refactor
 description: Refactor selected code for readability
-aliases:
-  - r
 action:
   type: prompt
   template: "Refactor this code for better readability and maintainability. Preserve functionality but improve structure, naming, and clarity."

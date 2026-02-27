@@ -1,7 +1,5 @@
 name: lint
 description: Run clippy linter
-aliases:
-  - l
 action:
   type: shell
   command: cargo clippy --all-targets -- -D warnings

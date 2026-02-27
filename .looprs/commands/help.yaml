@@ -6,12 +6,12 @@ action:
   type: message
   text: |
     Available custom commands:
-    
-    /refactor (or /r) - Refactor code for readability
-    /test (or /t)     - Run cargo tests
-    /lint (or /l)     - Run clippy linter
-    /help (or /h)     - Show this help
-    
+
+    /refactor   - Refactor code for readability
+    /test       - Run cargo tests
+    /lint       - Run clippy linter
+    /help       - Show this help
+
     Built-in commands:
     /q, exit, quit    - Exit the session
     /c, clear         - Clear conversation history
