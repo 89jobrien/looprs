@@ -112,10 +112,10 @@ pub async fn create_provider_with_overrides(
     }
 
     // Step 2: Check config file provider setting
-    if let Some(ref config) = config_file {
-        if let Some(provider_name) = &config.provider {
-            return create_provider_by_name(provider_name, &config_file, overrides).await;
-        }
+    if let Some(config) = config_file.as_ref()
+        && let Some(provider_name) = &config.provider
+    {
+        return create_provider_by_name(provider_name, &config_file, overrides).await;
     }
 
     // Step 3: Try providers in priority order based on available API keys
@@ -201,9 +201,9 @@ async fn create_provider_by_name(
                 .model
                 .or(env::var("MODEL").ok().map(ModelId::new))
                 .or(cfg_model);
-            Ok(Box::new(anthropic_sdk::AnthropicSdkProvider::new_with_model(
-                key, model,
-            )?))
+            Ok(Box::new(
+                anthropic_sdk::AnthropicSdkProvider::new_with_model(key, model)?,
+            ))
         }
         "openai" => {
             let key = env::var("OPENAI_API_KEY")

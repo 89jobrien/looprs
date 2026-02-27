@@ -1,5 +1,9 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicU8, Ordering},
+};
 
+use looprs::{FsMode, ui};
 use rustyline::completion::Completer;
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
@@ -110,11 +114,13 @@ pub fn bind_repl_keys(
     editor: &mut Editor<ReplHelper, DefaultHistory>,
     state: Arc<Mutex<ReplState>>,
     sets: Arc<MatchSets>,
+    fs_mode: Arc<AtomicU8>,
 ) {
     let slash_handler = ReplHandler::new(HandlerKind::Slash, state.clone(), sets.clone());
     let skill_handler = ReplHandler::new(HandlerKind::Skill, state.clone(), sets.clone());
     let colon_handler = ReplHandler::new(HandlerKind::Colon, state.clone(), sets.clone());
     let enter_handler = ReplHandler::new(HandlerKind::Enter, state.clone(), sets.clone());
+    let tab_handler = FsModeToggleHandler::new(fs_mode);
     let esc_handler = ReplHandler::new(HandlerKind::Esc, state, sets);
 
     let _ = editor.bind_sequence(
@@ -137,6 +143,44 @@ pub fn bind_repl_keys(
         Event::from(KeyEvent(KeyCode::Esc, Modifiers::NONE)),
         EventHandler::Conditional(Box::new(esc_handler)),
     );
+    let _ = editor.bind_sequence(
+        Event::from(KeyEvent(KeyCode::Tab, Modifiers::NONE)),
+        EventHandler::Conditional(Box::new(tab_handler)),
+    );
+}
+
+struct FsModeToggleHandler {
+    fs_mode: Arc<AtomicU8>,
+}
+
+impl FsModeToggleHandler {
+    fn new(fs_mode: Arc<AtomicU8>) -> Self {
+        Self { fs_mode }
+    }
+
+    fn handle_tab(&self, ctx: &EventContext) -> Option<Cmd> {
+        if !ctx.line().is_empty() || ctx.pos() != 0 {
+            return None;
+        }
+
+        let current = FsMode::from_u8(self.fs_mode.load(Ordering::Relaxed));
+        let next = current.next();
+        self.fs_mode.store(next.to_u8(), Ordering::Relaxed);
+        ui::info(format!("fs_mode = {}", next.as_str()));
+        Some(Cmd::AcceptLine)
+    }
+}
+
+impl ConditionalEventHandler for FsModeToggleHandler {
+    fn handle(
+        &self,
+        _evt: &Event,
+        _n: rustyline::RepeatCount,
+        _positive: bool,
+        ctx: &EventContext,
+    ) -> Option<Cmd> {
+        self.handle_tab(ctx)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

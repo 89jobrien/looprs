@@ -79,10 +79,10 @@ impl AgentRegistry {
             return Some(found);
         }
 
-        if let Some(default_name) = default_agent {
-            if let Some(default) = self.get(default_name) {
-                return Some(default);
-            }
+        if let Some(default_name) = default_agent
+            && let Some(default) = self.get(default_name)
+        {
+            return Some(default);
         }
 
         if delegate_by_default {

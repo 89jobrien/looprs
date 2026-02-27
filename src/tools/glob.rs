@@ -1,6 +1,6 @@
+use super::error::ToolError;
 use super::ToolArgs;
 use super::ToolContext;
-use super::error::ToolError;
 use serde_json::Value;
 use std::fs;
 
@@ -57,9 +57,8 @@ mod tests {
         fs::write(&a, "a").unwrap();
         fs::write(&b, "b").unwrap();
 
-        let ctx = ToolContext {
-            working_dir: dir.path().to_path_buf(),
-        };
+        let ctx =
+            ToolContext::from_working_dir(dir.path().to_path_buf(), crate::fs_mode::FsMode::Write);
         let args = json!({"pat": "*.txt"});
 
         let out = tool_glob(&args, &ctx).unwrap();
@@ -70,9 +69,8 @@ mod tests {
     #[test]
     fn glob_returns_none_when_empty() {
         let dir = tempfile::tempdir().unwrap();
-        let ctx = ToolContext {
-            working_dir: dir.path().to_path_buf(),
-        };
+        let ctx =
+            ToolContext::from_working_dir(dir.path().to_path_buf(), crate::fs_mode::FsMode::Write);
         let args = json!({"pat": "*.txt"});
 
         let out = tool_glob(&args, &ctx).unwrap();

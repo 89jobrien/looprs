@@ -1,6 +1,6 @@
+use super::error::ToolError;
 use super::ToolArgs;
 use super::ToolContext;
-use super::error::ToolError;
 use regex::Regex;
 use serde_json::Value;
 use std::ffi::OsString;
@@ -8,8 +8,8 @@ use std::fs;
 
 use super::availability;
 use crate::config::MAX_GREP_HITS;
-use crate::plugins::NamedTool;
 use crate::plugins::binaries::Rg;
+use crate::plugins::NamedTool;
 
 /// Try to use ripgrep (rg) if available, fall back to pure regex implementation
 pub(super) fn tool_grep(args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
@@ -20,10 +20,10 @@ pub(super) fn tool_grep(args: &Value, ctx: &ToolContext) -> Result<String, ToolE
     let base = ctx.resolve_path(path_prefix)?;
 
     // Try rg first if available
-    if availability::is_rg_available() {
-        if let Ok(result) = try_rg(pat_str, &base) {
-            return Ok(result);
-        }
+    if availability::is_rg_available()
+        && let Ok(result) = try_rg(pat_str, &base)
+    {
+        return Ok(result);
     }
 
     // Fall back to pure Rust implementation
@@ -115,9 +115,8 @@ mod tests {
         let file = dir.path().join("a.txt");
         fs::write(&file, "hello\nmatch me\n").unwrap();
 
-        let ctx = ToolContext {
-            working_dir: dir.path().to_path_buf(),
-        };
+        let ctx =
+            ToolContext::from_working_dir(dir.path().to_path_buf(), crate::fs_mode::FsMode::Write);
         let args = json!({"pat": "match"});
 
         let out = tool_grep(&args, &ctx).unwrap();
@@ -130,9 +129,8 @@ mod tests {
         let file = dir.path().join("a.txt");
         fs::write(&file, "hello\nworld\n").unwrap();
 
-        let ctx = ToolContext {
-            working_dir: dir.path().to_path_buf(),
-        };
+        let ctx =
+            ToolContext::from_working_dir(dir.path().to_path_buf(), crate::fs_mode::FsMode::Write);
         let args = json!({"pat": "xyz"});
 
         let out = tool_grep(&args, &ctx).unwrap();
@@ -145,9 +143,8 @@ mod tests {
         let file = dir.path().join("a.txt");
         fs::write(&file, "test123\ntest456\nhello\n").unwrap();
 
-        let ctx = ToolContext {
-            working_dir: dir.path().to_path_buf(),
-        };
+        let ctx =
+            ToolContext::from_working_dir(dir.path().to_path_buf(), crate::fs_mode::FsMode::Write);
         let args = json!({"pat": "test\\d+"});
 
         let out = tool_grep(&args, &ctx).unwrap();

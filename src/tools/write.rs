@@ -1,6 +1,6 @@
+use super::error::ToolError;
 use super::ToolArgs;
 use super::ToolContext;
-use super::error::ToolError;
 use serde_json::Value;
 use std::fs;
 
@@ -28,9 +28,8 @@ mod tests {
     #[test]
     fn write_creates_file() {
         let dir = tempfile::tempdir().unwrap();
-        let ctx = ToolContext {
-            working_dir: dir.path().to_path_buf(),
-        };
+        let ctx =
+            ToolContext::from_working_dir(dir.path().to_path_buf(), crate::fs_mode::FsMode::Write);
 
         let args = json!({"path": "out.txt", "content": "hello"});
         let out = tool_write(&args, &ctx).unwrap();
@@ -44,9 +43,8 @@ mod tests {
     #[test]
     fn write_blocks_path_traversal() {
         let dir = tempfile::tempdir().unwrap();
-        let ctx = ToolContext {
-            working_dir: dir.path().to_path_buf(),
-        };
+        let ctx =
+            ToolContext::from_working_dir(dir.path().to_path_buf(), crate::fs_mode::FsMode::Write);
 
         let args = json!({"path": "../escape.txt", "content": "nope"});
         let err = tool_write(&args, &ctx).unwrap_err();

@@ -27,13 +27,13 @@ pub fn seed_into(dir: &Path) -> Result<Vec<std::path::PathBuf>> {
 
 /// Expand leading `~` to home directory.
 pub fn expand_tilde(path: &str) -> std::path::PathBuf {
-    if path == "~" || path.starts_with("~/") {
-        if let Some(home) = std::env::home_dir() {
-            if path == "~" {
-                return home;
-            }
-            return home.join(path.trim_start_matches("~/"));
+    if (path == "~" || path.starts_with("~/"))
+        && let Some(home) = std::env::home_dir()
+    {
+        if path == "~" {
+            return home;
         }
+        return home.join(path.trim_start_matches("~/"));
     }
     std::path::PathBuf::from(path)
 }

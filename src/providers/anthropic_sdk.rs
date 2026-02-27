@@ -60,7 +60,9 @@ impl LLMProvider for AnthropicSdkProvider {
         let response_json: Value = serde_json::to_value(response)?;
 
         let content_arr = response_json["content"].as_array().ok_or_else(|| {
-            ProviderError::InvalidResponse("Unexpected API response: missing 'content' array".to_string())
+            ProviderError::InvalidResponse(
+                "Unexpected API response: missing 'content' array".to_string(),
+            )
         })?;
 
         let mut blocks = Vec::new();

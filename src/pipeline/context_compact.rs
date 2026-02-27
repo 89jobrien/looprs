@@ -1,6 +1,6 @@
 use crate::app_config::PipelineCompactionConfig;
 use anyhow::Result;
-use glob::{Pattern, glob};
+use glob::{glob, Pattern};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -16,18 +16,36 @@ pub struct CompactedContext {
     pub files: Vec<String>,
 }
 
-pub fn compact_context(repo_root: &Path, config: &PipelineCompactionConfig) -> Result<CompactedContext> {
+pub fn compact_context(
+    repo_root: &Path,
+    config: &PipelineCompactionConfig,
+) -> Result<CompactedContext> {
     let mut ordered = Vec::new();
     let mut seen = HashSet::new();
 
     if config.include_diff {
-        add_paths(&mut ordered, &mut seen, repo_root, git_diff_files(repo_root));
+        add_paths(
+            &mut ordered,
+            &mut seen,
+            repo_root,
+            git_diff_files(repo_root),
+        );
     }
     if config.include_recent {
-        add_paths(&mut ordered, &mut seen, repo_root, git_status_files(repo_root));
+        add_paths(
+            &mut ordered,
+            &mut seen,
+            repo_root,
+            git_status_files(repo_root),
+        );
     }
     if !config.include_globs.is_empty() {
-        add_paths(&mut ordered, &mut seen, repo_root, glob_files(repo_root, &config.include_globs));
+        add_paths(
+            &mut ordered,
+            &mut seen,
+            repo_root,
+            glob_files(repo_root, &config.include_globs),
+        );
     }
     if config.top_k > 0 {
         add_paths(
@@ -104,7 +122,9 @@ fn git_diff_files(repo_root: &Path) -> Vec<PathBuf> {
         .env_remove("GIT_WORK_TREE")
         .env_remove("GIT_INDEX_FILE")
         .output();
-    let Ok(output) = output else { return Vec::new() };
+    let Ok(output) = output else {
+        return Vec::new();
+    };
     if !output.status.success() {
         return Vec::new();
     }
@@ -119,7 +139,9 @@ fn git_status_files(repo_root: &Path) -> Vec<PathBuf> {
         .env_remove("GIT_WORK_TREE")
         .env_remove("GIT_INDEX_FILE")
         .output();
-    let Ok(output) = output else { return Vec::new() };
+    let Ok(output) = output else {
+        return Vec::new();
+    };
     if !output.status.success() {
         return Vec::new();
     }
@@ -171,17 +193,18 @@ fn glob_files(repo_root: &Path, globs: &[String]) -> Vec<PathBuf> {
 }
 
 fn top_k_files(repo_root: &Path, globs: &[String], top_k: usize) -> Vec<PathBuf> {
-    let candidates = rg_files(repo_root, globs).unwrap_or_else(|| list_files_fallback(repo_root, globs));
+    let candidates =
+        rg_files(repo_root, globs).unwrap_or_else(|| list_files_fallback(repo_root, globs));
     let mut with_time: Vec<(u128, PathBuf)> = candidates
         .into_iter()
-        .filter_map(|path| {
+        .map(|path| {
             let mtime = fs::metadata(&path)
                 .and_then(|m| m.modified())
                 .ok()
                 .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
                 .map(|d| d.as_nanos())
                 .unwrap_or(0);
-            Some((mtime, path))
+            (mtime, path)
         })
         .collect();
     with_time.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
@@ -208,22 +231,18 @@ fn rg_files(repo_root: &Path, globs: &[String]) -> Option<Vec<PathBuf>> {
 }
 
 fn list_files_fallback(repo_root: &Path, globs: &[String]) -> Vec<PathBuf> {
-    let patterns: Vec<Pattern> = globs
-        .iter()
-        .filter_map(|g| Pattern::new(g).ok())
-        .collect();
+    let patterns: Vec<Pattern> = globs.iter().filter_map(|g| Pattern::new(g).ok()).collect();
     let mut paths = Vec::new();
-    let walker = WalkDir::new(repo_root).into_iter().filter_entry(|entry| {
-        entry.file_name().to_str() != Some(".git")
-    });
+    let walker = WalkDir::new(repo_root)
+        .into_iter()
+        .filter_entry(|entry| entry.file_name().to_str() != Some(".git"));
     for entry in walker.flatten() {
         if !entry.file_type().is_file() {
             continue;
         }
         let path = entry.path();
         let rel = path.strip_prefix(repo_root).unwrap_or(path);
-        let matches = patterns.is_empty()
-            || patterns.iter().any(|p| p.matches_path(rel));
+        let matches = patterns.is_empty() || patterns.iter().any(|p| p.matches_path(rel));
         if matches {
             paths.push(path.to_path_buf());
         }
@@ -269,7 +288,6 @@ mod tests {
             include_recent: true,
             include_globs: vec!["*.txt".to_string()],
             top_k: 0,
-            ..Default::default()
         };
         let out = compact_context(repo.path(), &config).unwrap();
         assert!(out.text.contains("a.txt"));
@@ -290,7 +308,6 @@ mod tests {
             include_recent: false,
             include_globs: vec![outside_path.to_string_lossy().to_string()],
             top_k: 0,
-            ..Default::default()
         };
         let out = compact_context(repo.path(), &config).unwrap();
         assert!(!out.text.contains("outside"));
@@ -314,7 +331,6 @@ mod tests {
             include_recent: false,
             include_globs: Vec::new(),
             top_k: 0,
-            ..Default::default()
         };
         let out = compact_context(repo.path(), &config).unwrap();
         assert!(out.files.iter().any(|file| file == "tracked.txt"));
@@ -338,7 +354,6 @@ mod tests {
             include_recent: true,
             include_globs: Vec::new(),
             top_k: 0,
-            ..Default::default()
         };
         let out = compact_context(repo.path(), &config).unwrap();
         assert!(out.files.iter().any(|file| file == "tracked.txt"));

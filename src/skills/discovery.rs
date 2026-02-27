@@ -92,17 +92,17 @@ pub fn resolve_skill_path(
         skill_name
     };
 
-    if !force_superpowers {
-        if let Some(personal) = personal_dir {
-            let skill_path = personal.join(actual_skill_name);
-            let skill_file = skill_path.join("SKILL.md");
-            if skill_file.exists() {
-                return Some(ResolvedSkillPath {
-                    skill_file,
-                    source_type: "personal".to_string(),
-                    skill_path: actual_skill_name.to_string(),
-                });
-            }
+    if !force_superpowers
+        && let Some(personal) = personal_dir
+    {
+        let skill_path = personal.join(actual_skill_name);
+        let skill_file = skill_path.join("SKILL.md");
+        if skill_file.exists() {
+            return Some(ResolvedSkillPath {
+                skill_file,
+                source_type: "personal".to_string(),
+                skill_path: actual_skill_name.to_string(),
+            });
         }
     }
 

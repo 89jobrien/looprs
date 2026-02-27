@@ -83,6 +83,7 @@ async fn run_one_turn() -> GuiSnapshot {
     let runtime = RuntimeSettings {
         defaults: app_config.defaults.clone(),
         max_tokens_override: provider_config.merged_settings(&provider_name).max_tokens,
+        fs_mode: app_config.agents.fs_mode,
     };
 
     let mut agent = match Agent::new_with_runtime(provider, runtime, app_config.file_ref_policy()) {

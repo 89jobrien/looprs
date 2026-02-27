@@ -153,10 +153,10 @@ impl LLMProvider for OpenAIProvider {
         }
 
         // Only send temperature if the model supports it and user specified it
-        if Self::supports_temperature(model) {
-            if let Some(temp) = req.temperature {
-                body["temperature"] = json!(temp);
-            }
+        if Self::supports_temperature(model)
+            && let Some(temp) = req.temperature
+        {
+            body["temperature"] = json!(temp);
         }
 
         let res = self
@@ -191,33 +191,31 @@ impl LLMProvider for OpenAIProvider {
 
         let mut blocks = Vec::new();
 
-        if let Some(text) = message.get("content").and_then(|v| v.as_str()) {
-            if !text.is_empty() {
-                blocks.push(ContentBlock::Text {
-                    text: text.to_string(),
-                });
-            }
+        if let Some(text) = message.get("content").and_then(|v| v.as_str())
+            && !text.is_empty()
+        {
+            blocks.push(ContentBlock::Text {
+                text: text.to_string(),
+            });
         }
 
         if let Some(tool_calls) = message.get("tool_calls").and_then(|v| v.as_array()) {
             for tool_call in tool_calls {
                 if let (Some(id), Some(function)) = (tool_call.get("id"), tool_call.get("function"))
-                {
-                    if let (Some(name), Some(args)) =
+                    && let (Some(name), Some(args)) =
                         (function.get("name"), function.get("arguments"))
-                    {
-                        let args_str = if let Some(s) = args.as_str() {
-                            serde_json::from_str(s).unwrap_or(args.clone())
-                        } else {
-                            args.clone()
-                        };
+                {
+                    let args_str = if let Some(s) = args.as_str() {
+                        serde_json::from_str(s).unwrap_or(args.clone())
+                    } else {
+                        args.clone()
+                    };
 
-                        blocks.push(ContentBlock::ToolUse {
-                            id: crate::types::ToolId::new(id.as_str().unwrap_or("")),
-                            name: crate::types::ToolName::new(name.as_str().unwrap_or("")),
-                            input: args_str,
-                        });
-                    }
+                    blocks.push(ContentBlock::ToolUse {
+                        id: crate::types::ToolId::new(id.as_str().unwrap_or("")),
+                        name: crate::types::ToolName::new(name.as_str().unwrap_or("")),
+                        input: args_str,
+                    });
                 }
             }
         }

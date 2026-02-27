@@ -49,6 +49,7 @@ pub enum ContentBlock {
     },
 }
 
+#[allow(dead_code)]
 #[derive(Serialize)]
 pub struct ApiRequest {
     pub model: ModelId,
@@ -240,5 +241,30 @@ mod tests {
             ContentBlock::ToolUse { name, .. } => assert_eq!(name.as_str(), "read"),
             other => panic!("Expected ToolUse block second, got: {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_api_request_serialization() {
+        let req = ApiRequest {
+            model: ModelId::new("test-model"),
+            max_tokens: 123,
+            system: "system".to_string(),
+            messages: vec![Message::user("hello")],
+            tools: vec![ToolDefinition {
+                name: "read".to_string(),
+                description: "Read a file".to_string(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                }),
+            }],
+        };
+
+        let json = serde_json::to_value(&req).expect("serialize ApiRequest");
+        assert_eq!(json["model"], "test-model");
+        assert_eq!(json["max_tokens"], 123);
+        assert_eq!(json["system"], "system");
+        assert!(json["messages"].is_array());
+        assert!(json["tools"].is_array());
     }
 }

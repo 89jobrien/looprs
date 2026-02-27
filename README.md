@@ -1,6 +1,6 @@
 # looprs
 
-Agents are still just LLMs running tools in a loop until a condition is met. That is how I will continue to treat them until the paradigm shifts. `looprs` is a dumb name but is also a kit providing: LLMs, tools, loops, and conditions to meet.  It ain't much but it doesn't have some convoluted markdown file parsing progressive disclosure system that everybody seems to somehow do differently. Like wtf? `looprs` provides consistent interfaces for extending with custom slash commands that function like commands (`/`), skills are the standard (imo, legacy) markdown utilizing progressive disclosure (`$`), agents, rules, file references(`@`), and lots o' hooks. LLMs are an invaluable assistant for me and responsible for getting this monstrosity to compile. 
+Agents are still just LLMs running tools in a loop until a condition is met. That is how I will continue to treat them until the paradigm shifts. `looprs` is a dumb name but is also a kit providing: LLMs, tools, loops, and conditions to meet.  It ain't much but it doesn't have some convoluted markdown file parsing progressive disclosure system that everybody seems to somehow do differently. Like wtf? `looprs` provides consistent interfaces for extending with custom slash commands that function like commands (`/`), skills are the standard (imo, legacy) markdown utilizing progressive disclosure (`$`), agents, rules, file references(`@`), and lots o' hooks. LLMs are an invaluable assistant for me and responsible for getting this monstrosity to compile.
 
 ## Install
 
@@ -30,9 +30,25 @@ looprs
 ollama serve  # in another terminal
 export PROVIDER="local"
 looprs
+
+# Optional SDK-backed providers (raw providers still default)
+export PROVIDER="openai-sdk"      # or: anthropic-sdk / claude-sdk
+looprs
+
+# SDK-backed OpenAI (uses OPENAI_API_KEY + openai settings)
+export OPENAI_API_KEY="sk-..."
+export PROVIDER="openai-sdk"
+looprs
+
+# SDK-backed Anthropic (uses ANTHROPIC_API_KEY + anthropic settings)
+export ANTHROPIC_API_KEY="sk-ant-..."
+export PROVIDER="anthropic-sdk"   # or: claude-sdk
+looprs
 ```
 
-Or use `.looprs/provider.json` for persistent config. See `.env.example` for all options.
+Or use `.looprs/provider.json` for persistent config. SDK aliases reuse the same settings blocks:
+`openai-sdk -> openai` and `anthropic-sdk/claude-sdk -> anthropic`.
+See `.env.example` for all options.
 
 ## Built-In Tools
 
@@ -479,7 +495,8 @@ Looprs works with any major LLM:
 | OpenAI | `OPENAI_API_KEY` | GPT-4/GPT-5 | $$$ |
 | Local | `ollama serve` | llama2, mistral, neural-chat, etc. | Free |
 
-**Auto-detects** from env vars. Force with `PROVIDER=anthropic \| openai \| local`.
+**Auto-detects** from env vars. Force with
+`PROVIDER=anthropic | openai | local | openai-sdk | anthropic-sdk | claude-sdk`.
 
 Per-provider config: `.looprs/provider.json` or `MODEL=` env var.
 

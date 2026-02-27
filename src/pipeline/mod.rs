@@ -1,5 +1,5 @@
-pub mod logging;
 pub mod context_compact;
+pub mod logging;
 pub mod types;
 
 #[derive(Debug, Default)]

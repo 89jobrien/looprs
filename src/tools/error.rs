@@ -20,6 +20,13 @@ pub enum ToolError {
     #[error("Unknown tool: {0}")]
     UnknownTool(String),
 
+    #[error("Tool '{tool}' is not allowed in {mode} mode: {reason}")]
+    ModeDenied {
+        tool: String,
+        mode: String,
+        reason: String,
+    },
+
     #[error("Command execution failed: {0}")]
     CommandFailed(String),
 

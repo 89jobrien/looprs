@@ -1,6 +1,6 @@
+use super::error::ToolError;
 use super::ToolArgs;
 use super::ToolContext;
-use super::error::ToolError;
 use serde_json::Value;
 use std::fs;
 
@@ -46,9 +46,8 @@ mod tests {
         let file = dir.path().join("a.txt");
         fs::write(&file, "hello world").unwrap();
 
-        let ctx = ToolContext {
-            working_dir: dir.path().to_path_buf(),
-        };
+        let ctx =
+            ToolContext::from_working_dir(dir.path().to_path_buf(), crate::fs_mode::FsMode::Write);
         let args = json!({"path": "a.txt", "old": "world", "new": "there"});
 
         let out = tool_edit(&args, &ctx).unwrap();

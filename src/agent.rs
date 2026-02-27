@@ -4,6 +4,7 @@ use crate::app_config::DefaultsConfig;
 use crate::errors::AgentError;
 use crate::events::{Event, EventContext, EventManager};
 use crate::file_refs::FileRefPolicy;
+use crate::fs_mode::FsMode;
 use crate::hooks::{ApprovalCallback, HookExecutor, HookRegistry, PromptCallback};
 use crate::observation_manager::ObservationManager;
 use crate::providers::InferenceRequest;
@@ -18,6 +19,7 @@ use tokio::time::{Duration, timeout};
 pub struct RuntimeSettings {
     pub defaults: DefaultsConfig,
     pub max_tokens_override: Option<u32>,
+    pub fs_mode: FsMode,
 }
 
 pub struct Agent {
@@ -50,7 +52,7 @@ impl Agent {
         Ok(Self {
             provider,
             messages: Vec::new(),
-            tool_ctx: ToolContext::new()?,
+            tool_ctx: ToolContext::new_with_mode(runtime.fs_mode)?,
             events: EventManager::new(),
             observations: ObservationManager::new(),
             hooks: HookRegistry::new(),
@@ -71,11 +73,24 @@ impl Agent {
     }
 
     pub fn set_runtime_settings(&mut self, runtime: RuntimeSettings) {
+        self.tool_ctx.set_fs_mode(runtime.fs_mode);
         self.runtime = runtime;
     }
 
     pub fn set_file_ref_policy(&mut self, policy: FileRefPolicy) {
         self.file_ref_policy = policy;
+    }
+
+    pub fn fs_mode(&self) -> FsMode {
+        self.tool_ctx.fs_mode()
+    }
+
+    pub fn set_fs_mode(&self, mode: FsMode) {
+        self.tool_ctx.set_fs_mode(mode);
+    }
+
+    pub fn fs_mode_handle(&self) -> std::sync::Arc<std::sync::atomic::AtomicU8> {
+        self.tool_ctx.fs_mode_handle()
     }
 
     pub fn set_turn_metadata(&mut self, metadata: HashMap<String, String>) {

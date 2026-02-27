@@ -29,7 +29,10 @@ impl PipelineLogger {
     /// Use `sync_data`/`sync_all` (or a future config) if fsync-level durability is required.
     pub fn log_event(&self, step: &str, data: serde_json::Value) -> io::Result<()> {
         let mut event = serde_json::Map::new();
-        event.insert("step".to_string(), serde_json::Value::String(step.to_string()));
+        event.insert(
+            "step".to_string(),
+            serde_json::Value::String(step.to_string()),
+        );
         event.insert("data".to_string(), data);
 
         if let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -44,12 +47,11 @@ impl PipelineLogger {
             );
         }
 
-        let line = serde_json::to_string(&event)
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        let line = serde_json::to_string(&event).map_err(io::Error::other)?;
         let mut file = self
             .file
             .lock()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "logger mutex poisoned"))?;
+            .map_err(|_| io::Error::other("logger mutex poisoned"))?;
         file.write_all(line.as_bytes())?;
         file.write_all(b"\n")?;
         file.flush()?;
@@ -68,8 +70,7 @@ mod tests {
         logger
             .log_event("test", serde_json::json!({"ok": true}))
             .unwrap();
-        let entries =
-            std::fs::read_to_string(dir.path().join("events.jsonl")).unwrap();
+        let entries = std::fs::read_to_string(dir.path().join("events.jsonl")).unwrap();
         assert!(entries.contains("\"step\":\"test\""));
     }
 }

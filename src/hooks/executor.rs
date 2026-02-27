@@ -45,10 +45,10 @@ impl HookExecutor {
         let mut local_ctx: HashMap<String, String> = HashMap::new();
 
         // Check condition if present
-        if let Some(condition) = &hook.condition {
-            if !Self::eval_condition(condition, &local_ctx)? {
-                return Ok(results); // Skip hook if condition fails
-            }
+        if let Some(condition) = &hook.condition
+            && !Self::eval_condition(condition, &local_ctx)?
+        {
+            return Ok(results); // Skip hook if condition fails
         }
 
         // Execute each action

@@ -1,0 +1,69 @@
+[tools]
+rust = "latest"
+
+[tasks.build]
+description = "Build the project in release mode"
+run = "make build"
+
+[tasks.build-release]
+description = "Build the project in release mode"
+run = "make build"
+
+[tasks.dev]
+description = "Build the project in debug mode"
+run = "make dev"
+
+[tasks.test]
+description = "Run library tests"
+run = "make test"
+
+[tasks."test:all"]
+description = "Run all tests including integration targets"
+run = "make test-all"
+
+[tasks.lint]
+description = "Run clippy linter with warnings denied"
+run = "make lint"
+
+[tasks.format]
+description = "Format code with rustfmt"
+run = "make fmt"
+
+[tasks."fmt:check"]
+description = "Check formatting without modifying files"
+run = "make fmt-check"
+
+[tasks.check]
+description = "Quick compile check without building"
+run = "make check"
+
+[tasks.clean]
+description = "Remove build artifacts"
+run = "make clean"
+
+[tasks.install]
+description = "Build and install binary locally"
+run = "make install"
+
+[tasks.run]
+description = "Run compiled looprs binary"
+run = "make run"
+
+[tasks.watch]
+description = "Watch for changes and run checks"
+run = "make watch"
+
+[tasks.setup]
+description = "Install development dependencies"
+run = "make setup"
+
+[tasks.ci]
+description = "Run CI verification checks"
+run = "make ci"
+
+[tasks."verify:all"]
+description = "Run all local verification checks"
+run = "make all"
+
+[env]
+RUST_BACKTRACE = "1"

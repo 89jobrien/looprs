@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::file_refs::FileRefPolicy;
+use crate::fs_mode::FsMode;
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -122,6 +123,7 @@ pub struct AgentsConfig {
     pub max_parallel: usize,
     pub orchestration: String,
     pub delegate_by_default: bool,
+    pub fs_mode: FsMode,
     pub default_agent: Option<String>,
 }
 
@@ -132,12 +134,13 @@ impl Default for AgentsConfig {
             max_parallel: 3,
             orchestration: "sequential".to_string(),
             delegate_by_default: true,
+            fs_mode: FsMode::Write,
             default_agent: None,
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct PipelineChecksConfig {
     pub run_build: bool,
@@ -145,18 +148,6 @@ pub struct PipelineChecksConfig {
     pub run_lint: bool,
     pub run_typecheck: bool,
     pub run_bench: bool,
-}
-
-impl Default for PipelineChecksConfig {
-    fn default() -> Self {
-        Self {
-            run_build: false,
-            run_tests: false,
-            run_lint: false,
-            run_typecheck: false,
-            run_bench: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -243,7 +234,7 @@ mod tests {
         let config = AppConfig::default();
         let json = serde_json::to_string(&config).unwrap();
         let decoded: AppConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(decoded.pipeline.enabled, false);
+        assert!(!decoded.pipeline.enabled);
         assert_eq!(decoded.pipeline.log_dir, ".looprs/agent_logs/");
     }
 }

@@ -156,10 +156,10 @@ pub fn load_recent_observations(limit: usize) -> Option<Vec<String>> {
             continue;
         }
 
-        if let Ok(issue) = serde_json::from_str::<serde_json::Value>(line) {
-            if let Some(title) = issue.get("title").and_then(|t| t.as_str()) {
-                summaries.push(title.to_string());
-            }
+        if let Ok(issue) = serde_json::from_str::<serde_json::Value>(line)
+            && let Some(title) = issue.get("title").and_then(|t| t.as_str())
+        {
+            summaries.push(title.to_string());
         }
     }
 

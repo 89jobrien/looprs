@@ -3,9 +3,13 @@
 *.local.json
 .ctx/
 thoughts/
+docs/
 
 .env
 .looprs/provider.json
+.looprs/state.json
+.looprs/traces/
+.looprs/agent_logs/
 .beads/
 .github/
 .bacon-locations
@@ -13,3 +17,5 @@ thoughts/
 .DS_Store
 *.md
 !README.md
+
+mockstation/

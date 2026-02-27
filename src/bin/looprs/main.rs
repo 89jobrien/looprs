@@ -81,6 +81,7 @@ async fn main() -> Result<()> {
     let runtime = looprs::RuntimeSettings {
         defaults: app_config.defaults.clone(),
         max_tokens_override,
+        fs_mode: app_config.agents.fs_mode,
     };
     let mut agent = Agent::new_with_runtime(provider, runtime, app_config.file_ref_policy())?;
 
@@ -122,22 +123,21 @@ async fn main() -> Result<()> {
     let mut command_registry = CommandRegistry::new();
 
     // Load user commands
-    if user_commands_dir.exists() {
-        if let Ok(user_commands) = CommandRegistry::load_from_directory(&user_commands_dir) {
-            for cmd in user_commands.list() {
-                command_registry.register(cmd.clone());
-            }
+    if user_commands_dir.exists()
+        && let Ok(user_commands) = CommandRegistry::load_from_directory(&user_commands_dir)
+    {
+        for cmd in user_commands.list() {
+            command_registry.register(cmd.clone());
         }
     }
 
     // Load repo commands (will override user commands with same name)
-    if let Some(dir) = repo_commands_dir {
-        if dir.exists() {
-            if let Ok(repo_commands) = CommandRegistry::load_from_directory(&dir) {
-                for cmd in repo_commands.list() {
-                    command_registry.register(cmd.clone());
-                }
-            }
+    if let Some(dir) = repo_commands_dir
+        && dir.exists()
+        && let Ok(repo_commands) = CommandRegistry::load_from_directory(&dir)
+    {
+        for cmd in repo_commands.list() {
+            command_registry.register(cmd.clone());
         }
     }
 
@@ -292,7 +292,7 @@ async fn run_interactive(
         let helper = rl.helper().expect("helper just set");
         (helper.state(), helper.sets())
     };
-    bind_repl_keys(&mut rl, repl_state, repl_sets);
+    bind_repl_keys(&mut rl, repl_state, repl_sets, agent.fs_mode_handle());
 
     // Collect session context (jj status, bd issues, etc.)
     let context = SessionContext::collect();
@@ -322,10 +322,10 @@ async fn run_interactive(
 
     // Display context if available (unless quiet mode)
     if !cli_args.quiet {
-        if !context.is_empty() {
-            if let Some(formatted) = context.format_for_prompt() {
-                ui::info(format!("{}\n{}", "─".dimmed(), formatted.dimmed()));
-            }
+        if !context.is_empty()
+            && let Some(formatted) = context.format_for_prompt()
+        {
+            ui::info(format!("{}\n{}", "─".dimmed(), formatted.dimmed()));
         }
 
         // Display hook-injected context if available
@@ -595,6 +595,7 @@ fn setting_keys() -> Vec<String> {
         "defaults.max_context_tokens",
         "defaults.temperature",
         "defaults.timeout_seconds",
+        "fs_mode",
     ]
     .into_iter()
     .map(|s| s.to_string())
@@ -636,6 +637,7 @@ fn build_runtime_settings(
     looprs::RuntimeSettings {
         defaults: app_config.defaults.clone(),
         max_tokens_override,
+        fs_mode: app_config.agents.fs_mode,
     }
 }
 
@@ -650,10 +652,13 @@ async fn handle_colon_command(
     let mut parts = cmd.split_whitespace();
     let action = parts.next().unwrap_or("");
 
+    // Keep in-memory config in sync with live agent fs_mode (e.g. toggled via TAB).
+    app_config.agents.fs_mode = agent.fs_mode();
+
     match action {
         "help" => {
             ui::info("Usage: :set <key> <value>, :get <key>, :unset <key>");
-            ui::info("Keys: provider, model, max_tokens, timeout_secs, defaults.*");
+            ui::info("Keys: provider, model, max_tokens, timeout_secs, fs_mode, defaults.*");
         }
         "get" => {
             let key = parts.next();
@@ -664,6 +669,7 @@ async fn handle_colon_command(
                         .clone()
                         .unwrap_or_else(|| "auto".to_string());
                     ui::info(format!("provider = {provider}"));
+                    ui::info(format!("fs_mode = {}", agent.fs_mode().as_str()));
                     let settings = provider_settings_ref(provider_config, provider_name);
                     if let Some(settings) = settings {
                         if let Some(model) = &settings.model {
@@ -824,6 +830,7 @@ fn get_setting_value(
             .map(|v| v.to_string()),
         "defaults.temperature" => app_config.defaults.temperature.map(|v| v.to_string()),
         "defaults.timeout_seconds" => app_config.defaults.timeout_seconds.map(|v| v.to_string()),
+        "fs_mode" => Some(app_config.agents.fs_mode.as_str().to_string()),
         _ => None,
     }
 }
@@ -851,6 +858,7 @@ fn unset_setting(
         "defaults.max_context_tokens" => app_config.defaults.max_context_tokens = None,
         "defaults.temperature" => app_config.defaults.temperature = None,
         "defaults.timeout_seconds" => app_config.defaults.timeout_seconds = None,
+        "fs_mode" => app_config.agents.fs_mode = looprs::FsMode::Write,
         _ => {}
     }
 }

@@ -7,9 +7,15 @@ mod grep;
 mod read;
 mod write;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::env;
 use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicU8, Ordering},
+    Arc,
+};
+
+use crate::fs_mode::FsMode;
 
 use crate::api::ToolDefinition;
 use crate::errors::ToolContextError;
@@ -18,13 +24,40 @@ pub use error::ToolError;
 
 pub struct ToolContext {
     pub working_dir: PathBuf,
+    fs_mode: Arc<AtomicU8>,
 }
 
 impl ToolContext {
+    #[allow(dead_code)]
     pub fn new() -> Result<Self, ToolContextError> {
+        Self::new_with_mode(FsMode::default())
+    }
+
+    pub fn new_with_mode(mode: FsMode) -> Result<Self, ToolContextError> {
         Ok(Self {
             working_dir: env::current_dir().map_err(ToolContextError::WorkingDirUnavailable)?,
+            fs_mode: Arc::new(AtomicU8::new(mode.to_u8())),
         })
+    }
+
+    #[allow(dead_code)]
+    pub fn from_working_dir(working_dir: PathBuf, mode: FsMode) -> Self {
+        Self {
+            working_dir,
+            fs_mode: Arc::new(AtomicU8::new(mode.to_u8())),
+        }
+    }
+
+    pub fn fs_mode(&self) -> FsMode {
+        FsMode::from_u8(self.fs_mode.load(Ordering::Relaxed))
+    }
+
+    pub fn set_fs_mode(&self, mode: FsMode) {
+        self.fs_mode.store(mode.to_u8(), Ordering::Relaxed);
+    }
+
+    pub fn fs_mode_handle(&self) -> Arc<AtomicU8> {
+        self.fs_mode.clone()
     }
 
     /// Resolve a user-provided path within the working directory.
@@ -345,9 +378,50 @@ fn normalize_relative(p: &Path) -> Result<PathBuf, ()> {
     Ok(out)
 }
 
+fn enforce_fs_mode(tool: Tool, args: &Value, ctx: &ToolContext) -> Result<(), ToolError> {
+    let mode = ctx.fs_mode();
+    match mode {
+        FsMode::Write => Ok(()),
+        FsMode::Read => match tool {
+            Tool::Write | Tool::Edit | Tool::Bash => Err(ToolError::ModeDenied {
+                tool: tool.name().to_string(),
+                mode: mode.as_str().to_string(),
+                reason: "file writes are disabled".to_string(),
+            }),
+            _ => Ok(()),
+        },
+        FsMode::Update => match tool {
+            Tool::Bash => Err(ToolError::ModeDenied {
+                tool: tool.name().to_string(),
+                mode: mode.as_str().to_string(),
+                reason: "bash is disabled (it can create/modify files)".to_string(),
+            }),
+            Tool::Edit => Ok(()),
+            Tool::Write => {
+                let tool_args = ToolArgs::new(args);
+                let path = tool_args.get_str("path")?;
+                let full_path = ctx.resolve_path(path)?;
+                if full_path.is_file() {
+                    Ok(())
+                } else {
+                    Err(ToolError::ModeDenied {
+                        tool: tool.name().to_string(),
+                        mode: mode.as_str().to_string(),
+                        reason: "cannot create new files in update mode".to_string(),
+                    })
+                }
+            }
+            _ => Ok(()),
+        },
+    }
+}
+
 pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
     match Tool::from_name(name) {
-        Some(tool) => tool.execute(args, ctx),
+        Some(tool) => {
+            enforce_fs_mode(tool, args, ctx)?;
+            tool.execute(args, ctx)
+        }
         None => Err(ToolError::UnknownTool(name.to_string())),
     }
 }
@@ -359,13 +433,12 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fs_mode::FsMode;
 
     #[test]
     fn resolve_path_blocks_absolute_paths() {
         let dir = tempfile::tempdir().unwrap();
-        let ctx = ToolContext {
-            working_dir: dir.path().to_path_buf(),
-        };
+        let ctx = ToolContext::from_working_dir(dir.path().to_path_buf(), FsMode::Write);
 
         let err = ctx.resolve_path("/etc/passwd").unwrap_err();
         match err {
@@ -377,14 +450,62 @@ mod tests {
     #[test]
     fn resolve_path_blocks_parent_traversal() {
         let dir = tempfile::tempdir().unwrap();
-        let ctx = ToolContext {
-            working_dir: dir.path().to_path_buf(),
-        };
+        let ctx = ToolContext::from_working_dir(dir.path().to_path_buf(), FsMode::Write);
 
         let err = ctx.resolve_path("../escape.txt").unwrap_err();
         match err {
             ToolError::PathOutsideWorkingDir(_) => {}
             other => panic!("unexpected error: {other:?}"),
         }
+    }
+
+    #[test]
+    fn read_mode_blocks_write_edit_and_bash() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = ToolContext::from_working_dir(dir.path().to_path_buf(), FsMode::Read);
+
+        let args = serde_json::json!({"path": "out.txt", "content": "hello"});
+        let err = execute_tool("write", &args, &ctx).unwrap_err();
+        assert!(matches!(err, ToolError::ModeDenied { .. }));
+
+        let file = dir.path().join("a.txt");
+        std::fs::write(&file, "hello world").unwrap();
+        let args = serde_json::json!({"path": "a.txt", "old": "world", "new": "there"});
+        let err = execute_tool("edit", &args, &ctx).unwrap_err();
+        assert!(matches!(err, ToolError::ModeDenied { .. }));
+
+        let args = serde_json::json!({"cmd": "echo hi"});
+        let err = execute_tool("bash", &args, &ctx).unwrap_err();
+        assert!(matches!(err, ToolError::ModeDenied { .. }));
+    }
+
+    #[test]
+    fn update_mode_blocks_new_file_but_allows_existing_file_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = ToolContext::from_working_dir(dir.path().to_path_buf(), FsMode::Update);
+
+        let args = serde_json::json!({"path": "new.txt", "content": "hello"});
+        let err = execute_tool("write", &args, &ctx).unwrap_err();
+        assert!(matches!(err, ToolError::ModeDenied { .. }));
+
+        std::fs::write(dir.path().join("existing.txt"), "old").unwrap();
+        let args = serde_json::json!({"path": "existing.txt", "content": "new"});
+        let out = execute_tool("write", &args, &ctx).unwrap();
+        assert_eq!(out, "ok");
+        let content = std::fs::read_to_string(dir.path().join("existing.txt")).unwrap();
+        assert_eq!(content, "new");
+    }
+
+    #[test]
+    fn update_mode_allows_edit_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "hello world").unwrap();
+        let ctx = ToolContext::from_working_dir(dir.path().to_path_buf(), FsMode::Update);
+
+        let args = serde_json::json!({"path": "a.txt", "old": "world", "new": "there"});
+        let out = execute_tool("edit", &args, &ctx).unwrap();
+        assert_eq!(out, "ok");
+        let content = std::fs::read_to_string(dir.path().join("a.txt")).unwrap();
+        assert_eq!(content, "hello there");
     }
 }

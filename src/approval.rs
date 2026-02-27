@@ -4,7 +4,7 @@ use std::io::{self, Write};
 /// Prompt the user for approval via console
 /// Returns true if approved, false if declined
 pub fn console_approval_prompt(message: &str) -> bool {
-    print!("🔒 Approval required: {message} [y/N] ");
+    print!("Approval required: {message} [y/N] ");
 
     // If flushing stdout fails, treat as non-approved (non-fatal, best-effort UI).
     if io::stdout().flush().is_err() {
