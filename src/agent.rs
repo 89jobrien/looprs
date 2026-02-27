@@ -15,6 +15,25 @@ use crate::ui;
 use std::collections::HashMap;
 use tokio::time::{Duration, timeout};
 
+const MAX_TOOL_RESULT_CHARS_IN_CONTEXT: usize = 16_000;
+
+fn truncate_tool_result_for_context(content: &str) -> String {
+    if content.chars().count() <= MAX_TOOL_RESULT_CHARS_IN_CONTEXT {
+        return content.to_string();
+    }
+
+    let truncated: String = content
+        .chars()
+        .take(MAX_TOOL_RESULT_CHARS_IN_CONTEXT)
+        .collect();
+    let original_chars = content.chars().count();
+    format!(
+        "{}\n\n[truncated tool result: {} chars omitted]",
+        truncated,
+        original_chars.saturating_sub(MAX_TOOL_RESULT_CHARS_IN_CONTEXT)
+    )
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct RuntimeSettings {
     pub defaults: DefaultsConfig,
@@ -348,7 +367,7 @@ impl Agent {
 
                 let result = execute_tool(name.as_str(), input, &self.tool_ctx);
 
-                let content = match result {
+                let raw_content = match result {
                     Ok(ref output) => {
                         ui::tool_ok();
                         // Capture observation
@@ -378,6 +397,8 @@ impl Agent {
                         err_msg
                     }
                 };
+
+                let content = truncate_tool_result_for_context(&raw_content);
 
                 tool_results.push(ContentBlock::ToolResult {
                     tool_use_id: id.clone(),
@@ -498,6 +519,22 @@ mod tests {
         agent.add_user_message("First");
         agent.add_user_message("Second");
         assert_eq!(agent.messages.len(), 2);
+    }
+
+    #[test]
+    fn tool_result_truncation_keeps_small_content() {
+        let content = "short output";
+        let out = truncate_tool_result_for_context(content);
+        assert_eq!(out, content);
+    }
+
+    #[test]
+    fn tool_result_truncation_caps_large_content() {
+        let large = "x".repeat(MAX_TOOL_RESULT_CHARS_IN_CONTEXT + 50);
+        let out = truncate_tool_result_for_context(&large);
+        assert!(out.contains("[truncated tool result:"));
+        assert!(out.len() > MAX_TOOL_RESULT_CHARS_IN_CONTEXT);
+        assert!(out.len() < large.len());
     }
 
     #[test]
