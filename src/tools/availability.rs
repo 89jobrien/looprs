@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 
-use crate::plugins::binaries::{Fd, Rg};
 use crate::plugins::NamedTool;
+use crate::plugins::binaries::{Fd, Rg};
 
 /// Check if ripgrep (rg) binary is available in PATH
 pub fn is_rg_available() -> bool {

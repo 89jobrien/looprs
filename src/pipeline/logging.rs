@@ -1,4 +1,4 @@
-use std::fs::{create_dir_all, File, OpenOptions};
+use std::fs::{File, OpenOptions, create_dir_all};
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::Mutex;

@@ -7,12 +7,12 @@ mod grep;
 mod read;
 mod write;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicU8, Ordering},
     Arc,
+    atomic::{AtomicU8, Ordering},
 };
 
 use crate::fs_mode::FsMode;

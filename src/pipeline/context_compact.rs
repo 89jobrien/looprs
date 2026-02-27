@@ -1,6 +1,6 @@
 use crate::app_config::PipelineCompactionConfig;
 use anyhow::Result;
-use glob::{glob, Pattern};
+use glob::{Pattern, glob};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
