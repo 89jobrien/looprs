@@ -12,9 +12,23 @@ pub fn preview_len() -> usize {
 }
 
 pub fn allow_raw_output() -> bool {
-    std::env::var("LOOPRS_ALLOW_RAW_OUTPUT")
+    if !cfg!(debug_assertions) {
+        return false;
+    }
+
+    let explicitly_enabled = std::env::var("LOOPRS_ALLOW_RAW_OUTPUT")
         .ok()
-        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+
+    if !explicitly_enabled {
+        return false;
+    }
+
+    let env = std::env::var("LOOPRS_ENV")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    !matches!(env.as_str(), "prod" | "production")
 }
 
 pub fn strip_ansi(input: &str) -> String {
@@ -25,20 +39,52 @@ pub fn strip_ansi(input: &str) -> String {
 
     while i < bytes.len() {
         if bytes[i] == 0x1b {
-            // ESC
-            if i + 1 < bytes.len() && bytes[i + 1] == b'[' {
-                // CSI: ESC [ ... <final>
-                i += 2;
-                while i < bytes.len() {
-                    let b = bytes[i];
-                    // Final byte typically in range 0x40..0x7E
-                    if (0x40..=0x7e).contains(&b) {
+            if i + 1 >= bytes.len() {
+                break;
+            }
+
+            match bytes[i + 1] {
+                b'[' => {
+                    i += 2;
+                    while i < bytes.len() {
+                        let b = bytes[i];
                         i += 1;
-                        break;
+                        if (0x40..=0x7e).contains(&b) {
+                            break;
+                        }
                     }
-                    i += 1;
+                    continue;
                 }
-                continue;
+                b']' => {
+                    i += 2;
+                    while i < bytes.len() {
+                        if bytes[i] == 0x07 {
+                            i += 1;
+                            break;
+                        }
+                        if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
+                            i += 2;
+                            break;
+                        }
+                        i += 1;
+                    }
+                    continue;
+                }
+                b'P' | b'_' | b'^' | b'X' => {
+                    i += 2;
+                    while i < bytes.len() {
+                        if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
+                            i += 2;
+                            break;
+                        }
+                        i += 1;
+                    }
+                    continue;
+                }
+                _ => {
+                    i += 2;
+                    continue;
+                }
             }
         }
 
@@ -79,29 +125,50 @@ fn redact(input: &str) -> String {
     static PEM_RE: OnceLock<Regex> = OnceLock::new();
     static SK_RE: OnceLock<Regex> = OnceLock::new();
     static URL_CREDS_RE: OnceLock<Regex> = OnceLock::new();
+    static AUTH_RE: OnceLock<Regex> = OnceLock::new();
+    static JWT_RE: OnceLock<Regex> = OnceLock::new();
+    static PROVIDER_TOKEN_RE: OnceLock<Regex> = OnceLock::new();
     static KV_RE: OnceLock<Regex> = OnceLock::new();
 
     let pem_re = PEM_RE.get_or_init(|| {
-        Regex::new(r"(?s)-----BEGIN (?:RSA )?PRIVATE KEY-----.*?-----END (?:RSA )?PRIVATE KEY-----")
+        Regex::new(
+            r"(?s)-----BEGIN (?:[A-Z0-9 ]*PRIVATE KEY|OPENSSH PRIVATE KEY|PGP PRIVATE KEY BLOCK)-----.*?-----END (?:[A-Z0-9 ]*PRIVATE KEY|OPENSSH PRIVATE KEY|PGP PRIVATE KEY BLOCK)-----",
+        )
             .expect("pem regex")
     });
     let sk_re = SK_RE.get_or_init(|| Regex::new(r"\bsk-[A-Za-z0-9_\-]{10,}\b").expect("sk regex"));
-    let url_creds_re = URL_CREDS_RE.get_or_init(|| {
-        Regex::new(r"(https?://)([^/\s:@]+):([^/\s@]+)@").expect("url creds regex")
+    let url_creds_re = URL_CREDS_RE
+        .get_or_init(|| Regex::new(r"(https?://)([^/\s@]+)@").expect("url creds regex"));
+    let auth_re = AUTH_RE.get_or_init(|| {
+        Regex::new(r"(?im)(\bauthorization\b\s*[:=]\s*)([^\r\n]+)").expect("auth regex")
+    });
+    let jwt_re = JWT_RE.get_or_init(|| {
+        Regex::new(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b")
+            .expect("jwt regex")
+    });
+    let provider_token_re = PROVIDER_TOKEN_RE.get_or_init(|| {
+        Regex::new(
+            r"\b(?:ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9\-]{10,}|AKIA[0-9A-Z]{16})\b",
+        )
+        .expect("provider token regex")
     });
     let kv_re = KV_RE.get_or_init(|| {
-        // key: value  OR  key=value  (JSON/YAML/env-like)
         Regex::new(
-            r#"(?i)(api[_-]?key|authorization|access[_-]?token|token|secret|password)\s*([:=])\s*(["']?)([^\s"'\r\n,}]+)(["']?)"#,
+            r#"(?im)(\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|secret|password|passwd|pwd|client[_-]?secret)\b\s*[:=]\s*)(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\r\n,}]+)"#,
         )
         .expect("kv regex")
     });
 
     let mut s = input.to_string();
     s = pem_re.replace_all(&s, "[REDACTED PRIVATE KEY]").to_string();
-    s = url_creds_re.replace_all(&s, "$1$2:[REDACTED]@").to_string();
+    s = url_creds_re.replace_all(&s, "$1[REDACTED]@").to_string();
+    s = auth_re.replace_all(&s, "$1[REDACTED]").to_string();
     s = sk_re.replace_all(&s, "sk-[REDACTED]").to_string();
-    s = kv_re.replace_all(&s, "$1$2$3[REDACTED]$5").to_string();
+    s = jwt_re.replace_all(&s, "[REDACTED JWT]").to_string();
+    s = provider_token_re
+        .replace_all(&s, "[REDACTED TOKEN]")
+        .to_string();
+    s = kv_re.replace_all(&s, "$1[REDACTED]").to_string();
 
     s
 }
@@ -137,7 +204,7 @@ mod tests {
     fn redacts_url_credentials() {
         let s = "https://user:pass@example.com/path";
         let out = sanitize_for_console(s);
-        assert_eq!(out, "https://user:[REDACTED]@example.com/path");
+        assert_eq!(out, "https://[REDACTED]@example.com/path");
     }
 
     #[test]
@@ -145,5 +212,35 @@ mod tests {
         let s = "\u{1b}[31mred\u{1b}[0m";
         let out = strip_ansi(s);
         assert_eq!(out, "red");
+    }
+
+    #[test]
+    fn strips_osc_sequences() {
+        let s = "before\u{1b}]0;window-title\u{7}after";
+        let out = strip_ansi(s);
+        assert_eq!(out, "beforeafter");
+    }
+
+    #[test]
+    fn redacts_authorization_header() {
+        let s = "Authorization: Bearer super-secret-token";
+        let out = sanitize_for_console(s);
+        assert_eq!(out, "Authorization: [REDACTED]");
+    }
+
+    #[test]
+    fn redacts_jwt_tokens() {
+        let s = "jwt eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abcdefghijklmno1234567890.pqrstuvwxyzABCDE1234567890";
+        let out = sanitize_for_console(s);
+        assert!(out.contains("[REDACTED JWT]"));
+    }
+
+    #[test]
+    fn redacts_provider_tokens() {
+        let s = "ghp_abcdefghijklmnopqrstuvwxyz123456 and AKIA1234567890ABCDEF";
+        let out = sanitize_for_console(s);
+        assert!(!out.contains("ghp_abcdefghijklmnopqrstuvwxyz123456"));
+        assert!(!out.contains("AKIA1234567890ABCDEF"));
+        assert!(out.contains("[REDACTED TOKEN]"));
     }
 }

@@ -1,6 +1,7 @@
 use super::ToolArgs;
 use super::ToolContext;
 use super::error::ToolError;
+use crate::config::{MAX_GLOB_HITS, MAX_GLOB_OUTPUT_CHARS};
 use serde_json::Value;
 use std::fs;
 
@@ -34,14 +35,54 @@ pub(super) fn tool_glob(args: &Value, ctx: &ToolContext) -> Result<String, ToolE
     });
 
     if paths.is_empty() {
-        Ok("none".to_string())
-    } else {
-        Ok(paths
-            .iter()
-            .map(|p| p.display().to_string())
-            .collect::<Vec<_>>()
-            .join("\n"))
+        return Ok("none".to_string());
     }
+
+    let mut omitted_entries = 0usize;
+    if paths.len() > MAX_GLOB_HITS {
+        omitted_entries += paths.len() - MAX_GLOB_HITS;
+        paths.truncate(MAX_GLOB_HITS);
+    }
+
+    let mut output = String::new();
+    let mut truncated_by_chars = false;
+
+    for (index, path) in paths.iter().enumerate() {
+        let line = path.display().to_string();
+        let line_chars = line.chars().count();
+        let separator_chars = if output.is_empty() { 0 } else { 1 };
+
+        if output.chars().count() + separator_chars + line_chars > MAX_GLOB_OUTPUT_CHARS {
+            omitted_entries += paths.len() - index;
+            truncated_by_chars = true;
+            break;
+        }
+
+        if !output.is_empty() {
+            output.push('\n');
+        }
+        output.push_str(&line);
+    }
+
+    if omitted_entries > 0 {
+        if !output.is_empty() {
+            output.push('\n');
+        }
+
+        if truncated_by_chars {
+            output.push_str(&format!(
+                "[truncated glob results: {} entries omitted due to size cap]",
+                omitted_entries
+            ));
+        } else {
+            output.push_str(&format!(
+                "[truncated glob results: {} entries omitted due to hit cap]",
+                omitted_entries
+            ));
+        }
+    }
+
+    Ok(output)
 }
 
 #[cfg(test)]
@@ -75,5 +116,22 @@ mod tests {
 
         let out = tool_glob(&args, &ctx).unwrap();
         assert_eq!(out, "none");
+    }
+
+    #[test]
+    fn glob_caps_large_result_sets() {
+        let dir = tempfile::tempdir().unwrap();
+        for i in 0..(crate::config::MAX_GLOB_HITS + 10) {
+            let p = dir.path().join(format!("f{i:04}.txt"));
+            fs::write(p, "x").unwrap();
+        }
+
+        let ctx =
+            ToolContext::from_working_dir(dir.path().to_path_buf(), crate::fs_mode::FsMode::Write);
+        let args = json!({"pat": "*.txt"});
+
+        let out = tool_glob(&args, &ctx).unwrap();
+        assert!(out.contains("[truncated glob results:"));
+        assert!(out.contains("omitted"));
     }
 }
