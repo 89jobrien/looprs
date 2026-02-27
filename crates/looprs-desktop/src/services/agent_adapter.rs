@@ -1,3 +1,4 @@
+use crate::services::mockstation::{MockstationSnapshot, build_mockstation_snapshot};
 use looprs::runtime::events::gui_turn_metadata;
 use looprs::runtime::facade::bootstrap_runtime;
 use looprs::runtime::session::run_single_turn;
@@ -7,6 +8,7 @@ pub struct GuiSnapshot {
     pub status: String,
     pub prompt: String,
     pub response: String,
+    pub mockstation: MockstationSnapshot,
 }
 
 impl GuiSnapshot {
@@ -15,6 +17,7 @@ impl GuiSnapshot {
             status: "No run snapshot found".to_string(),
             prompt: String::new(),
             response: "Run this binary with LOOPRS_GUI_PROMPT to execute one turn.".to_string(),
+            mockstation: build_mockstation_snapshot(),
         }
     }
 }
@@ -30,6 +33,7 @@ pub async fn run_one_turn() -> GuiSnapshot {
                 status: "Provider initialization failed".to_string(),
                 prompt,
                 response: error.to_string(),
+                mockstation: build_mockstation_snapshot(),
             };
         }
     };
@@ -39,11 +43,28 @@ pub async fn run_one_turn() -> GuiSnapshot {
             status: "Turn complete".to_string(),
             prompt,
             response,
+            mockstation: build_mockstation_snapshot(),
         },
         Err(error) => GuiSnapshot {
             status: "Turn failed".to_string(),
             prompt,
             response: error.to_string(),
+            mockstation: build_mockstation_snapshot(),
+        },
+    }
+}
+
+pub fn run_one_turn_blocking() -> GuiSnapshot {
+    match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime.block_on(run_one_turn()),
+        Err(error) => GuiSnapshot {
+            status: "Failed to start runtime".to_string(),
+            prompt: String::new(),
+            response: error.to_string(),
+            mockstation: build_mockstation_snapshot(),
         },
     }
 }

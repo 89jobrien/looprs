@@ -49,6 +49,18 @@ run = "make install"
 description = "Run compiled looprs binary"
 run = "make run"
 
+[tasks.start]
+description = "Start looprs CLI in debug mode"
+run = "cargo run --bin looprs"
+
+[tasks.ui]
+description = "Start desktop UI application"
+run = "cargo run -p looprs-desktop"
+
+[tasks."start:everything"]
+description = "Build workspace and launch desktop UI (main app)"
+run = "cargo build --workspace && cargo run -p looprs-desktop"
+
 [tasks.watch]
 description = "Watch for changes and run checks"
 run = "make watch"

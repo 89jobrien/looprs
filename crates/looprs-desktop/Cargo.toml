@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-freya = { version = "0.3.0", default-features = false, features = ["custom-tokio-rt", "mocked-engine-development"] }
+freya = { version = "0.3.0", default-features = false, features = ["custom-tokio-rt", "skia"] }
 tokio = { version = "1.38", features = ["macros", "rt-multi-thread"] }
 looprs = { path = "../.." }
