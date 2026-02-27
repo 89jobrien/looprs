@@ -7,3 +7,4 @@ edition = "2024"
 freya = { version = "0.3.0", default-features = false, features = ["custom-tokio-rt", "skia"] }
 tokio = { version = "1.38", features = ["macros", "rt-multi-thread"] }
 looprs = { path = "../.." }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite"] }
