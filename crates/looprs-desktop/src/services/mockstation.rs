@@ -22,7 +22,7 @@ pub struct MockstationRuntime {
 impl MockstationRuntime {
     pub fn new() -> Self {
         let mut server = MockServer::default();
-        server.log("ready for connect/disconnect actions");
+        server.log("ready for terminal/ws/rest/browser actions");
 
         Self {
             seq: 0,
@@ -60,6 +60,53 @@ impl MockstationRuntime {
         self.ws.disconnect_browser();
         self.log("browser disconnected");
         self.server.log("browser detached from session");
+    }
+
+    pub fn start_websocket(&mut self) {
+        self.ws.start_websocket();
+        self.log("websocket transport online");
+        self.server.log("websocket transport started");
+    }
+
+    pub fn stop_websocket(&mut self) {
+        self.ws.stop_websocket();
+        self.log("websocket transport offline");
+        self.server.log("websocket transport stopped");
+    }
+
+    pub fn start_rest_api(&mut self) {
+        self.server.start_rest_api();
+        self.log("rest api server online");
+    }
+
+    pub fn stop_rest_api(&mut self) {
+        self.server.stop_rest_api();
+        self.log("rest api server offline");
+    }
+
+    pub fn run_terminal_command(&mut self, command: impl Into<String>) {
+        let command = command.into();
+        self.terminal
+            .push_outbound(format!("$ {}", command.as_str()));
+        self.terminal
+            .push_inbound(format!("command executed: {}", command));
+        self.log("terminal command simulated");
+    }
+
+    pub fn browser_rest_call(&mut self, route: impl Into<String>) {
+        let route = route.into();
+        self.browser
+            .push_outbound(format!("GET {}", route.as_str()));
+
+        if self.server.is_rest_running() {
+            let payload = format!("200 OK from {}", route);
+            self.browser.push_inbound(payload.clone());
+            self.log(format!("rest response -> browser: {}", payload));
+        } else {
+            self.browser
+                .push_inbound("503 REST API offline".to_string());
+            self.log("rest call failed: api offline");
+        }
     }
 
     pub fn send_from_terminal(&mut self, message: impl Into<String>) {

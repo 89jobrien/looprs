@@ -1,6 +1,6 @@
 #[derive(Clone)]
 pub struct MockServer {
-    running: bool,
+    rest_running: bool,
     session_id: String,
     events: Vec<String>,
 }
@@ -8,7 +8,7 @@ pub struct MockServer {
 impl Default for MockServer {
     fn default() -> Self {
         Self {
-            running: true,
+            rest_running: false,
             session_id: "demo-001".to_string(),
             events: vec!["server booted".to_string()],
         }
@@ -16,14 +16,32 @@ impl Default for MockServer {
 }
 
 impl MockServer {
+    pub fn start_rest_api(&mut self) {
+        self.rest_running = true;
+        self.log("rest api started on http://127.0.0.1:7777");
+    }
+
+    pub fn stop_rest_api(&mut self) {
+        self.rest_running = false;
+        self.log("rest api stopped");
+    }
+
+    pub fn is_rest_running(&self) -> bool {
+        self.rest_running
+    }
+
     pub fn log(&mut self, event: impl Into<String>) {
         self.events.push(event.into());
     }
 
     pub fn view(&self) -> String {
-        let state = if self.running { "running" } else { "stopped" };
+        let state = if self.rest_running {
+            "running"
+        } else {
+            "stopped"
+        };
         let mut lines = vec![
-            format!("server: {state}"),
+            format!("rest api: {state}"),
             format!("session: {}", self.session_id),
         ];
         lines.extend(
