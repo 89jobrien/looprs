@@ -2,7 +2,9 @@ use super::ToolArgs;
 use super::ToolContext;
 use super::error::ToolError;
 use serde_json::Value;
+use std::fmt::Write as _;
 use std::fs;
+use std::io::{BufRead, BufReader};
 
 pub(super) fn tool_read(args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
     let args = ToolArgs::new(args);
@@ -11,25 +13,55 @@ pub(super) fn tool_read(args: &Value, ctx: &ToolContext) -> Result<String, ToolE
     let limit = args.get_u64("limit")?;
 
     let full_path = ctx.resolve_path(path)?;
-    let content =
-        fs::read_to_string(&full_path).map_err(|_| ToolError::FileNotFound(path.to_string()))?;
 
-    let lines: Vec<&str> = content.lines().collect();
+    let file = fs::File::open(&full_path).map_err(|_| ToolError::FileNotFound(path.to_string()))?;
+    let mut reader = BufReader::new(file);
+    let mut line = String::new();
 
-    if offset >= lines.len() {
-        return Ok("(EOF)".to_string());
+    if limit == Some(0) {
+        return Ok(String::new());
     }
 
-    let end = limit
-        .map(|l| (offset + l as usize).min(lines.len()))
-        .unwrap_or(lines.len());
+    for _ in 0..offset {
+        line.clear();
+        let bytes_read = reader
+            .read_line(&mut line)
+            .map_err(|_| ToolError::FileNotFound(path.to_string()))?;
+        if bytes_read == 0 {
+            return Ok("(EOF)".to_string());
+        }
+    }
 
-    let output = lines[offset..end]
-        .iter()
-        .enumerate()
-        .map(|(i, line)| format!("{:4}| {}", offset + i + 1, line))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let mut output = String::new();
+    let mut written = 0usize;
+    loop {
+        if let Some(limit) = limit
+            && written >= limit as usize
+        {
+            break;
+        }
+
+        line.clear();
+        let bytes_read = reader
+            .read_line(&mut line)
+            .map_err(|_| ToolError::FileNotFound(path.to_string()))?;
+        if bytes_read == 0 {
+            if written == 0 {
+                return Ok("(EOF)".to_string());
+            }
+            break;
+        }
+
+        let trimmed = line.trim_end_matches(&['\n', '\r'][..]);
+
+        let line_no = offset + written + 1;
+        let _ = writeln!(&mut output, "{:4}| {}", line_no, trimmed);
+        written += 1;
+    }
+
+    while output.ends_with('\n') {
+        output.pop();
+    }
 
     Ok(output)
 }
