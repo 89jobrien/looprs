@@ -25,22 +25,52 @@ impl GenerativeContext {
 
     /// Get text from cache
     pub fn get_text(&self, key: &str) -> Option<String> {
-        self.cache.read().unwrap().get_text(key).cloned()
+        self.cache
+            .read()
+            .expect("SlotCache lock poisoned")
+            .get_text(key)
+            .cloned()
     }
 
     /// Set text in cache
-    pub fn set_text(&mut self, key: String, value: String) {
-        self.cache.write().unwrap().set_text(key, value);
+    pub fn set_text(&self, key: String, value: String) {
+        self.cache
+            .write()
+            .expect("SlotCache lock poisoned")
+            .set_text(key, value);
     }
 
     /// Get color from cache
     pub fn get_color(&self, key: &str) -> Option<(u8, u8, u8)> {
-        self.cache.read().unwrap().get_color(key)
+        self.cache
+            .read()
+            .expect("SlotCache lock poisoned")
+            .get_color(key)
     }
 
     /// Set color in cache
-    pub fn set_color(&mut self, key: String, value: (u8, u8, u8)) {
-        self.cache.write().unwrap().set_color(key, value);
+    pub fn set_color(&self, key: String, value: (u8, u8, u8)) {
+        self.cache
+            .write()
+            .expect("SlotCache lock poisoned")
+            .set_color(key, value);
+    }
+
+    /// Get style from cache
+    pub fn get_style(&self, slot_id: &str) -> Option<super::slots::GeneratedStyle> {
+        self.cache
+            .read()
+            .expect("SlotCache lock poisoned")
+            .get_style(slot_id)
+            .cloned()
+    }
+
+    /// Set style in cache
+    pub fn set_style(&self, slot_id: String, value: super::slots::GeneratedStyle) {
+        self.cache
+            .write()
+            .expect("SlotCache lock poisoned")
+            .set_style(slot_id, value);
     }
 }
 

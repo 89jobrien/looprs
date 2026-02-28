@@ -71,6 +71,17 @@ impl SlotCache {
         self.styles.get(key)
     }
 
+    /// Set style in cache and mark as cached
+    pub fn set_style(&mut self, slot_id: String, value: GeneratedStyle) {
+        self.styles.insert(slot_id.clone(), value);
+        self.status.insert(
+            slot_id,
+            GenerationStatus::Cached {
+                generated_at: Instant::now(),
+            },
+        );
+    }
+
     /// Get generation status for a key
     pub fn get_status(&self, key: &str) -> GenerationStatus {
         self.status
