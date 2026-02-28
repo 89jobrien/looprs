@@ -19,7 +19,9 @@ docs/
 !README.md
 !tests/README.md
 !docs/TESTING.md
+!docs/ownership-model.md
 !*.ai.md
+!**/SKILL.md
 
 # Test coverage artifacts
 lcov.info

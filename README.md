@@ -251,6 +251,16 @@ See `PROMPT-ENGINEERING-RESULTS.md` for detailed findings and next steps.
 
 The `.looprs/` directory defines your agent configuration (provider, rules, skills, etc.).
 
+### Issue Tracking with Beads
+
+This project uses [beads](https://github.com/your-beads-repo) (`bd`) for issue tracking and task management. New contributors and agents should run:
+
+```bash
+bd onboard
+```
+
+See `AGENTS.md` for the full agent workflow and `bd` command reference.
+
 ## Architecture
 
 ### Ownership Model
