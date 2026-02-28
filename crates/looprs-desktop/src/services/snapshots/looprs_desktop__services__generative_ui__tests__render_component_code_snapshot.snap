@@ -1,0 +1,14 @@
+---
+source: crates/looprs-desktop/src/services/generative_ui.rs
+expression: code
+---
+use freya::prelude::*;
+
+pub fn generated_component() -> impl IntoElement {
+    rect()
+        .vertical()
+        .child(
+            label().text("Hello")
+
+        )
+}

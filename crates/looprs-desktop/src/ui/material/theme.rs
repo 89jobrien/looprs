@@ -228,7 +228,7 @@ impl MaterialTheme {
         // System health contributes most
         if let Some(ref health) = context.system_health {
             urgency += match health.status {
-                HealthStatus::Critical => 3,
+                HealthStatus::Critical => 5,
                 HealthStatus::Degraded => 2,
                 HealthStatus::Healthy => 0,
                 HealthStatus::Unknown => 1,

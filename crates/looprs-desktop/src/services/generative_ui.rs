@@ -362,9 +362,9 @@ pub fn parse_size(raw: &str) -> Option<String> {
             .trim()
             .parse::<f32>()
             .ok()
-            .map(|n| format!("Size::percent({n})"));
+            .map(|n| format!("Size::percent({:.1})", n));
     }
-    v.parse::<f32>().ok().map(|n| format!("Size::px({n})"))
+    v.parse::<f32>().ok().map(|n| format!("Size::px({:.1})", n))
 }
 
 pub fn parse_rgb(raw: &str) -> Option<(u8, u8, u8)> {
@@ -382,7 +382,7 @@ pub fn escape_rsx_string(input: &str) -> String {
         .replace('\\', "\\\\")
         .replace('"', "\\\"")
         .replace('\n', "\\n")
-        .replace('\r', "")
+        .replace('\r', "\\r")
 }
 
 pub fn merge_json_in_place(target: &mut Value, patch: Value) {

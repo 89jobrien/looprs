@@ -128,37 +128,34 @@ fn test_bidirectional_ws_messaging() {
     assert!(snapshot.terminal_view.contains("pong from browser"));
 }
 
-#[test]
-fn test_snapshot_always_valid() {
-    use proptest::prelude::*;
+use proptest::prelude::*;
 
-    proptest! {
-        #[test]
-        fn mockstation_snapshot_never_panics(
-            terminal_connected in any::<bool>(),
-            browser_connected in any::<bool>(),
-            ws_running in any::<bool>(),
-            rest_running in any::<bool>(),
-        ) {
-            let mut runtime = build_mockstation_runtime();
+proptest! {
+    #[test]
+    fn test_snapshot_always_valid(
+        terminal_connected in any::<bool>(),
+        browser_connected in any::<bool>(),
+        ws_running in any::<bool>(),
+        rest_running in any::<bool>(),
+    ) {
+        let mut runtime = build_mockstation_runtime();
 
-            if terminal_connected {
-                runtime.connect_terminal();
-            }
-            if browser_connected {
-                runtime.connect_browser();
-            }
-            if ws_running {
-                runtime.start_websocket();
-            }
-            if rest_running {
-                runtime.start_rest_api();
-            }
-
-            // Should never panic
-            let snapshot = runtime.snapshot();
-
-            assert!(!snapshot.transport_log.is_empty());
+        if terminal_connected {
+            runtime.connect_terminal();
         }
+        if browser_connected {
+            runtime.connect_browser();
+        }
+        if ws_running {
+            runtime.start_websocket();
+        }
+        if rest_running {
+            runtime.start_rest_api();
+        }
+
+        // Should never panic
+        let snapshot = runtime.snapshot();
+
+        assert!(!snapshot.transport_log.is_empty());
     }
 }

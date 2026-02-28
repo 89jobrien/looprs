@@ -1,12 +1,13 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use looprs_desktop::services::generative_ui::*;
 use serde_json::json;
+use std::hint::black_box;
 
 fn bench_json_merge(c: &mut Criterion) {
     let mut group = c.benchmark_group("json_merge");
 
     group.bench_function("small_objects", |b| {
-        let mut base = json!({"a": 1, "b": 2});
+        let base = json!({"a": 1, "b": 2});
         let patch = json!({"c": 3});
 
         b.iter(|| {
@@ -16,7 +17,7 @@ fn bench_json_merge(c: &mut Criterion) {
     });
 
     group.bench_function("deep_nesting", |b| {
-        let mut base = json!({"a": {"b": {"c": {"d": {"e": 1}}}}});
+        let base = json!({"a": {"b": {"c": {"d": {"e": 1}}}}});
         let patch = json!({"a": {"b": {"c": {"d": {"f": 2}}}}});
 
         b.iter(|| {
@@ -26,7 +27,7 @@ fn bench_json_merge(c: &mut Criterion) {
     });
 
     group.bench_function("wide_objects", |b| {
-        let mut base = json!({
+        let base = json!({
             "a": 1, "b": 2, "c": 3, "d": 4, "e": 5,
             "f": 6, "g": 7, "h": 8, "i": 9, "j": 10
         });
