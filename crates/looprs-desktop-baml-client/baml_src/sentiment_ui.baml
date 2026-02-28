@@ -114,7 +114,7 @@ function GenerateSentimentAwareUi(
        - Sentiment: VeryPositive, Positive, Neutral, Negative, VeryNegative
        - Severity: Critical, High, Medium, Low, Info
        - Mood: Calm, Urgent, Celebratory, Cautious, Empathetic, Professional
-    3. Use dynamic_text_template for runtime text generation (use {{variable}} syntax)
+    3. Use dynamic_text_template for runtime text generation (use \{\{variable\}\} syntax)
     4. Set adaptive_colors for sentiment-based color changes:
        - Positive: greens, blues (calming, success)
        - Neutral: grays, whites (professional)
@@ -140,7 +140,7 @@ function GenerateSentimentAwareUi(
     }
 
     Example dynamic_text_template:
-    "{{severity_prefix}} {{message_count}} messages require attention"
+    "\{\{severity_prefix\}\} \{\{message_count\}\} messages require attention"
 
     {{ ctx.output_format }}
   "#
@@ -163,7 +163,7 @@ function GenerateDynamicText(
     Sentiment: {{ sentiment }}
     Mood: {{ mood }}
 
-    Replace {{variable}} placeholders with actual values.
+    Replace \{\{variable\}\} placeholders with actual values.
     Adjust tone and word choice to match the sentiment and mood.
 
     Examples:
