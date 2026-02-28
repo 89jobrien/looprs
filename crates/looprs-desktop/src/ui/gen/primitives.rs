@@ -1,8 +1,3 @@
-//! Generative UI primitives
-//!
-//! This module will contain GenText, GenContainer, and other generative components.
-//! Implementation will be added in Task 2.
+//! Primitive generative components (GenText, GenContainer)
 
-// Placeholder exports to satisfy mod.rs
-pub struct GenText;
-pub struct GenContainer;
+// Placeholder - will implement in next tasks

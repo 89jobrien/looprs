@@ -9,5 +9,4 @@ pub mod primitives;
 pub mod slots;
 
 pub use context::{GenerativeContext, GenerativeProvider};
-pub use primitives::{GenContainer, GenText};
 pub use slots::{GeneratedStyle, GenerationStatus, SlotCache};

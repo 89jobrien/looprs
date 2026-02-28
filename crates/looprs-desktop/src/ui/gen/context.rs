@@ -23,37 +23,24 @@ impl GenerativeContext {
         }
     }
 
-    /// Get read access to the cache
-    pub fn with_cache<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&SlotCache) -> R,
-    {
-        let cache = self.cache.read().unwrap();
-        f(&cache)
-    }
-
-    /// Get write access to the cache
-    pub fn with_cache_mut<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&mut SlotCache) -> R,
-    {
-        let mut cache = self.cache.write().unwrap();
-        f(&mut cache)
-    }
-
-    /// Clear all cached values
-    pub fn clear(&self) {
-        self.with_cache_mut(|cache| cache.clear());
-    }
-
     /// Get text from cache
     pub fn get_text(&self, key: &str) -> Option<String> {
-        self.with_cache(|cache| cache.get_text(key).map(|entry| entry.value.clone()))
+        self.cache.read().unwrap().get_text(key).cloned()
+    }
+
+    /// Set text in cache
+    pub fn set_text(&mut self, key: String, value: String) {
+        self.cache.write().unwrap().set_text(key, value);
     }
 
     /// Get color from cache
-    pub fn get_color(&self, key: &str) -> Option<String> {
-        self.with_cache(|cache| cache.get_color(key).map(|entry| entry.value.clone()))
+    pub fn get_color(&self, key: &str) -> Option<(u8, u8, u8)> {
+        self.cache.read().unwrap().get_color(key)
+    }
+
+    /// Set color in cache
+    pub fn set_color(&mut self, key: String, value: (u8, u8, u8)) {
+        self.cache.write().unwrap().set_color(key, value);
     }
 }
 

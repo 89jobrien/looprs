@@ -3,96 +3,24 @@
 //! This module defines the cache and status types for LLM-generated content slots.
 
 use std::collections::HashMap;
+use std::time::Instant;
 
 /// Status of a generation request
 #[derive(Debug, Clone, PartialEq)]
 pub enum GenerationStatus {
-    /// Not yet requested
     Pending,
-    /// Currently being generated
-    InProgress,
-    /// Successfully generated
-    Complete,
-    /// Generation failed with error message
-    Failed(String),
-}
-
-/// Cache entry for a generated value
-#[derive(Debug, Clone)]
-pub struct CacheEntry<T> {
-    /// The generated value
-    pub value: T,
-    /// Status of the generation
-    pub status: GenerationStatus,
-}
-
-impl<T> CacheEntry<T> {
-    /// Create a new cache entry with pending status
-    pub fn pending(value: T) -> Self {
-        Self {
-            value,
-            status: GenerationStatus::Pending,
-        }
-    }
-
-    /// Create a new cache entry with complete status
-    pub fn complete(value: T) -> Self {
-        Self {
-            value,
-            status: GenerationStatus::Complete,
-        }
-    }
-
-    /// Create a new cache entry with failed status
-    pub fn failed(value: T, error: String) -> Self {
-        Self {
-            value,
-            status: GenerationStatus::Failed(error),
-        }
-    }
-
-    /// Check if generation is complete
-    pub fn is_complete(&self) -> bool {
-        matches!(self.status, GenerationStatus::Complete)
-    }
-
-    /// Check if generation is in progress
-    pub fn is_in_progress(&self) -> bool {
-        matches!(self.status, GenerationStatus::InProgress)
-    }
-
-    /// Mark as in progress
-    pub fn mark_in_progress(&mut self) {
-        self.status = GenerationStatus::InProgress;
-    }
-
-    /// Mark as complete and update value
-    pub fn mark_complete(&mut self, value: T) {
-        self.value = value;
-        self.status = GenerationStatus::Complete;
-    }
-
-    /// Mark as failed with error
-    pub fn mark_failed(&mut self, error: String) {
-        self.status = GenerationStatus::Failed(error);
-    }
+    Generating,
+    Cached { generated_at: Instant },
+    Failed { error: String, fallback_active: bool },
 }
 
 /// Cache for generated slot values
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SlotCache {
-    /// Cached text values by slot key
-    pub text: HashMap<String, CacheEntry<String>>,
-    /// Cached color values by slot key (hex format)
-    pub color: HashMap<String, CacheEntry<String>>,
-    /// Cached style values by slot key
-    pub style: HashMap<String, CacheEntry<GeneratedStyle>>,
-}
-
-impl Default for SlotCache {
-    fn default() -> Self {
-        Self::new()
-    }
+    text: HashMap<String, String>,
+    colors: HashMap<String, (u8, u8, u8)>,
+    styles: HashMap<String, GeneratedStyle>,
+    status: HashMap<String, GenerationStatus>,
 }
 
 impl SlotCache {
@@ -100,47 +28,75 @@ impl SlotCache {
     pub fn new() -> Self {
         Self {
             text: HashMap::new(),
-            color: HashMap::new(),
-            style: HashMap::new(),
+            colors: HashMap::new(),
+            styles: HashMap::new(),
+            status: HashMap::new(),
         }
     }
 
-    /// Clear all cached values
-    pub fn clear(&mut self) {
-        self.text.clear();
-        self.color.clear();
-        self.style.clear();
-    }
-
     /// Get text from cache
-    pub fn get_text(&self, key: &str) -> Option<&CacheEntry<String>> {
+    pub fn get_text(&self, key: &str) -> Option<&String> {
         self.text.get(key)
     }
 
+    /// Set text in cache and mark as cached
+    pub fn set_text(&mut self, key: String, value: String) {
+        self.text.insert(key.clone(), value);
+        self.status.insert(
+            key,
+            GenerationStatus::Cached {
+                generated_at: Instant::now(),
+            },
+        );
+    }
+
     /// Get color from cache
-    pub fn get_color(&self, key: &str) -> Option<&CacheEntry<String>> {
-        self.color.get(key)
+    pub fn get_color(&self, key: &str) -> Option<(u8, u8, u8)> {
+        self.colors.get(key).copied()
+    }
+
+    /// Set color in cache and mark as cached
+    pub fn set_color(&mut self, key: String, value: (u8, u8, u8)) {
+        self.colors.insert(key.clone(), value);
+        self.status.insert(
+            key,
+            GenerationStatus::Cached {
+                generated_at: Instant::now(),
+            },
+        );
     }
 
     /// Get style from cache
-    pub fn get_style(&self, key: &str) -> Option<&CacheEntry<GeneratedStyle>> {
-        self.style.get(key)
+    pub fn get_style(&self, key: &str) -> Option<&GeneratedStyle> {
+        self.styles.get(key)
+    }
+
+    /// Get generation status for a key
+    pub fn get_status(&self, key: &str) -> GenerationStatus {
+        self.status
+            .get(key)
+            .cloned()
+            .unwrap_or(GenerationStatus::Pending)
+    }
+
+    /// Mark a key as failed
+    pub fn set_failed(&mut self, key: String, error: String, fallback_active: bool) {
+        self.status.insert(
+            key,
+            GenerationStatus::Failed {
+                error,
+                fallback_active,
+            },
+        );
     }
 }
 
 /// Generated style properties
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GeneratedStyle {
-    /// Font size
-    pub font_size: Option<f32>,
-    /// Font weight
-    pub font_weight: Option<String>,
-    /// Text color (hex format)
-    pub color: Option<String>,
-    /// Background color (hex format)
-    pub background: Option<String>,
-    /// Padding
+    pub background: Option<(u8, u8, u8)>,
+    pub corner_radius: Option<f32>,
     pub padding: Option<f32>,
-    /// Margin
-    pub margin: Option<f32>,
+    pub border_color: Option<(u8, u8, u8)>,
+    pub border_width: Option<f32>,
 }
