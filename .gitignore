@@ -12,11 +12,24 @@ docs/
 .looprs/observability/
 .looprs/agent_logs/
 .beads/
-.github/
 .bacon-locations
 /.cursor/skills
 .DS_Store
 *.md
 !README.md
+!tests/README.md
+!docs/TESTING.md
+
+# Test coverage artifacts
+lcov.info
+*.profraw
+*.profdata
+target/llvm-cov/
+
+# Insta snapshots pending review
+*.snap.new
 
 #mockstation/
+
+# vendored crates
+third_party/**/target/

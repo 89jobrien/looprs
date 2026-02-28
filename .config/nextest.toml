@@ -1,0 +1,13 @@
+[profile.default]
+retries = 2
+fail-fast = false
+test-threads = "num-cpus"
+
+[profile.ci]
+retries = 3
+fail-fast = true
+test-threads = 4
+
+[[profile.default.overrides]]
+filter = 'test(live_)'
+retries = 0  # Don't retry live LLM tests

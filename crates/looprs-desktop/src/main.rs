@@ -1,6 +1,4 @@
-mod bootstrap;
-mod services;
-mod ui;
+use looprs_desktop::bootstrap;
 
 #[tokio::main]
 async fn main() {

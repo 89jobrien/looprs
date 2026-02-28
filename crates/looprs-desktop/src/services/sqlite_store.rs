@@ -26,7 +26,7 @@ async fn open_pool() -> Result<sqlx::Pool<sqlx::Sqlite>, sqlx::Error> {
         .disable_statement_logging();
 
     let pool = SqlitePoolOptions::new()
-        .max_connections(1)
+        .max_connections(4)  // Changed from 1 - prevents UI blocking
         .connect_with(options)
         .await?;
 
