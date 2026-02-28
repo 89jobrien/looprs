@@ -8,6 +8,7 @@ use crate::services::sqlite_store::{
 };
 use crate::ui::context_demo::context_demo_screen;
 use crate::ui::editor::editor_screen;
+use crate::ui::gen_demo::gen_demo_screen;
 use crate::ui::terminal::terminal_screen;
 use freya::prelude::*;
 use std::sync::Arc;
@@ -28,6 +29,7 @@ enum Screen {
     GenerativeUi,
     Mockstation,
     ContextDemo,
+    GenDemo,
 }
 
 fn action_button(
@@ -55,6 +57,7 @@ pub fn app() -> impl IntoElement {
             Some("genui") | Some("generativeui") | Some("GenerativeUi") => Screen::GenerativeUi,
             Some("mock") | Some("mockstation") | Some("Mockstation") => Screen::Mockstation,
             Some("context") | Some("contextdemo") | Some("ContextDemo") => Screen::ContextDemo,
+            Some("gen") | Some("gendemo") | Some("GenDemo") => Screen::GenDemo,
             _ => Screen::MainMenu,
         },
     );
@@ -862,6 +865,7 @@ pub fn app() -> impl IntoElement {
                 .into_element()
         }
         Screen::ContextDemo => context_demo_screen().into_element(),
+        Screen::GenDemo => gen_demo_screen().into_element(),
     };
 
     rect()
@@ -946,6 +950,18 @@ pub fn app() -> impl IntoElement {
                             move |_| screen.set(Screen::ContextDemo)
                         })
                         .child(label().text("Context Demo")),
+                )
+                .child(
+                    rect()
+                        .width(Size::flex(1.0))
+                        .padding(Gaps::new_all(6.0))
+                        .background((156, 39, 176))
+                        .center()
+                        .on_press({
+                            let mut screen = screen;
+                            move |_| screen.set(Screen::GenDemo)
+                        })
+                        .child(label().text("Gen Demo")),
                 )
                 .child(
                     rect()
