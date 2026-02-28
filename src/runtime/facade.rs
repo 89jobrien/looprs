@@ -42,3 +42,44 @@ pub async fn bootstrap_runtime(
         agent,
     })
 }
+
+#[cfg(test)]
+mod live_llm_tests {
+    use super::*;
+    use crate::runtime::events::gui_turn_metadata;
+    use crate::runtime::session::run_single_turn;
+
+    fn live_tests_enabled() -> bool {
+        std::env::var("LOOPRS_RUN_LIVE_LLM_TESTS")
+            .ok()
+            .is_some_and(|v| v == "1" || v == "true")
+    }
+
+    fn has_any_api_key() -> bool {
+        std::env::var("ANTHROPIC_API_KEY").ok().is_some()
+            || std::env::var("OPENAI_API_KEY").ok().is_some()
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_llm_single_turn_smoke() {
+        if !live_tests_enabled() || !has_any_api_key() {
+            return;
+        }
+
+        let mut rt = bootstrap_runtime(None)
+            .await
+            .expect("bootstrap_runtime failed");
+
+        rt.agent.clear_history();
+        let response = run_single_turn(
+            &mut rt.agent,
+            "Reply with the single word OK.",
+            gui_turn_metadata(),
+        )
+        .await
+        .expect("run_single_turn failed");
+
+        assert!(response.to_uppercase().contains("OK"));
+    }
+}
