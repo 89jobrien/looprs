@@ -2,6 +2,7 @@ use crate::app_config::PipelineCompactionConfig;
 use anyhow::Result;
 use glob::{Pattern, glob};
 use std::collections::HashSet;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -63,7 +64,7 @@ pub fn compact_context(
         let display = rel.to_string_lossy();
         files.push(display.to_string());
 
-        text.push_str(&format!("// File: {display}\n"));
+        let _ = writeln!(&mut text, "// File: {display}");
         match fs::metadata(&path) {
             Ok(meta) if meta.len() > MAX_FILE_BYTES => {
                 text.push_str("// Skipped: file too large\n\n");
@@ -76,16 +77,16 @@ pub fn compact_context(
             }
         }
 
-        let content = fs::read(&path)
-            .ok()
-            .and_then(|bytes| String::from_utf8(bytes).ok());
-        if let Some(content) = content {
-            text.push_str(&content);
-            if !content.ends_with('\n') {
-                text.push('\n');
+        match fs::read_to_string(&path) {
+            Ok(content) => {
+                text.push_str(&content);
+                if !content.ends_with('\n') {
+                    text.push('\n');
+                }
             }
-        } else {
-            text.push_str("// Skipped: non-utf8 or unreadable\n");
+            Err(_) => {
+                text.push_str("// Skipped: non-utf8 or unreadable\n");
+            }
         }
         text.push('\n');
     }
@@ -181,7 +182,12 @@ fn glob_files(repo_root: &Path, globs: &[String]) -> Vec<PathBuf> {
         if let Ok(entries) = glob(&pattern) {
             for entry in entries.flatten() {
                 if entry.is_file() {
-                    let entry_canon = fs::canonicalize(&entry).unwrap_or(entry.clone());
+                    let entry_lexically_in_repo = entry.starts_with(repo_root);
+                    if !entry_lexically_in_repo {
+                        continue;
+                    }
+
+                    let entry_canon = fs::canonicalize(&entry).unwrap_or_else(|_| entry.clone());
                     if entry_canon.starts_with(&repo_root_canon) {
                         paths.push(entry);
                     }
@@ -251,7 +257,7 @@ fn list_files_fallback(repo_root: &Path, globs: &[String]) -> Vec<PathBuf> {
 }
 
 fn sort_unique_paths(mut paths: Vec<PathBuf>) -> Vec<PathBuf> {
-    paths.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
+    paths.sort();
     paths.dedup();
     paths
 }
