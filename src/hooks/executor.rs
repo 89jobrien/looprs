@@ -205,7 +205,14 @@ impl HookExecutor {
 
     /// Run a shell command and capture output
     fn run_command(command_str: &str) -> anyhow::Result<String> {
-        let output = Command::new("sh").arg("-c").arg(command_str).output()?;
+        let output = if cfg!(windows) {
+            Command::new("cmd").arg("/C").arg(command_str).output()?
+        } else {
+            Command::new("/bin/sh")
+                .arg("-c")
+                .arg(command_str)
+                .output()?
+        };
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
 
