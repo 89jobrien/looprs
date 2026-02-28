@@ -9,7 +9,7 @@ readme = "README.md"
 rust-version = "1.88"
 
 [workspace]
-members = ["crates/looprs-desktop"]
+members = ["crates/looprs-desktop", "crates/looprs-desktop-baml-client"]
 
 [dependencies]
 anyhow = "1.0"
