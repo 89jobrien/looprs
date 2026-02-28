@@ -27,7 +27,7 @@ impl MockBrowser {
     }
 
     pub fn view(&self) -> String {
-        let status = if self.connected {
+        let status = if self.is_connected() {
             "connected"
         } else {
             "disconnected"

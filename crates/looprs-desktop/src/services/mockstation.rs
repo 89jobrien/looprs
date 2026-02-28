@@ -155,7 +155,3 @@ impl MockstationRuntime {
 pub fn build_mockstation_runtime() -> MockstationRuntime {
     MockstationRuntime::new()
 }
-
-pub fn build_mockstation_snapshot() -> MockstationSnapshot {
-    MockstationRuntime::new().snapshot()
-}
