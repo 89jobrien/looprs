@@ -70,7 +70,7 @@ In the running desktop app, click the **Generative UI** navigation button to ope
 
 This screen uses a generated BAML client to call a typed function and render both:
 - a `UiNode` tree (JSON)
-- generated Freya `rsx!` Rust component code
+- generated Freya builder-style Rust component code
 
 Requirements:
 

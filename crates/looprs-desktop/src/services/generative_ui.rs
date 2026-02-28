@@ -465,7 +465,7 @@ mod tests {
             tag: Union2KlabelOrKrect::Krect,
             text: None,
             attrs: [("direction".to_string(), "vertical".to_string())].into(),
-            children: vec![Arc::new(UiNode {
+            children: vec![Box::new(UiNode {
                 tag: Union2KlabelOrKrect::Klabel,
                 text: Some("Hello".to_string()),
                 attrs: Default::default(),

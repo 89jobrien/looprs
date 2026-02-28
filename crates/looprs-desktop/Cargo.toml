@@ -18,6 +18,8 @@ proptest = "1.4"
 insta = { version = "1.34", features = ["json"] }
 tokio-test = "0.4"                       # async test utilities
 criterion = "0.6"                        # benchmarking
+tempfile = "3.12"                        # temporary directories for tests
+serial_test = "3.2"                      # serialize tests that use global state
 
 [[bench]]
 name = "desktop_benchmarks"

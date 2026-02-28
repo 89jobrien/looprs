@@ -1,7 +1,9 @@
 use looprs_desktop::services::sqlite_store::*;
 use tempfile::TempDir;
+use serial_test::serial;
 
 #[tokio::test]
+#[serial]
 async fn test_load_chat_messages_empty_database() {
     let _tmp = setup_temp_observability_dir();
 
@@ -11,6 +13,7 @@ async fn test_load_chat_messages_empty_database() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_append_and_load_chat_messages() {
     let _tmp = setup_temp_observability_dir();
 
@@ -27,6 +30,7 @@ async fn test_append_and_load_chat_messages() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_load_chat_messages_respects_limit() {
     let _tmp = setup_temp_observability_dir();
 
@@ -42,6 +46,7 @@ async fn test_load_chat_messages_respects_limit() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_clear_chat_messages() {
     let _tmp = setup_temp_observability_dir();
 
@@ -53,6 +58,7 @@ async fn test_clear_chat_messages() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_append_observability_event() {
     let _tmp = setup_temp_observability_dir();
 
@@ -63,6 +69,7 @@ async fn test_append_observability_event() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_concurrent_writes() {
     let _tmp = setup_temp_observability_dir();
 
@@ -83,18 +90,24 @@ async fn test_concurrent_writes() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_database_connection_failure_handling() {
     // Set invalid observability dir to force connection failure
-    std::env::set_var("LOOPRS_OBSERVABILITY_DIR", "/invalid/path/that/cannot/exist");
+    unsafe {
+        std::env::set_var("LOOPRS_OBSERVABILITY_DIR", "/invalid/path/that/cannot/exist");
+    }
 
     // Should not panic, should return empty vec
     let messages = load_chat_messages(100).await;
     assert_eq!(messages.len(), 0);
 
-    std::env::remove_var("LOOPRS_OBSERVABILITY_DIR");
+    unsafe {
+        std::env::remove_var("LOOPRS_OBSERVABILITY_DIR");
+    }
 }
 
 #[tokio::test]
+#[serial]
 async fn test_messages_ordered_chronologically() {
     let _tmp = setup_temp_observability_dir();
 
@@ -113,6 +126,7 @@ async fn test_messages_ordered_chronologically() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_message_with_special_characters() {
     let _tmp = setup_temp_observability_dir();
 
@@ -126,6 +140,7 @@ async fn test_message_with_special_characters() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_empty_message_content() {
     let _tmp = setup_temp_observability_dir();
 
@@ -140,6 +155,8 @@ async fn test_empty_message_content() {
 // Test helper
 fn setup_temp_observability_dir() -> TempDir {
     let tmp = TempDir::new().unwrap();
-    std::env::set_var("LOOPRS_OBSERVABILITY_DIR", tmp.path());
+    unsafe {
+        std::env::set_var("LOOPRS_OBSERVABILITY_DIR", tmp.path());
+    }
     tmp
 }

@@ -24,31 +24,29 @@ impl GuiSnapshot {
     }
 }
 
-fn app() -> Element {
+fn app() -> impl IntoElement {
     let snapshot = SNAPSHOT
         .get()
         .cloned()
         .unwrap_or_else(GuiSnapshot::fallback);
 
-    rsx!(
-        rect {
-            width: "100%",
-            height: "100%",
-            padding: "12",
-            direction: "vertical",
-            label { "Status: {snapshot.status}" }
-            rect {
-                width: "100%",
-                height: "fill",
-                direction: "vertical",
-                label { "Prompt:" }
-                label { "{snapshot.prompt}" }
-                label { "" }
-                label { "Response:" }
-                label { "{snapshot.response}" }
-            }
-        }
-    )
+    rect()
+        .width(Size::fill())
+        .height(Size::fill())
+        .padding(Gaps::new_all(12.0))
+        .vertical()
+        .child(label().text(format!("Status: {}", snapshot.status)))
+        .child(
+            rect()
+                .width(Size::fill())
+                .height(Size::fill())
+                .vertical()
+                .child(label().text("Prompt:"))
+                .child(label().text(snapshot.prompt))
+                .child(label().text(""))
+                .child(label().text("Response:"))
+                .child(label().text(snapshot.response)),
+        )
 }
 
 #[tokio::main]
@@ -58,7 +56,7 @@ async fn main() {
     let snapshot = run_one_turn().await;
     let _ = SNAPSHOT.set(snapshot);
 
-    launch(app);
+    launch(LaunchConfig::new().with_window(WindowConfig::new(app)));
 }
 
 async fn run_one_turn() -> GuiSnapshot {
