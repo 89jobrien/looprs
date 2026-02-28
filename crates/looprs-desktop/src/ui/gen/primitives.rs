@@ -60,10 +60,22 @@ impl GenText {
 
 impl Component for GenText {
     fn render(&self) -> impl IntoElement {
-        // TODO: Check for GenerativeContext using Freya's use_context
-        // For now, always use fallback props
-        let final_text = self.text.clone();
-        let final_color = self.color;
+        // Check for GenerativeContext
+        let gen_ctx = use_try_consume::<super::context::GenerativeContext>();
+
+        // Get generated text if slot exists and context has it
+        let final_text = if let (Some(slot_id), Some(ctx)) = (&self.slot_id, gen_ctx.as_ref()) {
+            ctx.get_text(slot_id).unwrap_or_else(|| self.text.clone())
+        } else {
+            self.text.clone()
+        };
+
+        // Get generated color if available
+        let final_color = if let (Some(slot_id), Some(ctx)) = (&self.slot_id, gen_ctx.as_ref()) {
+            ctx.get_color(slot_id).unwrap_or(self.color)
+        } else {
+            self.color
+        };
 
         label()
             .text(final_text)

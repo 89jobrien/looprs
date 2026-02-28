@@ -15,6 +15,12 @@ pub struct GenerativeContext {
     cache: Arc<RwLock<SlotCache>>,
 }
 
+impl PartialEq for GenerativeContext {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.cache, &other.cache)
+    }
+}
+
 impl GenerativeContext {
     /// Create a new generative context
     pub fn new() -> Self {
@@ -80,21 +86,19 @@ impl Default for GenerativeContext {
     }
 }
 
-/// Provider component for generative context
-///
-/// This will be implemented as a Freya component wrapper in the next task.
-/// For now, it's a placeholder type.
-pub struct GenerativeProvider;
-
-impl GenerativeProvider {
-    /// Create a new generative provider
-    pub fn new() -> Self {
-        Self
-    }
+/// Provider component for GenerativeContext
+#[derive(Clone, PartialEq)]
+pub struct GenerativeProvider {
+    context: GenerativeContext,
 }
 
-impl Default for GenerativeProvider {
-    fn default() -> Self {
-        Self::new()
+impl GenerativeProvider {
+    pub fn new(context: GenerativeContext) -> Self {
+        Self { context }
+    }
+
+    pub fn child(self, child: impl freya::prelude::IntoElement) -> impl freya::prelude::IntoElement {
+        freya::prelude::use_provide_context(|| self.context.clone());
+        child
     }
 }
