@@ -15,8 +15,8 @@ pub struct GenText {
     reactive_fields: Vec<String>,
 }
 
-impl GenText {
-    pub fn new() -> Self {
+impl Default for GenText {
+    fn default() -> Self {
         Self {
             text: String::new(),
             font_size: 14.0,
@@ -24,6 +24,12 @@ impl GenText {
             slot_id: None,
             reactive_fields: Vec::new(),
         }
+    }
+}
+
+impl GenText {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn text(mut self, text: impl Into<String>) -> Self {
