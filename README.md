@@ -50,6 +50,61 @@ Or use `.looprs/provider.json` for persistent config. SDK aliases reuse the same
 `openai-sdk -> openai` and `anthropic-sdk/claude-sdk -> anthropic`.
 See `.env.example` for all options.
 
+## Desktop UI
+
+The desktop UI lives in `crates/looprs-desktop`.
+
+### Run
+
+From the repo root:
+
+```bash
+cargo run -p looprs-desktop
+# or, if you use mise:
+mise run ui
+```
+
+### Generative UI (BAML)
+
+In the running desktop app, click the **Generative UI** navigation button to open the "Live Generative UI" screen.
+
+This screen uses a generated BAML client to call a typed function and render both:
+- a `UiNode` tree (JSON)
+- generated Freya `rsx!` Rust component code
+
+Requirements:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+The BAML schema and generator config live here:
+- `crates/looprs-desktop-baml-client/baml_src/generative_ui.baml` (defines `GenerateUiTree`)
+- `crates/looprs-desktop-baml-client/baml_src/generators.baml` (writes generated Rust to `../src`)
+
+Generated code is checked in under:
+- `crates/looprs-desktop-baml-client/src/baml_client/*`
+
+To regenerate the client after editing `.baml` files (requires the BAML CLI installed):
+
+```bash
+baml-cli generate --from crates/looprs-desktop-baml-client/baml_src
+```
+
+### Live LLM tests
+
+Some tests that make real LLM calls are `#[ignore]` and additionally gated by:
+
+```bash
+export LOOPRS_RUN_LIVE_LLM_TESTS=1
+```
+
+Run ignored tests with:
+
+```bash
+cargo test --all-targets -- --ignored
+```
+
 ### Observability and External SSD Logs
 
 looprs writes structured runtime trace/events as JSONL. You can redirect observability output to an external SSD with:
