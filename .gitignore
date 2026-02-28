@@ -9,6 +9,7 @@ docs/
 .looprs/provider.json
 .looprs/state.json
 .looprs/traces/
+.looprs/observability/
 .looprs/agent_logs/
 .beads/
 .github/
