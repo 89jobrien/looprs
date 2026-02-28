@@ -35,11 +35,18 @@ pub fn app() -> Element {
     let mut genui_update = use_signal(GenerativeUiUpdate::default);
 
     use_effect(move || {
-        if *chat_history_loaded.read() {
+        if *screen.read() != Screen::AiChat {
             return;
         }
 
-        chat_history_loaded.set(true);
+        {
+            let mut loaded = chat_history_loaded.write();
+            if *loaded {
+                return;
+            }
+            *loaded = true;
+        }
+
         spawn(async move {
             let persisted = load_chat_messages(500).await;
             let hydrated = persisted
@@ -57,14 +64,19 @@ pub fn app() -> Element {
         if *screen.read() != Screen::GenerativeUi {
             return;
         }
-        if genui_handle.read().is_some() {
-            return;
-        }
 
-        let handle = start_live_generative_ui(Duration::from_secs(3));
+        let handle = {
+            let mut slot = genui_handle.write();
+            if slot.is_some() {
+                return;
+            }
+
+            let handle = start_live_generative_ui(Duration::from_secs(3));
+            *slot = Some(handle.clone());
+            handle
+        };
+
         let mut updates_rx = handle.updates.clone();
-        genui_handle.set(Some(handle.clone()));
-
         spawn(async move {
             loop {
                 if updates_rx.changed().await.is_err() {
@@ -81,10 +93,10 @@ pub fn app() -> Element {
             return;
         }
 
-        if let Some(handle) = genui_handle.read().as_ref() {
+        let handle = genui_handle.write().take();
+        if let Some(handle) = handle {
             handle.stop();
         }
-        genui_handle.set(None);
     });
 
     rsx!(
