@@ -1,9 +1,13 @@
 use crate::services::agent_adapter::run_turn_for_prompt;
+use crate::services::generative_ui::{
+    GenerativeUiCommand, GenerativeUiUpdate, LiveGenerativeUiHandle, start_live_generative_ui,
+};
 use crate::services::mockstation::build_mockstation_runtime;
 use crate::services::sqlite_store::{
     append_chat_message, append_observability_event, clear_chat_messages, load_chat_messages,
 };
 use freya::prelude::*;
+use std::time::Duration;
 
 #[derive(Clone)]
 struct ChatMessage {
@@ -15,6 +19,7 @@ struct ChatMessage {
 enum Screen {
     MainMenu,
     AiChat,
+    GenerativeUi,
     Mockstation,
 }
 
@@ -26,6 +31,8 @@ pub fn app() -> Element {
     let mut chat_history = use_signal(Vec::<ChatMessage>::new);
     let mut chat_history_loaded = use_signal(|| false);
     let mut mockstation = use_signal(build_mockstation_runtime);
+    let mut genui_handle = use_signal(|| None::<LiveGenerativeUiHandle>);
+    let mut genui_update = use_signal(GenerativeUiUpdate::default);
 
     use_effect(move || {
         if *chat_history_loaded.read() {
@@ -46,6 +53,40 @@ pub fn app() -> Element {
         });
     });
 
+    use_effect(move || {
+        if *screen.read() != Screen::GenerativeUi {
+            return;
+        }
+        if genui_handle.read().is_some() {
+            return;
+        }
+
+        let handle = start_live_generative_ui(Duration::from_secs(3));
+        let mut updates_rx = handle.updates.clone();
+        genui_handle.set(Some(handle.clone()));
+
+        spawn(async move {
+            loop {
+                if updates_rx.changed().await.is_err() {
+                    return;
+                }
+                let update = (*updates_rx.borrow()).clone();
+                genui_update.set(update);
+            }
+        });
+    });
+
+    use_effect(move || {
+        if *screen.read() == Screen::GenerativeUi {
+            return;
+        }
+
+        if let Some(handle) = genui_handle.read().as_ref() {
+            handle.stop();
+        }
+        genui_handle.set(None);
+    });
+
     rsx!(
         rect {
             width: "100%",
@@ -63,6 +104,13 @@ pub fn app() -> Element {
                     background: "rgb(60, 90, 132)",
                     onclick: move |_| screen.set(Screen::AiChat),
                     label { "AI Workspace" }
+                }
+                rect {
+                    width: "18%",
+                    padding: "6",
+                    background: "rgb(76, 52, 120)",
+                    onclick: move |_| screen.set(Screen::GenerativeUi),
+                    label { "Generative UI" }
                 }
                 rect {
                     width: "18%",
@@ -292,6 +340,177 @@ pub fn app() -> Element {
                             label { "Each Send appends to conversation history in this session." }
                         }
                     }
+                    )
+                }
+                Screen::GenerativeUi => {
+                    let update = genui_update.read().clone();
+                    let state_pretty = serde_json::to_string_pretty(&update.state)
+                        .unwrap_or_else(|_| "{}".to_string());
+                    let tree_pretty = serde_json::to_string_pretty(&update.component_tree_json)
+                        .unwrap_or_else(|_| "null".to_string());
+
+                    let genui_handle_interval_3 = genui_handle;
+                    let genui_handle_interval_5 = genui_handle;
+                    let genui_handle_regenerate = genui_handle;
+                    let genui_handle_theme_dark = genui_handle;
+                    let genui_handle_theme_light = genui_handle;
+                    let genui_handle_accent_purple = genui_handle;
+                    let genui_handle_accent_blue = genui_handle;
+
+                    rsx!(
+                        rect {
+                            width: "100%",
+                            height: "100%",
+                            direction: "vertical",
+                            spacing: "10",
+                            label { "Live Generative UI" }
+                            label { "Status: {update.status}" }
+                            label { "Interval: {update.interval_secs}s" }
+
+                            rect {
+                                width: "100%",
+                                height: "88%",
+                                direction: "horizontal",
+                                spacing: "12",
+
+                                rect {
+                                    width: "22%",
+                                    height: "fill",
+                                    direction: "vertical",
+                                    spacing: "8",
+                                    label { "Controls" }
+                                    rect {
+                                        width: "100%",
+                                        padding: "6",
+                                        background: "rgb(60, 90, 132)",
+                                        onclick: move |_| {
+                                            if let Some(h) = genui_handle_interval_3.read().as_ref() {
+                                                h.send(GenerativeUiCommand::SetIntervalSecs { secs: 3 });
+                                            }
+                                        },
+                                        label { "Every 3s" }
+                                    }
+                                    rect {
+                                        width: "100%",
+                                        padding: "6",
+                                        background: "rgb(60, 132, 90)",
+                                        onclick: move |_| {
+                                            if let Some(h) = genui_handle_interval_5.read().as_ref() {
+                                                h.send(GenerativeUiCommand::SetIntervalSecs { secs: 5 });
+                                            }
+                                        },
+                                        label { "Every 5s" }
+                                    }
+                                    rect {
+                                        width: "100%",
+                                        padding: "6",
+                                        background: "rgb(90, 90, 90)",
+                                        onclick: move |_| {
+                                            if let Some(h) = genui_handle_regenerate.read().as_ref() {
+                                                h.send(GenerativeUiCommand::Regenerate);
+                                            }
+                                        },
+                                        label { "Regenerate" }
+                                    }
+                                    rect {
+                                        width: "100%",
+                                        padding: "6",
+                                        background: "rgb(52, 76, 120)",
+                                        onclick: move |_| {
+                                            if let Some(h) = genui_handle_theme_dark.read().as_ref() {
+                                                h.send(GenerativeUiCommand::PatchState {
+                                                    patch: serde_json::json!({"theme": "dark"}),
+                                                });
+                                            }
+                                        },
+                                        label { "Theme: dark" }
+                                    }
+                                    rect {
+                                        width: "100%",
+                                        padding: "6",
+                                        background: "rgb(120, 120, 70)",
+                                        onclick: move |_| {
+                                            if let Some(h) = genui_handle_theme_light.read().as_ref() {
+                                                h.send(GenerativeUiCommand::PatchState {
+                                                    patch: serde_json::json!({"theme": "light"}),
+                                                });
+                                            }
+                                        },
+                                        label { "Theme: light" }
+                                    }
+                                    rect {
+                                        width: "100%",
+                                        padding: "6",
+                                        background: "rgb(76, 52, 120)",
+                                        onclick: move |_| {
+                                            if let Some(h) = genui_handle_accent_purple.read().as_ref() {
+                                                h.send(GenerativeUiCommand::PatchState {
+                                                    patch: serde_json::json!({"accent": "rgb(76, 52, 120)"}),
+                                                });
+                                            }
+                                        },
+                                        label { "Accent: purple" }
+                                    }
+                                    rect {
+                                        width: "100%",
+                                        padding: "6",
+                                        background: "rgb(60, 90, 132)",
+                                        onclick: move |_| {
+                                            if let Some(h) = genui_handle_accent_blue.read().as_ref() {
+                                                h.send(GenerativeUiCommand::PatchState {
+                                                    patch: serde_json::json!({"accent": "rgb(60, 90, 132)"}),
+                                                });
+                                            }
+                                        },
+                                        label { "Accent: blue" }
+                                    }
+                                }
+
+                                rect {
+                                    width: "52%",
+                                    height: "fill",
+                                    direction: "vertical",
+                                    spacing: "8",
+                                    label { "Generated component code" }
+                                    rect {
+                                        width: "100%",
+                                        height: "fill",
+                                        padding: "8",
+                                        background: "rgb(44, 44, 44)",
+                                        direction: "vertical",
+                                        label { "{update.component_code}" }
+                                    }
+                                }
+
+                                rect {
+                                    width: "26%",
+                                    height: "fill",
+                                    direction: "vertical",
+                                    spacing: "8",
+                                    label { "State" }
+                                    rect {
+                                        width: "100%",
+                                        height: "fill",
+                                        padding: "8",
+                                        background: "rgb(54, 54, 54)",
+                                        direction: "vertical",
+                                        label { "{state_pretty}" }
+                                    }
+                                    label { "Tree" }
+                                    rect {
+                                        width: "100%",
+                                        height: "40%",
+                                        padding: "8",
+                                        background: "rgb(54, 54, 54)",
+                                        direction: "vertical",
+                                        label { "{tree_pretty}" }
+                                    }
+                                    if let Some(err) = update.last_error.clone() {
+                                        label { "Error: {err}" }
+                                    }
+                                }
+                            }
+                        }
                     )
                 }
                 Screen::Mockstation => {

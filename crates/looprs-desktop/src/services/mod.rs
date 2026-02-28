@@ -1,4 +1,5 @@
 pub mod agent_adapter;
+pub mod generative_ui;
 pub mod mock_browser;
 pub mod mock_server;
 pub mod mock_terminal;
