@@ -2,7 +2,7 @@ use crate::services::agent_adapter::run_turn_for_prompt;
 use crate::services::generative_ui::{
     GenerativeUiCommand, GenerativeUiUpdate, LiveGenerativeUiHandle, start_live_generative_ui,
 };
-use crate::services::mockstation::build_mockstation_runtime;
+use crate::services::mockstation::{MockstationRuntime, build_mockstation_runtime};
 use crate::services::sqlite_store::{
     append_chat_message, append_observability_event, clear_chat_messages, load_chat_messages,
 };
@@ -24,13 +24,13 @@ enum Screen {
 }
 
 pub fn app() -> Element {
-    let mut screen = use_signal(|| Screen::AiChat);
+    let mut screen = use_signal(|| Screen::MainMenu);
     let mut chat_status = use_signal(|| "Ready".to_string());
     let mut chat_is_running = use_signal(|| false);
     let mut chat_input = use_signal(String::new);
     let mut chat_history = use_signal(Vec::<ChatMessage>::new);
     let mut chat_history_loaded = use_signal(|| false);
-    let mut mockstation = use_signal(build_mockstation_runtime);
+    let mut mockstation = use_signal(|| None::<MockstationRuntime>);
     let mut genui_handle = use_signal(|| None::<LiveGenerativeUiHandle>);
     let mut genui_update = use_signal(GenerativeUiUpdate::default);
 
@@ -97,6 +97,19 @@ pub fn app() -> Element {
         if let Some(handle) = handle {
             handle.stop();
         }
+    });
+
+    use_effect(move || {
+        if *screen.read() != Screen::Mockstation {
+            return;
+        }
+
+        let mut slot = mockstation.write();
+        if slot.is_some() {
+            return;
+        }
+
+        *slot = Some(build_mockstation_runtime());
     });
 
     rsx!(
@@ -526,7 +539,11 @@ pub fn app() -> Element {
                     )
                 }
                 Screen::Mockstation => {
-                    let live_mock = mockstation.read().snapshot();
+                    let live_mock = mockstation
+                        .read()
+                        .as_ref()
+                        .map(|runtime| runtime.snapshot())
+                        .unwrap_or_default();
                     rsx!(
                         rect {
                             width: "100%",
@@ -538,36 +555,36 @@ pub fn app() -> Element {
                                 direction: "vertical",
                                 spacing: "6",
                                 label { "Terminal" }
-                                rect { width: "100%", padding: "6", background: "rgb(44, 90, 160)", onclick: move |_| mockstation.write().connect_terminal(), label { "Connect" } }
-                                rect { width: "100%", padding: "6", background: "rgb(120, 44, 44)", onclick: move |_| mockstation.write().disconnect_terminal(), label { "Disconnect" } }
-                                rect { width: "100%", padding: "6", background: "rgb(52, 76, 120)", onclick: move |_| mockstation.write().run_terminal_command("ls -la"), label { "Run: ls -la" } }
-                                rect { width: "100%", padding: "6", background: "rgb(60, 60, 120)", onclick: move |_| mockstation.write().send_from_terminal("ping from terminal"), label { "Send WS frame" } }
+                                rect { width: "100%", padding: "6", background: "rgb(44, 90, 160)", onclick: move |_| { if let Some(runtime) = mockstation.write().as_mut() { runtime.connect_terminal(); } }, label { "Connect" } }
+                                rect { width: "100%", padding: "6", background: "rgb(120, 44, 44)", onclick: move |_| { if let Some(runtime) = mockstation.write().as_mut() { runtime.disconnect_terminal(); } }, label { "Disconnect" } }
+                                rect { width: "100%", padding: "6", background: "rgb(52, 76, 120)", onclick: move |_| { if let Some(runtime) = mockstation.write().as_mut() { runtime.run_terminal_command("ls -la"); } }, label { "Run: ls -la" } }
+                                rect { width: "100%", padding: "6", background: "rgb(60, 60, 120)", onclick: move |_| { if let Some(runtime) = mockstation.write().as_mut() { runtime.send_from_terminal("ping from terminal"); } }, label { "Send WS frame" } }
                             }
                             rect {
                                 width: "25%",
                                 direction: "vertical",
                                 spacing: "6",
                                 label { "WebSocket" }
-                                rect { width: "100%", padding: "6", background: "rgb(60, 100, 150)", onclick: move |_| mockstation.write().start_websocket(), label { "Start WS" } }
-                                rect { width: "100%", padding: "6", background: "rgb(100, 60, 120)", onclick: move |_| mockstation.write().stop_websocket(), label { "Stop WS" } }
+                                rect { width: "100%", padding: "6", background: "rgb(60, 100, 150)", onclick: move |_| { if let Some(runtime) = mockstation.write().as_mut() { runtime.start_websocket(); } }, label { "Start WS" } }
+                                rect { width: "100%", padding: "6", background: "rgb(100, 60, 120)", onclick: move |_| { if let Some(runtime) = mockstation.write().as_mut() { runtime.stop_websocket(); } }, label { "Stop WS" } }
                             }
                             rect {
                                 width: "25%",
                                 direction: "vertical",
                                 spacing: "6",
                                 label { "REST API" }
-                                rect { width: "100%", padding: "6", background: "rgb(52, 120, 88)", onclick: move |_| mockstation.write().start_rest_api(), label { "Start REST" } }
-                                rect { width: "100%", padding: "6", background: "rgb(120, 88, 52)", onclick: move |_| mockstation.write().stop_rest_api(), label { "Stop REST" } }
-                                rect { width: "100%", padding: "6", background: "rgb(70, 120, 120)", onclick: move |_| mockstation.write().browser_rest_call("/api/health"), label { "Browser GET /api/health" } }
+                                rect { width: "100%", padding: "6", background: "rgb(52, 120, 88)", onclick: move |_| { if let Some(runtime) = mockstation.write().as_mut() { runtime.start_rest_api(); } }, label { "Start REST" } }
+                                rect { width: "100%", padding: "6", background: "rgb(120, 88, 52)", onclick: move |_| { if let Some(runtime) = mockstation.write().as_mut() { runtime.stop_rest_api(); } }, label { "Stop REST" } }
+                                rect { width: "100%", padding: "6", background: "rgb(70, 120, 120)", onclick: move |_| { if let Some(runtime) = mockstation.write().as_mut() { runtime.browser_rest_call("/api/health"); } }, label { "Browser GET /api/health" } }
                             }
                             rect {
                                 width: "25%",
                                 direction: "vertical",
                                 spacing: "6",
                                 label { "Browser" }
-                                rect { width: "100%", padding: "6", background: "rgb(44, 120, 70)", onclick: move |_| mockstation.write().connect_browser(), label { "Connect" } }
-                                rect { width: "100%", padding: "6", background: "rgb(120, 80, 44)", onclick: move |_| mockstation.write().disconnect_browser(), label { "Disconnect" } }
-                                rect { width: "100%", padding: "6", background: "rgb(60, 120, 120)", onclick: move |_| mockstation.write().send_from_browser("pong from browser"), label { "Send WS frame" } }
+                                rect { width: "100%", padding: "6", background: "rgb(44, 120, 70)", onclick: move |_| { if let Some(runtime) = mockstation.write().as_mut() { runtime.connect_browser(); } }, label { "Connect" } }
+                                rect { width: "100%", padding: "6", background: "rgb(120, 80, 44)", onclick: move |_| { if let Some(runtime) = mockstation.write().as_mut() { runtime.disconnect_browser(); } }, label { "Disconnect" } }
+                                rect { width: "100%", padding: "6", background: "rgb(60, 120, 120)", onclick: move |_| { if let Some(runtime) = mockstation.write().as_mut() { runtime.send_from_browser("pong from browser"); } }, label { "Send WS frame" } }
                             }
                         }
 
