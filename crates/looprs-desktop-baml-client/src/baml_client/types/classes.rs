@@ -10,6 +10,219 @@ use baml::{BamlDecode, BamlEncode};
 
 #[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
 
+pub struct AdaptiveColors {
+    pub background_positive: String,
+
+    pub background_neutral: String,
+
+    pub background_negative: String,
+
+    pub text_positive: String,
+
+    pub text_neutral: String,
+
+    pub text_negative: String,
+
+    pub accent_color: Option<String>,
+
+    pub severity_indicator: Option<String>,
+}
+
+impl AsRef<AdaptiveColors> for AdaptiveColors {
+    fn as_ref(&self) -> &AdaptiveColors {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
+
+pub struct ContextAwareUiNode {
+    pub tag: Union7KbadgeOrKbuttonOrKcardOrKchipOrKlabelOrKparagraphOrKrect,
+
+    pub text: Option<String>,
+
+    pub attrs: std::collections::HashMap<String, String>,
+
+    pub children: Vec<Box<ContextAwareUiNode>>,
+
+    pub context_signals: Vec<String>,
+
+    pub material_colors: Option<MaterialColors>,
+
+    pub dynamic_text_template: Option<String>,
+
+    pub urgency_level: i64,
+
+    pub recommended_action: Option<String>,
+}
+
+impl AsRef<ContextAwareUiNode> for ContextAwareUiNode {
+    fn as_ref(&self) -> &ContextAwareUiNode {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
+
+pub struct DataAnomaly {
+    #[baml(name = "type")]
+    pub r#type: AnomalyType,
+
+    pub severity: AnomalySeverity,
+
+    pub metric: String,
+
+    pub current_value: f64,
+
+    pub expected_range: serde_json::Value,
+
+    pub description: String,
+
+    pub timestamp: String,
+}
+
+impl AsRef<DataAnomaly> for DataAnomaly {
+    fn as_ref(&self) -> &DataAnomaly {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
+
+pub struct MaterialColors {
+    pub primary: serde_json::Value,
+
+    pub container: serde_json::Value,
+
+    pub on_container: serde_json::Value,
+
+    pub border: Option<serde_json::Value>,
+}
+
+impl AsRef<MaterialColors> for MaterialColors {
+    fn as_ref(&self) -> &MaterialColors {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
+
+pub struct MessageAnalysis {
+    pub text: String,
+
+    pub sentiment: Sentiment,
+
+    pub severity: Severity,
+
+    pub mood: Mood,
+
+    pub confidence: f64,
+
+    pub key_phrases: Vec<String>,
+
+    pub suggested_response_tone: String,
+}
+
+impl AsRef<MessageAnalysis> for MessageAnalysis {
+    fn as_ref(&self) -> &MessageAnalysis {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
+
+pub struct SentimentContext {
+    pub sentiment: Sentiment,
+
+    pub severity: Severity,
+
+    pub mood: Mood,
+
+    pub confidence: f64,
+
+    pub keywords: Vec<String>,
+
+    pub tone_adjustments: std::collections::HashMap<String, String>,
+}
+
+impl AsRef<SentimentContext> for SentimentContext {
+    fn as_ref(&self) -> &SentimentContext {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
+
+pub struct SentimentUiNode {
+    pub tag: Union5KimageOrKlabelOrKparagraphOrKrectOrKsvg,
+
+    pub text: Option<String>,
+
+    pub attrs: std::collections::HashMap<String, String>,
+
+    pub children: Vec<Box<SentimentUiNode>>,
+
+    pub sentiment_context: Option<SentimentContext>,
+
+    pub dynamic_text_template: Option<String>,
+
+    pub adaptive_colors: Option<AdaptiveColors>,
+}
+
+impl AsRef<SentimentUiNode> for SentimentUiNode {
+    fn as_ref(&self) -> &SentimentUiNode {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
+
+pub struct SystemHealth {
+    pub status: HealthStatus,
+
+    pub cpu_usage: f64,
+
+    pub memory_usage: f64,
+
+    pub error_rate: f64,
+
+    pub response_time_p95: f64,
+
+    pub active_alerts: i64,
+
+    pub recommendations: Vec<String>,
+}
+
+impl AsRef<SystemHealth> for SystemHealth {
+    fn as_ref(&self) -> &SystemHealth {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
+
+pub struct UiContext {
+    pub sentiment: Option<SentimentContext>,
+
+    pub intent: Option<UserIntent>,
+
+    pub system_health: Option<SystemHealth>,
+
+    pub workflow_state: Option<WorkflowState>,
+
+    pub anomalies: Vec<DataAnomaly>,
+
+    pub timestamp: String,
+}
+
+impl AsRef<UiContext> for UiContext {
+    fn as_ref(&self) -> &UiContext {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
+
 pub struct UiNode {
     pub tag: Union2KlabelOrKrect,
 
@@ -22,6 +235,48 @@ pub struct UiNode {
 
 impl AsRef<UiNode> for UiNode {
     fn as_ref(&self) -> &UiNode {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
+
+pub struct UserIntent {
+    pub category: IntentCategory,
+
+    pub goal: String,
+
+    pub confidence: f64,
+
+    pub suggested_actions: Vec<String>,
+
+    pub required_context: Vec<String>,
+}
+
+impl AsRef<UserIntent> for UserIntent {
+    fn as_ref(&self) -> &UserIntent {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
+
+pub struct WorkflowState {
+    pub stage: WorkflowStage,
+
+    pub progress: f64,
+
+    pub current_step: String,
+
+    pub total_steps: i64,
+
+    pub blockers: Vec<String>,
+
+    pub estimated_remaining_time: Option<String>,
+}
+
+impl AsRef<WorkflowState> for WorkflowState {
+    fn as_ref(&self) -> &WorkflowState {
         self
     }
 }

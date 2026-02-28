@@ -3,4 +3,502 @@
 //
 // Learn more at https://docs.boundaryml.com
 
-// No enums defined
+//! Generated enum types.
+
+use baml::{BamlDecode, BamlEncode};
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BamlEncode, BamlDecode)]
+
+pub enum AnomalySeverity {
+    Info,
+
+    Warning,
+
+    Critical,
+}
+
+impl Default for AnomalySeverity {
+    fn default() -> Self {
+        Self::Info
+    }
+}
+
+impl std::fmt::Display for AnomalySeverity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Info => write!(f, "Info"),
+
+            Self::Warning => write!(f, "Warning"),
+
+            Self::Critical => write!(f, "Critical"),
+        }
+    }
+}
+
+impl std::str::FromStr for AnomalySeverity {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Info" => Ok(Self::Info),
+
+            "Warning" => Ok(Self::Warning),
+
+            "Critical" => Ok(Self::Critical),
+
+            _ => Err(()),
+        }
+    }
+}
+
+impl AsRef<AnomalySeverity> for AnomalySeverity {
+    fn as_ref(&self) -> &AnomalySeverity {
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BamlEncode, BamlDecode)]
+
+pub enum AnomalyType {
+    Spike,
+
+    Drop,
+
+    Outlier,
+
+    Trend,
+
+    Missing,
+}
+
+impl Default for AnomalyType {
+    fn default() -> Self {
+        Self::Spike
+    }
+}
+
+impl std::fmt::Display for AnomalyType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Spike => write!(f, "Spike"),
+
+            Self::Drop => write!(f, "Drop"),
+
+            Self::Outlier => write!(f, "Outlier"),
+
+            Self::Trend => write!(f, "Trend"),
+
+            Self::Missing => write!(f, "Missing"),
+        }
+    }
+}
+
+impl std::str::FromStr for AnomalyType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Spike" => Ok(Self::Spike),
+
+            "Drop" => Ok(Self::Drop),
+
+            "Outlier" => Ok(Self::Outlier),
+
+            "Trend" => Ok(Self::Trend),
+
+            "Missing" => Ok(Self::Missing),
+
+            _ => Err(()),
+        }
+    }
+}
+
+impl AsRef<AnomalyType> for AnomalyType {
+    fn as_ref(&self) -> &AnomalyType {
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BamlEncode, BamlDecode)]
+
+pub enum HealthStatus {
+    Healthy,
+
+    Degraded,
+
+    Critical,
+
+    Unknown,
+}
+
+impl Default for HealthStatus {
+    fn default() -> Self {
+        Self::Healthy
+    }
+}
+
+impl std::fmt::Display for HealthStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Healthy => write!(f, "Healthy"),
+
+            Self::Degraded => write!(f, "Degraded"),
+
+            Self::Critical => write!(f, "Critical"),
+
+            Self::Unknown => write!(f, "Unknown"),
+        }
+    }
+}
+
+impl std::str::FromStr for HealthStatus {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Healthy" => Ok(Self::Healthy),
+
+            "Degraded" => Ok(Self::Degraded),
+
+            "Critical" => Ok(Self::Critical),
+
+            "Unknown" => Ok(Self::Unknown),
+
+            _ => Err(()),
+        }
+    }
+}
+
+impl AsRef<HealthStatus> for HealthStatus {
+    fn as_ref(&self) -> &HealthStatus {
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BamlEncode, BamlDecode)]
+
+pub enum IntentCategory {
+    Debug,
+
+    Optimize,
+
+    Monitor,
+
+    Configure,
+
+    Explore,
+
+    Report,
+}
+
+impl Default for IntentCategory {
+    fn default() -> Self {
+        Self::Debug
+    }
+}
+
+impl std::fmt::Display for IntentCategory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Debug => write!(f, "Debug"),
+
+            Self::Optimize => write!(f, "Optimize"),
+
+            Self::Monitor => write!(f, "Monitor"),
+
+            Self::Configure => write!(f, "Configure"),
+
+            Self::Explore => write!(f, "Explore"),
+
+            Self::Report => write!(f, "Report"),
+        }
+    }
+}
+
+impl std::str::FromStr for IntentCategory {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Debug" => Ok(Self::Debug),
+
+            "Optimize" => Ok(Self::Optimize),
+
+            "Monitor" => Ok(Self::Monitor),
+
+            "Configure" => Ok(Self::Configure),
+
+            "Explore" => Ok(Self::Explore),
+
+            "Report" => Ok(Self::Report),
+
+            _ => Err(()),
+        }
+    }
+}
+
+impl AsRef<IntentCategory> for IntentCategory {
+    fn as_ref(&self) -> &IntentCategory {
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BamlEncode, BamlDecode)]
+
+pub enum Mood {
+    Calm,
+
+    Urgent,
+
+    Celebratory,
+
+    Cautious,
+
+    Empathetic,
+
+    Professional,
+}
+
+impl Default for Mood {
+    fn default() -> Self {
+        Self::Calm
+    }
+}
+
+impl std::fmt::Display for Mood {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Calm => write!(f, "Calm"),
+
+            Self::Urgent => write!(f, "Urgent"),
+
+            Self::Celebratory => write!(f, "Celebratory"),
+
+            Self::Cautious => write!(f, "Cautious"),
+
+            Self::Empathetic => write!(f, "Empathetic"),
+
+            Self::Professional => write!(f, "Professional"),
+        }
+    }
+}
+
+impl std::str::FromStr for Mood {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Calm" => Ok(Self::Calm),
+
+            "Urgent" => Ok(Self::Urgent),
+
+            "Celebratory" => Ok(Self::Celebratory),
+
+            "Cautious" => Ok(Self::Cautious),
+
+            "Empathetic" => Ok(Self::Empathetic),
+
+            "Professional" => Ok(Self::Professional),
+
+            _ => Err(()),
+        }
+    }
+}
+
+impl AsRef<Mood> for Mood {
+    fn as_ref(&self) -> &Mood {
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BamlEncode, BamlDecode)]
+
+pub enum Sentiment {
+    VeryPositive,
+
+    Positive,
+
+    Neutral,
+
+    Negative,
+
+    VeryNegative,
+}
+
+impl Default for Sentiment {
+    fn default() -> Self {
+        Self::VeryPositive
+    }
+}
+
+impl std::fmt::Display for Sentiment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::VeryPositive => write!(f, "VeryPositive"),
+
+            Self::Positive => write!(f, "Positive"),
+
+            Self::Neutral => write!(f, "Neutral"),
+
+            Self::Negative => write!(f, "Negative"),
+
+            Self::VeryNegative => write!(f, "VeryNegative"),
+        }
+    }
+}
+
+impl std::str::FromStr for Sentiment {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "VeryPositive" => Ok(Self::VeryPositive),
+
+            "Positive" => Ok(Self::Positive),
+
+            "Neutral" => Ok(Self::Neutral),
+
+            "Negative" => Ok(Self::Negative),
+
+            "VeryNegative" => Ok(Self::VeryNegative),
+
+            _ => Err(()),
+        }
+    }
+}
+
+impl AsRef<Sentiment> for Sentiment {
+    fn as_ref(&self) -> &Sentiment {
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BamlEncode, BamlDecode)]
+
+pub enum Severity {
+    Critical,
+
+    High,
+
+    Medium,
+
+    Low,
+
+    Info,
+}
+
+impl Default for Severity {
+    fn default() -> Self {
+        Self::Critical
+    }
+}
+
+impl std::fmt::Display for Severity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Critical => write!(f, "Critical"),
+
+            Self::High => write!(f, "High"),
+
+            Self::Medium => write!(f, "Medium"),
+
+            Self::Low => write!(f, "Low"),
+
+            Self::Info => write!(f, "Info"),
+        }
+    }
+}
+
+impl std::str::FromStr for Severity {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Critical" => Ok(Self::Critical),
+
+            "High" => Ok(Self::High),
+
+            "Medium" => Ok(Self::Medium),
+
+            "Low" => Ok(Self::Low),
+
+            "Info" => Ok(Self::Info),
+
+            _ => Err(()),
+        }
+    }
+}
+
+impl AsRef<Severity> for Severity {
+    fn as_ref(&self) -> &Severity {
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BamlEncode, BamlDecode)]
+
+pub enum WorkflowStage {
+    NotStarted,
+
+    Planning,
+
+    Executing,
+
+    Reviewing,
+
+    Completed,
+
+    Failed,
+}
+
+impl Default for WorkflowStage {
+    fn default() -> Self {
+        Self::NotStarted
+    }
+}
+
+impl std::fmt::Display for WorkflowStage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotStarted => write!(f, "NotStarted"),
+
+            Self::Planning => write!(f, "Planning"),
+
+            Self::Executing => write!(f, "Executing"),
+
+            Self::Reviewing => write!(f, "Reviewing"),
+
+            Self::Completed => write!(f, "Completed"),
+
+            Self::Failed => write!(f, "Failed"),
+        }
+    }
+}
+
+impl std::str::FromStr for WorkflowStage {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "NotStarted" => Ok(Self::NotStarted),
+
+            "Planning" => Ok(Self::Planning),
+
+            "Executing" => Ok(Self::Executing),
+
+            "Reviewing" => Ok(Self::Reviewing),
+
+            "Completed" => Ok(Self::Completed),
+
+            "Failed" => Ok(Self::Failed),
+
+            _ => Err(()),
+        }
+    }
+}
+
+impl AsRef<WorkflowStage> for WorkflowStage {
+    fn as_ref(&self) -> &WorkflowStage {
+        self
+    }
+}

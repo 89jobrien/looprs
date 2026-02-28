@@ -19,6 +19,7 @@ docs/
 !README.md
 !tests/README.md
 !docs/TESTING.md
+!*.ai.md
 
 # Test coverage artifacts
 lcov.info

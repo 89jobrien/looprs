@@ -108,6 +108,20 @@ macro_rules! baml_function_async {
 // Generate function structs
 // =============================================================================
 
+baml_function_async!(AnalyzeIntent(user_input: impl AsRef<str> + BamlEncode, conversation_history: impl AsRef<str> + BamlEncode, ) -> (stream_types::UserIntent, types::UserIntent));
+
+baml_function_async!(AnalyzeSentiment(text: impl AsRef<str> + BamlEncode, context: impl AsRef<str> + BamlEncode, ) -> (stream_types::MessageAnalysis, types::MessageAnalysis));
+
+baml_function_async!(AssessSystemHealth(metrics: impl AsRef<str> + BamlEncode, ) -> (stream_types::SystemHealth, types::SystemHealth));
+
+baml_function_async!(DetectAnomalies(metrics_history: impl AsRef<str> + BamlEncode, current_metrics: impl AsRef<str> + BamlEncode, ) -> (Vec<stream_types::DataAnomaly>, Vec<types::DataAnomaly>));
+
+baml_function_async!(GenerateContextAwareUi(goal: impl AsRef<str> + BamlEncode, context: &types::UiContext, ) -> (stream_types::ContextAwareUiNode, types::ContextAwareUiNode));
+
+baml_function_async!(GenerateDynamicText(template: impl AsRef<str> + BamlEncode, variables: &std::collections::HashMap<String, String>, sentiment: &types::Sentiment, mood: &types::Mood, ) -> (String, String));
+
+baml_function_async!(GenerateSentimentAwareUi(goal: impl AsRef<str> + BamlEncode, state_json: impl AsRef<str> + BamlEncode, sentiment_analysis: impl AsRef<str> + BamlEncode, ) -> (stream_types::SentimentUiNode, types::SentimentUiNode));
+
 baml_function_async!(GenerateUiTree(goal: impl AsRef<str> + BamlEncode, state_json: impl AsRef<str> + BamlEncode, ) -> (stream_types::UiNode, types::UiNode));
 
 // =============================================================================
@@ -118,6 +132,20 @@ baml_function_async!(GenerateUiTree(goal: impl AsRef<str> + BamlEncode, state_js
 pub struct BamlAsyncClient {
     options: FunctionOptions,
 
+    pub AnalyzeIntent: AnalyzeIntent,
+
+    pub AnalyzeSentiment: AnalyzeSentiment,
+
+    pub AssessSystemHealth: AssessSystemHealth,
+
+    pub DetectAnomalies: DetectAnomalies,
+
+    pub GenerateContextAwareUi: GenerateContextAwareUi,
+
+    pub GenerateDynamicText: GenerateDynamicText,
+
+    pub GenerateSentimentAwareUi: GenerateSentimentAwareUi,
+
     pub GenerateUiTree: GenerateUiTree,
 }
 
@@ -125,6 +153,20 @@ impl BamlAsyncClient {
     pub const fn new() -> Self {
         Self {
             options: FunctionOptions::new(),
+
+            AnalyzeIntent: AnalyzeIntent::new(),
+
+            AnalyzeSentiment: AnalyzeSentiment::new(),
+
+            AssessSystemHealth: AssessSystemHealth::new(),
+
+            DetectAnomalies: DetectAnomalies::new(),
+
+            GenerateContextAwareUi: GenerateContextAwareUi::new(),
+
+            GenerateDynamicText: GenerateDynamicText::new(),
+
+            GenerateSentimentAwareUi: GenerateSentimentAwareUi::new(),
 
             GenerateUiTree: GenerateUiTree::new(),
         }
@@ -134,6 +176,34 @@ impl BamlAsyncClient {
     pub fn with_options(&self, options: FunctionOptions) -> Self {
         Self {
             options: options.clone(),
+
+            AnalyzeIntent: AnalyzeIntent {
+                options: options.clone(),
+            },
+
+            AnalyzeSentiment: AnalyzeSentiment {
+                options: options.clone(),
+            },
+
+            AssessSystemHealth: AssessSystemHealth {
+                options: options.clone(),
+            },
+
+            DetectAnomalies: DetectAnomalies {
+                options: options.clone(),
+            },
+
+            GenerateContextAwareUi: GenerateContextAwareUi {
+                options: options.clone(),
+            },
+
+            GenerateDynamicText: GenerateDynamicText {
+                options: options.clone(),
+            },
+
+            GenerateSentimentAwareUi: GenerateSentimentAwareUi {
+                options: options.clone(),
+            },
 
             GenerateUiTree: GenerateUiTree {
                 options: options.clone(),

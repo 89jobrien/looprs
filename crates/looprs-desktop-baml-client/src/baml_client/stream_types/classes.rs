@@ -14,6 +14,219 @@ use baml::BamlDecode;
 
 #[derive(Debug, Clone, Default, BamlDecode)]
 
+pub struct AdaptiveColors {
+    pub background_positive: Option<String>,
+
+    pub background_neutral: Option<String>,
+
+    pub background_negative: Option<String>,
+
+    pub text_positive: Option<String>,
+
+    pub text_neutral: Option<String>,
+
+    pub text_negative: Option<String>,
+
+    pub accent_color: Option<String>,
+
+    pub severity_indicator: Option<String>,
+}
+
+impl AsRef<AdaptiveColors> for AdaptiveColors {
+    fn as_ref(&self) -> &AdaptiveColors {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlDecode)]
+
+pub struct ContextAwareUiNode {
+    pub tag: Option<types::Union7KbadgeOrKbuttonOrKcardOrKchipOrKlabelOrKparagraphOrKrect>,
+
+    pub text: Option<String>,
+
+    pub attrs: std::collections::HashMap<String, String>,
+
+    pub children: Vec<Box<ContextAwareUiNode>>,
+
+    pub context_signals: Vec<String>,
+
+    pub material_colors: Option<MaterialColors>,
+
+    pub dynamic_text_template: Option<String>,
+
+    pub urgency_level: Option<i64>,
+
+    pub recommended_action: Option<String>,
+}
+
+impl AsRef<ContextAwareUiNode> for ContextAwareUiNode {
+    fn as_ref(&self) -> &ContextAwareUiNode {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlDecode)]
+
+pub struct DataAnomaly {
+    #[baml(name = "type")]
+    pub r#type: Option<types::AnomalyType>,
+
+    pub severity: Option<types::AnomalySeverity>,
+
+    pub metric: Option<String>,
+
+    pub current_value: Option<f64>,
+
+    pub expected_range: Option<serde_json::Value>,
+
+    pub description: Option<String>,
+
+    pub timestamp: Option<String>,
+}
+
+impl AsRef<DataAnomaly> for DataAnomaly {
+    fn as_ref(&self) -> &DataAnomaly {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlDecode)]
+
+pub struct MaterialColors {
+    pub primary: Option<serde_json::Value>,
+
+    pub container: Option<serde_json::Value>,
+
+    pub on_container: Option<serde_json::Value>,
+
+    pub border: Option<serde_json::Value>,
+}
+
+impl AsRef<MaterialColors> for MaterialColors {
+    fn as_ref(&self) -> &MaterialColors {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlDecode)]
+
+pub struct MessageAnalysis {
+    pub text: Option<String>,
+
+    pub sentiment: Option<types::Sentiment>,
+
+    pub severity: Option<types::Severity>,
+
+    pub mood: Option<types::Mood>,
+
+    pub confidence: Option<f64>,
+
+    pub key_phrases: Vec<String>,
+
+    pub suggested_response_tone: Option<String>,
+}
+
+impl AsRef<MessageAnalysis> for MessageAnalysis {
+    fn as_ref(&self) -> &MessageAnalysis {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlDecode)]
+
+pub struct SentimentContext {
+    pub sentiment: Option<types::Sentiment>,
+
+    pub severity: Option<types::Severity>,
+
+    pub mood: Option<types::Mood>,
+
+    pub confidence: Option<f64>,
+
+    pub keywords: Vec<String>,
+
+    pub tone_adjustments: std::collections::HashMap<String, String>,
+}
+
+impl AsRef<SentimentContext> for SentimentContext {
+    fn as_ref(&self) -> &SentimentContext {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlDecode)]
+
+pub struct SentimentUiNode {
+    pub tag: Option<types::Union5KimageOrKlabelOrKparagraphOrKrectOrKsvg>,
+
+    pub text: Option<String>,
+
+    pub attrs: std::collections::HashMap<String, String>,
+
+    pub children: Vec<Box<SentimentUiNode>>,
+
+    pub sentiment_context: Option<SentimentContext>,
+
+    pub dynamic_text_template: Option<String>,
+
+    pub adaptive_colors: Option<AdaptiveColors>,
+}
+
+impl AsRef<SentimentUiNode> for SentimentUiNode {
+    fn as_ref(&self) -> &SentimentUiNode {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlDecode)]
+
+pub struct SystemHealth {
+    pub status: Option<types::HealthStatus>,
+
+    pub cpu_usage: Option<f64>,
+
+    pub memory_usage: Option<f64>,
+
+    pub error_rate: Option<f64>,
+
+    pub response_time_p95: Option<f64>,
+
+    pub active_alerts: Option<i64>,
+
+    pub recommendations: Vec<String>,
+}
+
+impl AsRef<SystemHealth> for SystemHealth {
+    fn as_ref(&self) -> &SystemHealth {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlDecode)]
+
+pub struct UiContext {
+    pub sentiment: Option<SentimentContext>,
+
+    pub intent: Option<UserIntent>,
+
+    pub system_health: Option<SystemHealth>,
+
+    pub workflow_state: Option<WorkflowState>,
+
+    pub anomalies: Vec<DataAnomaly>,
+
+    pub timestamp: Option<String>,
+}
+
+impl AsRef<UiContext> for UiContext {
+    fn as_ref(&self) -> &UiContext {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlDecode)]
+
 pub struct UiNode {
     pub tag: Option<types::Union2KlabelOrKrect>,
 
@@ -26,6 +239,48 @@ pub struct UiNode {
 
 impl AsRef<UiNode> for UiNode {
     fn as_ref(&self) -> &UiNode {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlDecode)]
+
+pub struct UserIntent {
+    pub category: Option<types::IntentCategory>,
+
+    pub goal: Option<String>,
+
+    pub confidence: Option<f64>,
+
+    pub suggested_actions: Vec<String>,
+
+    pub required_context: Vec<String>,
+}
+
+impl AsRef<UserIntent> for UserIntent {
+    fn as_ref(&self) -> &UserIntent {
+        self
+    }
+}
+
+#[derive(Debug, Clone, Default, BamlDecode)]
+
+pub struct WorkflowState {
+    pub stage: Option<types::WorkflowStage>,
+
+    pub progress: Option<f64>,
+
+    pub current_step: Option<String>,
+
+    pub total_steps: Option<i64>,
+
+    pub blockers: Vec<String>,
+
+    pub estimated_remaining_time: Option<String>,
+}
+
+impl AsRef<WorkflowState> for WorkflowState {
+    fn as_ref(&self) -> &WorkflowState {
         self
     }
 }

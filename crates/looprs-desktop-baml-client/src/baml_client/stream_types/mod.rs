@@ -18,7 +18,29 @@ pub use unions::*;
 /// Streaming variants of types (all fields Optional).
 #[derive(Debug, Clone)]
 pub enum StreamTypes {
+    AdaptiveColors(AdaptiveColors),
+
+    ContextAwareUiNode(ContextAwareUiNode),
+
+    DataAnomaly(DataAnomaly),
+
+    MaterialColors(MaterialColors),
+
+    MessageAnalysis(MessageAnalysis),
+
+    SentimentContext(SentimentContext),
+
+    SentimentUiNode(SentimentUiNode),
+
+    SystemHealth(SystemHealth),
+
+    UiContext(UiContext),
+
     UiNode(UiNode),
+
+    UserIntent(UserIntent),
+
+    WorkflowState(WorkflowState),
 }
 
 impl baml::KnownTypes for StreamTypes {
@@ -28,7 +50,29 @@ impl baml::KnownTypes for StreamTypes {
 
     fn type_name(&self) -> &'static str {
         match self {
+            StreamTypes::AdaptiveColors(_) => "AdaptiveColors",
+
+            StreamTypes::ContextAwareUiNode(_) => "ContextAwareUiNode",
+
+            StreamTypes::DataAnomaly(_) => "DataAnomaly",
+
+            StreamTypes::MaterialColors(_) => "MaterialColors",
+
+            StreamTypes::MessageAnalysis(_) => "MessageAnalysis",
+
+            StreamTypes::SentimentContext(_) => "SentimentContext",
+
+            StreamTypes::SentimentUiNode(_) => "SentimentUiNode",
+
+            StreamTypes::SystemHealth(_) => "SystemHealth",
+
+            StreamTypes::UiContext(_) => "UiContext",
+
             StreamTypes::UiNode(_) => "UiNode",
+
+            StreamTypes::UserIntent(_) => "UserIntent",
+
+            StreamTypes::WorkflowState(_) => "WorkflowState",
         }
     }
 }

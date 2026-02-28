@@ -4,3 +4,539 @@
 // Learn more at https://docs.boundaryml.com
 
 //! Generated enum builder wrappers for type-safe value access.
+
+/// Wrapper for the `AnomalySeverity` enum builder.
+///
+/// Provides type-safe method access to values defined in the schema.
+/// Access values via methods: `builder.ValueName()`
+
+pub struct AnomalySeverityEnumBuilder {
+    inner: baml::EnumBuilder,
+}
+
+impl AnomalySeverityEnumBuilder {
+    /// Create wrapper from runtime EnumBuilder.
+    pub(crate) fn new(inner: baml::EnumBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying EnumBuilder.
+    pub fn inner(&self) -> &baml::EnumBuilder {
+        &self.inner
+    }
+
+    /// Get the enum as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("AnomalySeverity is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Value Accessors (1:1 with schema value names)
+    // =========================================================================
+
+    /// Access the `Info` value builder.
+    pub fn value_Info(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Info").expect(
+            "AnomalySeverity.Info is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Warning` value builder.
+    pub fn value_Warning(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Warning").expect(
+            "AnomalySeverity.Warning is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Critical` value builder.
+    pub fn value_Critical(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Critical").expect(
+            "AnomalySeverity.Critical is statically defined in .baml and should always be present",
+        )
+    }
+}
+
+/// Wrapper for the `AnomalyType` enum builder.
+///
+/// Provides type-safe method access to values defined in the schema.
+/// Access values via methods: `builder.ValueName()`
+
+pub struct AnomalyTypeEnumBuilder {
+    inner: baml::EnumBuilder,
+}
+
+impl AnomalyTypeEnumBuilder {
+    /// Create wrapper from runtime EnumBuilder.
+    pub(crate) fn new(inner: baml::EnumBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying EnumBuilder.
+    pub fn inner(&self) -> &baml::EnumBuilder {
+        &self.inner
+    }
+
+    /// Get the enum as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("AnomalyType is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Value Accessors (1:1 with schema value names)
+    // =========================================================================
+
+    /// Access the `Spike` value builder.
+    pub fn value_Spike(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Spike")
+            .expect("AnomalyType.Spike is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `Drop` value builder.
+    pub fn value_Drop(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Drop")
+            .expect("AnomalyType.Drop is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `Outlier` value builder.
+    pub fn value_Outlier(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Outlier").expect(
+            "AnomalyType.Outlier is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Trend` value builder.
+    pub fn value_Trend(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Trend")
+            .expect("AnomalyType.Trend is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `Missing` value builder.
+    pub fn value_Missing(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Missing").expect(
+            "AnomalyType.Missing is statically defined in .baml and should always be present",
+        )
+    }
+}
+
+/// Wrapper for the `HealthStatus` enum builder.
+///
+/// Provides type-safe method access to values defined in the schema.
+/// Access values via methods: `builder.ValueName()`
+
+pub struct HealthStatusEnumBuilder {
+    inner: baml::EnumBuilder,
+}
+
+impl HealthStatusEnumBuilder {
+    /// Create wrapper from runtime EnumBuilder.
+    pub(crate) fn new(inner: baml::EnumBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying EnumBuilder.
+    pub fn inner(&self) -> &baml::EnumBuilder {
+        &self.inner
+    }
+
+    /// Get the enum as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("HealthStatus is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Value Accessors (1:1 with schema value names)
+    // =========================================================================
+
+    /// Access the `Healthy` value builder.
+    pub fn value_Healthy(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Healthy").expect(
+            "HealthStatus.Healthy is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Degraded` value builder.
+    pub fn value_Degraded(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Degraded").expect(
+            "HealthStatus.Degraded is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Critical` value builder.
+    pub fn value_Critical(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Critical").expect(
+            "HealthStatus.Critical is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Unknown` value builder.
+    pub fn value_Unknown(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Unknown").expect(
+            "HealthStatus.Unknown is statically defined in .baml and should always be present",
+        )
+    }
+}
+
+/// Wrapper for the `IntentCategory` enum builder.
+///
+/// Provides type-safe method access to values defined in the schema.
+/// Access values via methods: `builder.ValueName()`
+
+pub struct IntentCategoryEnumBuilder {
+    inner: baml::EnumBuilder,
+}
+
+impl IntentCategoryEnumBuilder {
+    /// Create wrapper from runtime EnumBuilder.
+    pub(crate) fn new(inner: baml::EnumBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying EnumBuilder.
+    pub fn inner(&self) -> &baml::EnumBuilder {
+        &self.inner
+    }
+
+    /// Get the enum as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("IntentCategory is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Value Accessors (1:1 with schema value names)
+    // =========================================================================
+
+    /// Access the `Debug` value builder.
+    pub fn value_Debug(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Debug").expect(
+            "IntentCategory.Debug is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Optimize` value builder.
+    pub fn value_Optimize(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Optimize").expect(
+            "IntentCategory.Optimize is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Monitor` value builder.
+    pub fn value_Monitor(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Monitor").expect(
+            "IntentCategory.Monitor is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Configure` value builder.
+    pub fn value_Configure(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Configure").expect(
+            "IntentCategory.Configure is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Explore` value builder.
+    pub fn value_Explore(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Explore").expect(
+            "IntentCategory.Explore is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Report` value builder.
+    pub fn value_Report(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Report").expect(
+            "IntentCategory.Report is statically defined in .baml and should always be present",
+        )
+    }
+}
+
+/// Wrapper for the `Mood` enum builder.
+///
+/// Provides type-safe method access to values defined in the schema.
+/// Access values via methods: `builder.ValueName()`
+
+pub struct MoodEnumBuilder {
+    inner: baml::EnumBuilder,
+}
+
+impl MoodEnumBuilder {
+    /// Create wrapper from runtime EnumBuilder.
+    pub(crate) fn new(inner: baml::EnumBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying EnumBuilder.
+    pub fn inner(&self) -> &baml::EnumBuilder {
+        &self.inner
+    }
+
+    /// Get the enum as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("Mood is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Value Accessors (1:1 with schema value names)
+    // =========================================================================
+
+    /// Access the `Calm` value builder.
+    pub fn value_Calm(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Calm")
+            .expect("Mood.Calm is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `Urgent` value builder.
+    pub fn value_Urgent(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Urgent")
+            .expect("Mood.Urgent is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `Celebratory` value builder.
+    pub fn value_Celebratory(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Celebratory")
+            .expect("Mood.Celebratory is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `Cautious` value builder.
+    pub fn value_Cautious(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Cautious")
+            .expect("Mood.Cautious is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `Empathetic` value builder.
+    pub fn value_Empathetic(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Empathetic")
+            .expect("Mood.Empathetic is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `Professional` value builder.
+    pub fn value_Professional(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Professional")
+            .expect("Mood.Professional is statically defined in .baml and should always be present")
+    }
+}
+
+/// Wrapper for the `Sentiment` enum builder.
+///
+/// Provides type-safe method access to values defined in the schema.
+/// Access values via methods: `builder.ValueName()`
+
+pub struct SentimentEnumBuilder {
+    inner: baml::EnumBuilder,
+}
+
+impl SentimentEnumBuilder {
+    /// Create wrapper from runtime EnumBuilder.
+    pub(crate) fn new(inner: baml::EnumBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying EnumBuilder.
+    pub fn inner(&self) -> &baml::EnumBuilder {
+        &self.inner
+    }
+
+    /// Get the enum as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("Sentiment is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Value Accessors (1:1 with schema value names)
+    // =========================================================================
+
+    /// Access the `VeryPositive` value builder.
+    pub fn value_VeryPositive(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("VeryPositive").expect(
+            "Sentiment.VeryPositive is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Positive` value builder.
+    pub fn value_Positive(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Positive").expect(
+            "Sentiment.Positive is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Neutral` value builder.
+    pub fn value_Neutral(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Neutral")
+            .expect("Sentiment.Neutral is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `Negative` value builder.
+    pub fn value_Negative(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Negative").expect(
+            "Sentiment.Negative is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `VeryNegative` value builder.
+    pub fn value_VeryNegative(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("VeryNegative").expect(
+            "Sentiment.VeryNegative is statically defined in .baml and should always be present",
+        )
+    }
+}
+
+/// Wrapper for the `Severity` enum builder.
+///
+/// Provides type-safe method access to values defined in the schema.
+/// Access values via methods: `builder.ValueName()`
+
+pub struct SeverityEnumBuilder {
+    inner: baml::EnumBuilder,
+}
+
+impl SeverityEnumBuilder {
+    /// Create wrapper from runtime EnumBuilder.
+    pub(crate) fn new(inner: baml::EnumBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying EnumBuilder.
+    pub fn inner(&self) -> &baml::EnumBuilder {
+        &self.inner
+    }
+
+    /// Get the enum as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("Severity is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Value Accessors (1:1 with schema value names)
+    // =========================================================================
+
+    /// Access the `Critical` value builder.
+    pub fn value_Critical(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Critical")
+            .expect("Severity.Critical is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `High` value builder.
+    pub fn value_High(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("High")
+            .expect("Severity.High is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `Medium` value builder.
+    pub fn value_Medium(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Medium")
+            .expect("Severity.Medium is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `Low` value builder.
+    pub fn value_Low(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Low")
+            .expect("Severity.Low is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `Info` value builder.
+    pub fn value_Info(&self) -> baml::EnumValueBuilder {
+        self.inner
+            .get_value("Info")
+            .expect("Severity.Info is statically defined in .baml and should always be present")
+    }
+}
+
+/// Wrapper for the `WorkflowStage` enum builder.
+///
+/// Provides type-safe method access to values defined in the schema.
+/// Access values via methods: `builder.ValueName()`
+
+pub struct WorkflowStageEnumBuilder {
+    inner: baml::EnumBuilder,
+}
+
+impl WorkflowStageEnumBuilder {
+    /// Create wrapper from runtime EnumBuilder.
+    pub(crate) fn new(inner: baml::EnumBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying EnumBuilder.
+    pub fn inner(&self) -> &baml::EnumBuilder {
+        &self.inner
+    }
+
+    /// Get the enum as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("WorkflowStage is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Value Accessors (1:1 with schema value names)
+    // =========================================================================
+
+    /// Access the `NotStarted` value builder.
+    pub fn value_NotStarted(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("NotStarted").expect(
+            "WorkflowStage.NotStarted is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Planning` value builder.
+    pub fn value_Planning(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Planning").expect(
+            "WorkflowStage.Planning is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Executing` value builder.
+    pub fn value_Executing(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Executing").expect(
+            "WorkflowStage.Executing is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Reviewing` value builder.
+    pub fn value_Reviewing(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Reviewing").expect(
+            "WorkflowStage.Reviewing is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Completed` value builder.
+    pub fn value_Completed(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Completed").expect(
+            "WorkflowStage.Completed is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `Failed` value builder.
+    pub fn value_Failed(&self) -> baml::EnumValueBuilder {
+        self.inner.get_value("Failed").expect(
+            "WorkflowStage.Failed is statically defined in .baml and should always be present",
+        )
+    }
+}

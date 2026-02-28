@@ -23,9 +23,53 @@ pub use baml::{Checked, StreamState};
 /// Serves as the compile-time type registry for BamlValue.
 #[derive(Debug, Clone)]
 pub enum Types {
+    AdaptiveColors(AdaptiveColors),
+
+    ContextAwareUiNode(ContextAwareUiNode),
+
+    DataAnomaly(DataAnomaly),
+
+    MaterialColors(MaterialColors),
+
+    MessageAnalysis(MessageAnalysis),
+
+    SentimentContext(SentimentContext),
+
+    SentimentUiNode(SentimentUiNode),
+
+    SystemHealth(SystemHealth),
+
+    UiContext(UiContext),
+
     UiNode(UiNode),
 
+    UserIntent(UserIntent),
+
+    WorkflowState(WorkflowState),
+
+    AnomalySeverity(AnomalySeverity),
+
+    AnomalyType(AnomalyType),
+
+    HealthStatus(HealthStatus),
+
+    IntentCategory(IntentCategory),
+
+    Mood(Mood),
+
+    Sentiment(Sentiment),
+
+    Severity(Severity),
+
+    WorkflowStage(WorkflowStage),
+
     Union2KlabelOrKrect(Union2KlabelOrKrect),
+
+    Union5KimageOrKlabelOrKparagraphOrKrectOrKsvg(Union5KimageOrKlabelOrKparagraphOrKrectOrKsvg),
+
+    Union7KbadgeOrKbuttonOrKcardOrKchipOrKlabelOrKparagraphOrKrect(
+        Union7KbadgeOrKbuttonOrKcardOrKchipOrKlabelOrKparagraphOrKrect,
+    ),
 }
 
 impl baml::KnownTypes for Types {
@@ -35,9 +79,55 @@ impl baml::KnownTypes for Types {
 
     fn type_name(&self) -> &'static str {
         match self {
+            Types::AdaptiveColors(_) => "AdaptiveColors",
+
+            Types::ContextAwareUiNode(_) => "ContextAwareUiNode",
+
+            Types::DataAnomaly(_) => "DataAnomaly",
+
+            Types::MaterialColors(_) => "MaterialColors",
+
+            Types::MessageAnalysis(_) => "MessageAnalysis",
+
+            Types::SentimentContext(_) => "SentimentContext",
+
+            Types::SentimentUiNode(_) => "SentimentUiNode",
+
+            Types::SystemHealth(_) => "SystemHealth",
+
+            Types::UiContext(_) => "UiContext",
+
             Types::UiNode(_) => "UiNode",
 
+            Types::UserIntent(_) => "UserIntent",
+
+            Types::WorkflowState(_) => "WorkflowState",
+
+            Types::AnomalySeverity(_) => "AnomalySeverity",
+
+            Types::AnomalyType(_) => "AnomalyType",
+
+            Types::HealthStatus(_) => "HealthStatus",
+
+            Types::IntentCategory(_) => "IntentCategory",
+
+            Types::Mood(_) => "Mood",
+
+            Types::Sentiment(_) => "Sentiment",
+
+            Types::Severity(_) => "Severity",
+
+            Types::WorkflowStage(_) => "WorkflowStage",
+
             Types::Union2KlabelOrKrect(_) => "Union2KlabelOrKrect",
+
+            Types::Union5KimageOrKlabelOrKparagraphOrKrectOrKsvg(_) => {
+                "Union5KimageOrKlabelOrKparagraphOrKrectOrKsvg"
+            }
+
+            Types::Union7KbadgeOrKbuttonOrKcardOrKchipOrKlabelOrKparagraphOrKrect(_) => {
+                "Union7KbadgeOrKbuttonOrKcardOrKchipOrKlabelOrKparagraphOrKrect"
+            }
         }
     }
 }

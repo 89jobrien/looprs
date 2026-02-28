@@ -6,6 +6,7 @@ use crate::services::mockstation::{MockstationRuntime, build_mockstation_runtime
 use crate::services::sqlite_store::{
     append_chat_message, append_observability_event, clear_chat_messages, load_chat_messages,
 };
+use crate::ui::context_demo::context_demo_screen;
 use crate::ui::editor::editor_screen;
 use crate::ui::terminal::terminal_screen;
 use freya::prelude::*;
@@ -26,6 +27,7 @@ enum Screen {
     Terminal,
     GenerativeUi,
     Mockstation,
+    ContextDemo,
 }
 
 fn action_button(
@@ -52,6 +54,7 @@ pub fn app() -> impl IntoElement {
             Some("terminal") | Some("Terminal") => Screen::Terminal,
             Some("genui") | Some("generativeui") | Some("GenerativeUi") => Screen::GenerativeUi,
             Some("mock") | Some("mockstation") | Some("Mockstation") => Screen::Mockstation,
+            Some("context") | Some("contextdemo") | Some("ContextDemo") => Screen::ContextDemo,
             _ => Screen::MainMenu,
         },
     );
@@ -858,6 +861,7 @@ pub fn app() -> impl IntoElement {
                 )
                 .into_element()
         }
+        Screen::ContextDemo => context_demo_screen().into_element(),
     };
 
     rect()
@@ -930,6 +934,18 @@ pub fn app() -> impl IntoElement {
                             move |_| screen.set(Screen::Mockstation)
                         })
                         .child(label().text("Mockstation")),
+                )
+                .child(
+                    rect()
+                        .width(Size::flex(1.0))
+                        .padding(Gaps::new_all(6.0))
+                        .background((76, 175, 80))
+                        .center()
+                        .on_press({
+                            let mut screen = screen;
+                            move |_| screen.set(Screen::ContextDemo)
+                        })
+                        .child(label().text("Context Demo")),
                 )
                 .child(
                     rect()

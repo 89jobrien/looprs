@@ -50,6 +50,87 @@ impl TypeBuilder {
     // Schema Class Accessors (1:1 with schema class names)
     // =========================================================================
 
+    /// Access the `AdaptiveColors` class builder.
+    pub fn AdaptiveColors(&self) -> AdaptiveColorsClassBuilder {
+        AdaptiveColorsClassBuilder::new(
+            self.inner
+                .get_class("AdaptiveColors")
+                .expect("class AdaptiveColors is defined in schema"),
+        )
+    }
+
+    /// Access the `ContextAwareUiNode` class builder.
+    pub fn ContextAwareUiNode(&self) -> ContextAwareUiNodeClassBuilder {
+        ContextAwareUiNodeClassBuilder::new(
+            self.inner
+                .get_class("ContextAwareUiNode")
+                .expect("class ContextAwareUiNode is defined in schema"),
+        )
+    }
+
+    /// Access the `DataAnomaly` class builder.
+    pub fn DataAnomaly(&self) -> DataAnomalyClassBuilder {
+        DataAnomalyClassBuilder::new(
+            self.inner
+                .get_class("DataAnomaly")
+                .expect("class DataAnomaly is defined in schema"),
+        )
+    }
+
+    /// Access the `MaterialColors` class builder.
+    pub fn MaterialColors(&self) -> MaterialColorsClassBuilder {
+        MaterialColorsClassBuilder::new(
+            self.inner
+                .get_class("MaterialColors")
+                .expect("class MaterialColors is defined in schema"),
+        )
+    }
+
+    /// Access the `MessageAnalysis` class builder.
+    pub fn MessageAnalysis(&self) -> MessageAnalysisClassBuilder {
+        MessageAnalysisClassBuilder::new(
+            self.inner
+                .get_class("MessageAnalysis")
+                .expect("class MessageAnalysis is defined in schema"),
+        )
+    }
+
+    /// Access the `SentimentContext` class builder.
+    pub fn SentimentContext(&self) -> SentimentContextClassBuilder {
+        SentimentContextClassBuilder::new(
+            self.inner
+                .get_class("SentimentContext")
+                .expect("class SentimentContext is defined in schema"),
+        )
+    }
+
+    /// Access the `SentimentUiNode` class builder.
+    pub fn SentimentUiNode(&self) -> SentimentUiNodeClassBuilder {
+        SentimentUiNodeClassBuilder::new(
+            self.inner
+                .get_class("SentimentUiNode")
+                .expect("class SentimentUiNode is defined in schema"),
+        )
+    }
+
+    /// Access the `SystemHealth` class builder.
+    pub fn SystemHealth(&self) -> SystemHealthClassBuilder {
+        SystemHealthClassBuilder::new(
+            self.inner
+                .get_class("SystemHealth")
+                .expect("class SystemHealth is defined in schema"),
+        )
+    }
+
+    /// Access the `UiContext` class builder.
+    pub fn UiContext(&self) -> UiContextClassBuilder {
+        UiContextClassBuilder::new(
+            self.inner
+                .get_class("UiContext")
+                .expect("class UiContext is defined in schema"),
+        )
+    }
+
     /// Access the `UiNode` class builder.
     pub fn UiNode(&self) -> UiNodeClassBuilder {
         UiNodeClassBuilder::new(
@@ -59,9 +140,99 @@ impl TypeBuilder {
         )
     }
 
+    /// Access the `UserIntent` class builder.
+    pub fn UserIntent(&self) -> UserIntentClassBuilder {
+        UserIntentClassBuilder::new(
+            self.inner
+                .get_class("UserIntent")
+                .expect("class UserIntent is defined in schema"),
+        )
+    }
+
+    /// Access the `WorkflowState` class builder.
+    pub fn WorkflowState(&self) -> WorkflowStateClassBuilder {
+        WorkflowStateClassBuilder::new(
+            self.inner
+                .get_class("WorkflowState")
+                .expect("class WorkflowState is defined in schema"),
+        )
+    }
+
     // =========================================================================
     // Schema Enum Accessors (1:1 with schema enum names)
     // =========================================================================
+
+    /// Access the `AnomalySeverity` enum builder.
+    pub fn AnomalySeverity(&self) -> AnomalySeverityEnumBuilder {
+        AnomalySeverityEnumBuilder::new(
+            self.inner
+                .get_enum("AnomalySeverity")
+                .expect("enum AnomalySeverity is defined in schema"),
+        )
+    }
+
+    /// Access the `AnomalyType` enum builder.
+    pub fn AnomalyType(&self) -> AnomalyTypeEnumBuilder {
+        AnomalyTypeEnumBuilder::new(
+            self.inner
+                .get_enum("AnomalyType")
+                .expect("enum AnomalyType is defined in schema"),
+        )
+    }
+
+    /// Access the `HealthStatus` enum builder.
+    pub fn HealthStatus(&self) -> HealthStatusEnumBuilder {
+        HealthStatusEnumBuilder::new(
+            self.inner
+                .get_enum("HealthStatus")
+                .expect("enum HealthStatus is defined in schema"),
+        )
+    }
+
+    /// Access the `IntentCategory` enum builder.
+    pub fn IntentCategory(&self) -> IntentCategoryEnumBuilder {
+        IntentCategoryEnumBuilder::new(
+            self.inner
+                .get_enum("IntentCategory")
+                .expect("enum IntentCategory is defined in schema"),
+        )
+    }
+
+    /// Access the `Mood` enum builder.
+    pub fn Mood(&self) -> MoodEnumBuilder {
+        MoodEnumBuilder::new(
+            self.inner
+                .get_enum("Mood")
+                .expect("enum Mood is defined in schema"),
+        )
+    }
+
+    /// Access the `Sentiment` enum builder.
+    pub fn Sentiment(&self) -> SentimentEnumBuilder {
+        SentimentEnumBuilder::new(
+            self.inner
+                .get_enum("Sentiment")
+                .expect("enum Sentiment is defined in schema"),
+        )
+    }
+
+    /// Access the `Severity` enum builder.
+    pub fn Severity(&self) -> SeverityEnumBuilder {
+        SeverityEnumBuilder::new(
+            self.inner
+                .get_enum("Severity")
+                .expect("enum Severity is defined in schema"),
+        )
+    }
+
+    /// Access the `WorkflowStage` enum builder.
+    pub fn WorkflowStage(&self) -> WorkflowStageEnumBuilder {
+        WorkflowStageEnumBuilder::new(
+            self.inner
+                .get_enum("WorkflowStage")
+                .expect("enum WorkflowStage is defined in schema"),
+        )
+    }
 
     // =========================================================================
     // Primitive Types (all infallible)

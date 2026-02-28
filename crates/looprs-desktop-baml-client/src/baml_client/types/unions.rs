@@ -30,3 +30,77 @@ impl Default for Union2KlabelOrKrect {
         Self::Krect
     }
 }
+
+/// Generated from: ("rect" | "label" | "paragraph" | "image" | "svg")
+#[derive(Debug, Clone, BamlEncode, BamlDecode, PartialEq, Eq, Hash)]
+#[baml(union)]
+pub enum Union5KimageOrKlabelOrKparagraphOrKrectOrKsvg {
+    #[baml(name = "string_rect", literal_string = "rect")]
+    Krect,
+
+    #[baml(name = "string_label", literal_string = "label")]
+    Klabel,
+
+    #[baml(name = "string_paragraph", literal_string = "paragraph")]
+    Kparagraph,
+
+    #[baml(name = "string_image", literal_string = "image")]
+    Kimage,
+
+    #[baml(name = "string_svg", literal_string = "svg")]
+    Ksvg,
+}
+
+impl AsRef<Union5KimageOrKlabelOrKparagraphOrKrectOrKsvg>
+    for Union5KimageOrKlabelOrKparagraphOrKrectOrKsvg
+{
+    fn as_ref(&self) -> &Union5KimageOrKlabelOrKparagraphOrKrectOrKsvg {
+        self
+    }
+}
+
+impl Default for Union5KimageOrKlabelOrKparagraphOrKrectOrKsvg {
+    fn default() -> Self {
+        Self::Krect
+    }
+}
+
+/// Generated from: ("rect" | "label" | "paragraph" | "card" | "button" | "chip" | "badge")
+#[derive(Debug, Clone, BamlEncode, BamlDecode, PartialEq, Eq, Hash)]
+#[baml(union)]
+pub enum Union7KbadgeOrKbuttonOrKcardOrKchipOrKlabelOrKparagraphOrKrect {
+    #[baml(name = "string_rect", literal_string = "rect")]
+    Krect,
+
+    #[baml(name = "string_label", literal_string = "label")]
+    Klabel,
+
+    #[baml(name = "string_paragraph", literal_string = "paragraph")]
+    Kparagraph,
+
+    #[baml(name = "string_card", literal_string = "card")]
+    Kcard,
+
+    #[baml(name = "string_button", literal_string = "button")]
+    Kbutton,
+
+    #[baml(name = "string_chip", literal_string = "chip")]
+    Kchip,
+
+    #[baml(name = "string_badge", literal_string = "badge")]
+    Kbadge,
+}
+
+impl AsRef<Union7KbadgeOrKbuttonOrKcardOrKchipOrKlabelOrKparagraphOrKrect>
+    for Union7KbadgeOrKbuttonOrKcardOrKchipOrKlabelOrKparagraphOrKrect
+{
+    fn as_ref(&self) -> &Union7KbadgeOrKbuttonOrKcardOrKchipOrKlabelOrKparagraphOrKrect {
+        self
+    }
+}
+
+impl Default for Union7KbadgeOrKbuttonOrKcardOrKchipOrKlabelOrKparagraphOrKrect {
+    fn default() -> Self {
+        Self::Krect
+    }
+}

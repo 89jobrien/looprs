@@ -5,6 +5,693 @@
 
 //! Generated class builder wrappers for type-safe field access.
 
+/// Wrapper for the `AdaptiveColors` class builder.
+///
+/// Provides type-safe method access to fields defined in the schema.
+/// Access fields via methods: `builder.field_name()`
+
+pub struct AdaptiveColorsClassBuilder {
+    inner: baml::ClassBuilder,
+}
+
+impl AdaptiveColorsClassBuilder {
+    /// Create wrapper from runtime ClassBuilder.
+    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying ClassBuilder.
+    pub fn inner(&self) -> &baml::ClassBuilder {
+        &self.inner
+    }
+
+    /// Get the class as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("AdaptiveColors is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Field Accessors (1:1 with schema field names)
+    // =========================================================================
+
+    /// Access the `background_positive` field builder.
+    pub fn property_background_positive(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("background_positive")
+            .expect("AdaptiveColors.background_positive is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `background_neutral` field builder.
+    pub fn property_background_neutral(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("background_neutral")
+            .expect("AdaptiveColors.background_neutral is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `background_negative` field builder.
+    pub fn property_background_negative(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("background_negative")
+            .expect("AdaptiveColors.background_negative is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `text_positive` field builder.
+    pub fn property_text_positive(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("text_positive")
+            .expect("AdaptiveColors.text_positive is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `text_neutral` field builder.
+    pub fn property_text_neutral(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("text_neutral")
+            .expect("AdaptiveColors.text_neutral is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `text_negative` field builder.
+    pub fn property_text_negative(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("text_negative")
+            .expect("AdaptiveColors.text_negative is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `accent_color` field builder.
+    pub fn property_accent_color(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("accent_color")
+            .expect("AdaptiveColors.accent_color is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `severity_indicator` field builder.
+    pub fn property_severity_indicator(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("severity_indicator")
+            .expect("AdaptiveColors.severity_indicator is statically defined in .baml and should always be present")
+    }
+}
+
+/// Wrapper for the `ContextAwareUiNode` class builder.
+///
+/// Provides type-safe method access to fields defined in the schema.
+/// Access fields via methods: `builder.field_name()`
+
+pub struct ContextAwareUiNodeClassBuilder {
+    inner: baml::ClassBuilder,
+}
+
+impl ContextAwareUiNodeClassBuilder {
+    /// Create wrapper from runtime ClassBuilder.
+    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying ClassBuilder.
+    pub fn inner(&self) -> &baml::ClassBuilder {
+        &self.inner
+    }
+
+    /// Get the class as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner.as_type().expect(
+            "ContextAwareUiNode is statically defined in .baml and should always have a type",
+        )
+    }
+
+    // =========================================================================
+    // Field Accessors (1:1 with schema field names)
+    // =========================================================================
+
+    /// Access the `tag` field builder.
+    pub fn property_tag(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("tag").expect(
+            "ContextAwareUiNode.tag is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `text` field builder.
+    pub fn property_text(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("text").expect(
+            "ContextAwareUiNode.text is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `attrs` field builder.
+    pub fn property_attrs(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("attrs").expect(
+            "ContextAwareUiNode.attrs is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `children` field builder.
+    pub fn property_children(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("children")
+            .expect("ContextAwareUiNode.children is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `context_signals` field builder.
+    pub fn property_context_signals(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("context_signals")
+            .expect("ContextAwareUiNode.context_signals is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `material_colors` field builder.
+    pub fn property_material_colors(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("material_colors")
+            .expect("ContextAwareUiNode.material_colors is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `dynamic_text_template` field builder.
+    pub fn property_dynamic_text_template(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("dynamic_text_template")
+            .expect("ContextAwareUiNode.dynamic_text_template is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `urgency_level` field builder.
+    pub fn property_urgency_level(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("urgency_level")
+            .expect("ContextAwareUiNode.urgency_level is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `recommended_action` field builder.
+    pub fn property_recommended_action(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("recommended_action")
+            .expect("ContextAwareUiNode.recommended_action is statically defined in .baml and should always be present")
+    }
+}
+
+/// Wrapper for the `DataAnomaly` class builder.
+///
+/// Provides type-safe method access to fields defined in the schema.
+/// Access fields via methods: `builder.field_name()`
+
+pub struct DataAnomalyClassBuilder {
+    inner: baml::ClassBuilder,
+}
+
+impl DataAnomalyClassBuilder {
+    /// Create wrapper from runtime ClassBuilder.
+    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying ClassBuilder.
+    pub fn inner(&self) -> &baml::ClassBuilder {
+        &self.inner
+    }
+
+    /// Get the class as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("DataAnomaly is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Field Accessors (1:1 with schema field names)
+    // =========================================================================
+
+    /// Access the `r#type` field builder.
+    pub fn property_type(&self) -> baml::ClassPropertyBuilder {
+        self.inner
+            .get_property("type")
+            .expect("DataAnomaly.type is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `severity` field builder.
+    pub fn property_severity(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("severity").expect(
+            "DataAnomaly.severity is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `metric` field builder.
+    pub fn property_metric(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("metric").expect(
+            "DataAnomaly.metric is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `current_value` field builder.
+    pub fn property_current_value(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("current_value").expect(
+            "DataAnomaly.current_value is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `expected_range` field builder.
+    pub fn property_expected_range(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("expected_range")
+            .expect("DataAnomaly.expected_range is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `description` field builder.
+    pub fn property_description(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("description").expect(
+            "DataAnomaly.description is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `timestamp` field builder.
+    pub fn property_timestamp(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("timestamp").expect(
+            "DataAnomaly.timestamp is statically defined in .baml and should always be present",
+        )
+    }
+}
+
+/// Wrapper for the `MaterialColors` class builder.
+///
+/// Provides type-safe method access to fields defined in the schema.
+/// Access fields via methods: `builder.field_name()`
+
+pub struct MaterialColorsClassBuilder {
+    inner: baml::ClassBuilder,
+}
+
+impl MaterialColorsClassBuilder {
+    /// Create wrapper from runtime ClassBuilder.
+    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying ClassBuilder.
+    pub fn inner(&self) -> &baml::ClassBuilder {
+        &self.inner
+    }
+
+    /// Get the class as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("MaterialColors is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Field Accessors (1:1 with schema field names)
+    // =========================================================================
+
+    /// Access the `primary` field builder.
+    pub fn property_primary(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("primary").expect(
+            "MaterialColors.primary is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `container` field builder.
+    pub fn property_container(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("container").expect(
+            "MaterialColors.container is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `on_container` field builder.
+    pub fn property_on_container(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("on_container")
+            .expect("MaterialColors.on_container is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `border` field builder.
+    pub fn property_border(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("border").expect(
+            "MaterialColors.border is statically defined in .baml and should always be present",
+        )
+    }
+}
+
+/// Wrapper for the `MessageAnalysis` class builder.
+///
+/// Provides type-safe method access to fields defined in the schema.
+/// Access fields via methods: `builder.field_name()`
+
+pub struct MessageAnalysisClassBuilder {
+    inner: baml::ClassBuilder,
+}
+
+impl MessageAnalysisClassBuilder {
+    /// Create wrapper from runtime ClassBuilder.
+    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying ClassBuilder.
+    pub fn inner(&self) -> &baml::ClassBuilder {
+        &self.inner
+    }
+
+    /// Get the class as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("MessageAnalysis is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Field Accessors (1:1 with schema field names)
+    // =========================================================================
+
+    /// Access the `text` field builder.
+    pub fn property_text(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("text").expect(
+            "MessageAnalysis.text is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `sentiment` field builder.
+    pub fn property_sentiment(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("sentiment").expect(
+            "MessageAnalysis.sentiment is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `severity` field builder.
+    pub fn property_severity(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("severity").expect(
+            "MessageAnalysis.severity is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `mood` field builder.
+    pub fn property_mood(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("mood").expect(
+            "MessageAnalysis.mood is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `confidence` field builder.
+    pub fn property_confidence(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("confidence")
+            .expect("MessageAnalysis.confidence is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `key_phrases` field builder.
+    pub fn property_key_phrases(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("key_phrases")
+            .expect("MessageAnalysis.key_phrases is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `suggested_response_tone` field builder.
+    pub fn property_suggested_response_tone(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("suggested_response_tone")
+            .expect("MessageAnalysis.suggested_response_tone is statically defined in .baml and should always be present")
+    }
+}
+
+/// Wrapper for the `SentimentContext` class builder.
+///
+/// Provides type-safe method access to fields defined in the schema.
+/// Access fields via methods: `builder.field_name()`
+
+pub struct SentimentContextClassBuilder {
+    inner: baml::ClassBuilder,
+}
+
+impl SentimentContextClassBuilder {
+    /// Create wrapper from runtime ClassBuilder.
+    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying ClassBuilder.
+    pub fn inner(&self) -> &baml::ClassBuilder {
+        &self.inner
+    }
+
+    /// Get the class as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("SentimentContext is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Field Accessors (1:1 with schema field names)
+    // =========================================================================
+
+    /// Access the `sentiment` field builder.
+    pub fn property_sentiment(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("sentiment")
+            .expect("SentimentContext.sentiment is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `severity` field builder.
+    pub fn property_severity(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("severity").expect(
+            "SentimentContext.severity is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `mood` field builder.
+    pub fn property_mood(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("mood").expect(
+            "SentimentContext.mood is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `confidence` field builder.
+    pub fn property_confidence(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("confidence")
+            .expect("SentimentContext.confidence is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `keywords` field builder.
+    pub fn property_keywords(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("keywords").expect(
+            "SentimentContext.keywords is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `tone_adjustments` field builder.
+    pub fn property_tone_adjustments(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("tone_adjustments")
+            .expect("SentimentContext.tone_adjustments is statically defined in .baml and should always be present")
+    }
+}
+
+/// Wrapper for the `SentimentUiNode` class builder.
+///
+/// Provides type-safe method access to fields defined in the schema.
+/// Access fields via methods: `builder.field_name()`
+
+pub struct SentimentUiNodeClassBuilder {
+    inner: baml::ClassBuilder,
+}
+
+impl SentimentUiNodeClassBuilder {
+    /// Create wrapper from runtime ClassBuilder.
+    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying ClassBuilder.
+    pub fn inner(&self) -> &baml::ClassBuilder {
+        &self.inner
+    }
+
+    /// Get the class as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("SentimentUiNode is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Field Accessors (1:1 with schema field names)
+    // =========================================================================
+
+    /// Access the `tag` field builder.
+    pub fn property_tag(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("tag").expect(
+            "SentimentUiNode.tag is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `text` field builder.
+    pub fn property_text(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("text").expect(
+            "SentimentUiNode.text is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `attrs` field builder.
+    pub fn property_attrs(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("attrs").expect(
+            "SentimentUiNode.attrs is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `children` field builder.
+    pub fn property_children(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("children").expect(
+            "SentimentUiNode.children is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `sentiment_context` field builder.
+    pub fn property_sentiment_context(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("sentiment_context")
+            .expect("SentimentUiNode.sentiment_context is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `dynamic_text_template` field builder.
+    pub fn property_dynamic_text_template(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("dynamic_text_template")
+            .expect("SentimentUiNode.dynamic_text_template is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `adaptive_colors` field builder.
+    pub fn property_adaptive_colors(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("adaptive_colors")
+            .expect("SentimentUiNode.adaptive_colors is statically defined in .baml and should always be present")
+    }
+}
+
+/// Wrapper for the `SystemHealth` class builder.
+///
+/// Provides type-safe method access to fields defined in the schema.
+/// Access fields via methods: `builder.field_name()`
+
+pub struct SystemHealthClassBuilder {
+    inner: baml::ClassBuilder,
+}
+
+impl SystemHealthClassBuilder {
+    /// Create wrapper from runtime ClassBuilder.
+    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying ClassBuilder.
+    pub fn inner(&self) -> &baml::ClassBuilder {
+        &self.inner
+    }
+
+    /// Get the class as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("SystemHealth is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Field Accessors (1:1 with schema field names)
+    // =========================================================================
+
+    /// Access the `status` field builder.
+    pub fn property_status(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("status").expect(
+            "SystemHealth.status is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `cpu_usage` field builder.
+    pub fn property_cpu_usage(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("cpu_usage").expect(
+            "SystemHealth.cpu_usage is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `memory_usage` field builder.
+    pub fn property_memory_usage(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("memory_usage").expect(
+            "SystemHealth.memory_usage is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `error_rate` field builder.
+    pub fn property_error_rate(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("error_rate").expect(
+            "SystemHealth.error_rate is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `response_time_p95` field builder.
+    pub fn property_response_time_p95(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("response_time_p95")
+            .expect("SystemHealth.response_time_p95 is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `active_alerts` field builder.
+    pub fn property_active_alerts(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("active_alerts")
+            .expect("SystemHealth.active_alerts is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `recommendations` field builder.
+    pub fn property_recommendations(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("recommendations")
+            .expect("SystemHealth.recommendations is statically defined in .baml and should always be present")
+    }
+}
+
+/// Wrapper for the `UiContext` class builder.
+///
+/// Provides type-safe method access to fields defined in the schema.
+/// Access fields via methods: `builder.field_name()`
+
+pub struct UiContextClassBuilder {
+    inner: baml::ClassBuilder,
+}
+
+impl UiContextClassBuilder {
+    /// Create wrapper from runtime ClassBuilder.
+    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying ClassBuilder.
+    pub fn inner(&self) -> &baml::ClassBuilder {
+        &self.inner
+    }
+
+    /// Get the class as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("UiContext is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Field Accessors (1:1 with schema field names)
+    // =========================================================================
+
+    /// Access the `sentiment` field builder.
+    pub fn property_sentiment(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("sentiment").expect(
+            "UiContext.sentiment is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `intent` field builder.
+    pub fn property_intent(&self) -> baml::ClassPropertyBuilder {
+        self.inner
+            .get_property("intent")
+            .expect("UiContext.intent is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `system_health` field builder.
+    pub fn property_system_health(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("system_health").expect(
+            "UiContext.system_health is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `workflow_state` field builder.
+    pub fn property_workflow_state(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("workflow_state").expect(
+            "UiContext.workflow_state is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `anomalies` field builder.
+    pub fn property_anomalies(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("anomalies").expect(
+            "UiContext.anomalies is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `timestamp` field builder.
+    pub fn property_timestamp(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("timestamp").expect(
+            "UiContext.timestamp is statically defined in .baml and should always be present",
+        )
+    }
+}
+
 /// Wrapper for the `UiNode` class builder.
 ///
 /// Provides type-safe method access to fields defined in the schema.
@@ -62,5 +749,142 @@ impl UiNodeClassBuilder {
         self.inner
             .get_property("children")
             .expect("UiNode.children is statically defined in .baml and should always be present")
+    }
+}
+
+/// Wrapper for the `UserIntent` class builder.
+///
+/// Provides type-safe method access to fields defined in the schema.
+/// Access fields via methods: `builder.field_name()`
+
+pub struct UserIntentClassBuilder {
+    inner: baml::ClassBuilder,
+}
+
+impl UserIntentClassBuilder {
+    /// Create wrapper from runtime ClassBuilder.
+    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying ClassBuilder.
+    pub fn inner(&self) -> &baml::ClassBuilder {
+        &self.inner
+    }
+
+    /// Get the class as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("UserIntent is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Field Accessors (1:1 with schema field names)
+    // =========================================================================
+
+    /// Access the `category` field builder.
+    pub fn property_category(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("category").expect(
+            "UserIntent.category is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `goal` field builder.
+    pub fn property_goal(&self) -> baml::ClassPropertyBuilder {
+        self.inner
+            .get_property("goal")
+            .expect("UserIntent.goal is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `confidence` field builder.
+    pub fn property_confidence(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("confidence").expect(
+            "UserIntent.confidence is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `suggested_actions` field builder.
+    pub fn property_suggested_actions(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("suggested_actions")
+            .expect("UserIntent.suggested_actions is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `required_context` field builder.
+    pub fn property_required_context(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("required_context")
+            .expect("UserIntent.required_context is statically defined in .baml and should always be present")
+    }
+}
+
+/// Wrapper for the `WorkflowState` class builder.
+///
+/// Provides type-safe method access to fields defined in the schema.
+/// Access fields via methods: `builder.field_name()`
+
+pub struct WorkflowStateClassBuilder {
+    inner: baml::ClassBuilder,
+}
+
+impl WorkflowStateClassBuilder {
+    /// Create wrapper from runtime ClassBuilder.
+    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+        Self { inner }
+    }
+
+    /// Get the underlying ClassBuilder.
+    pub fn inner(&self) -> &baml::ClassBuilder {
+        &self.inner
+    }
+
+    /// Get the class as a type definition.
+    pub fn r#type(&self) -> baml::TypeDef {
+        self.inner
+            .as_type()
+            .expect("WorkflowState is statically defined in .baml and should always have a type")
+    }
+
+    // =========================================================================
+    // Field Accessors (1:1 with schema field names)
+    // =========================================================================
+
+    /// Access the `stage` field builder.
+    pub fn property_stage(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("stage").expect(
+            "WorkflowState.stage is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `progress` field builder.
+    pub fn property_progress(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("progress").expect(
+            "WorkflowState.progress is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `current_step` field builder.
+    pub fn property_current_step(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("current_step")
+            .expect("WorkflowState.current_step is statically defined in .baml and should always be present")
+    }
+
+    /// Access the `total_steps` field builder.
+    pub fn property_total_steps(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("total_steps").expect(
+            "WorkflowState.total_steps is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `blockers` field builder.
+    pub fn property_blockers(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("blockers").expect(
+            "WorkflowState.blockers is statically defined in .baml and should always be present",
+        )
+    }
+
+    /// Access the `estimated_remaining_time` field builder.
+    pub fn property_estimated_remaining_time(&self) -> baml::ClassPropertyBuilder {
+        self.inner.get_property("estimated_remaining_time")
+            .expect("WorkflowState.estimated_remaining_time is statically defined in .baml and should always be present")
     }
 }
