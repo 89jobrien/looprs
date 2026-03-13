@@ -1,0 +1,16 @@
+[package]
+name = "agent-bin"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+agent-domain = { path = "../agent-domain" }
+agent-app = { path = "../agent-app" }
+llm-openai-adapter = { path = "../llm-openai-adapter" }
+jira-adapter = { path = "../jira-adapter" }
+trace-sqlite-adapter = { path = "../trace-sqlite-adapter" }
+http-api-adapter = { path = "../http-api-adapter" }
+anyhow = "1.0"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+axum = "0.8"
+dotenvy = "0.15"
