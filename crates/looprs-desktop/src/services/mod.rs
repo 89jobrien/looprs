@@ -5,6 +5,7 @@ pub mod generative_ui;
 // pub mod sentiment_ui;
 pub mod system_monitor;
 pub mod mock_browser;
+pub mod model_badge;
 pub mod mock_server;
 pub mod mock_terminal;
 pub mod mock_ws;

@@ -1,4 +1,5 @@
 use crate::services::agent_adapter::run_turn_for_prompt;
+use crate::services::model_badge::{load_badge_state, spawn_badge_poller, ModelBadgeState};
 use crate::services::generative_ui::{
     GenerativeUiCommand, GenerativeUiUpdate, LiveGenerativeUiHandle, start_live_generative_ui,
 };
@@ -11,7 +12,7 @@ use crate::ui::editor::editor_screen;
 use crate::ui::gen_demo::gen_demo_screen;
 use crate::ui::terminal::terminal_screen;
 use freya::prelude::*;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 #[derive(Clone)]
@@ -71,6 +72,30 @@ pub fn app() -> impl IntoElement {
     let mockstation = use_state(|| Option::<MockstationRuntime>::None);
     let genui_handle = use_state(|| Option::<LiveGenerativeUiHandle>::None);
     let genui_update = use_state(|| Arc::new(GenerativeUiUpdate::default()));
+
+    let badge_arc: Arc<RwLock<ModelBadgeState>> =
+        Arc::new(RwLock::new(ModelBadgeState::default()));
+    let mut badge_ui = use_state(ModelBadgeState::default);
+    {
+        let badge_arc = Arc::clone(&badge_arc);
+        let mut badge_ui = badge_ui;
+        use_side_effect(move || {
+            if let Ok(cfg) = looprs::models_config::ModelsConfig::load() {
+                let mc_path = std::path::PathBuf::from(cfg.magi_modelcard());
+                if !mc_path.as_os_str().is_empty() {
+                    let initial = load_badge_state(&mc_path);
+                    badge_ui.set(initial.clone());
+                    if let Ok(mut s) = badge_arc.write() {
+                        *s = initial;
+                    }
+                    spawn_badge_poller(mc_path, Arc::clone(&badge_arc));
+                }
+            }
+        });
+    }
+    let badge_model_id = badge_ui.read().model_id.clone();
+    let badge_mean_reward = badge_ui.read().mean_reward;
+    let badge_training_status = badge_ui.read().training_status.clone();
 
     {
         let screen_state = screen;
@@ -163,6 +188,9 @@ pub fn app() -> impl IntoElement {
             .spacing(6.0)
             .child(label().text("looprs desktop"))
             .child(label().text("Editor-first shell: AI Workspace + Mockstation."))
+            .child(label().text(format!("Model: {badge_model_id}")))
+            .child(label().text(format!("Mean reward: {badge_mean_reward:.3}")))
+            .child(label().text(format!("Training: {badge_training_status}")))
             .into_element(),
         Screen::AiChat => {
             let history_items = chat_history.read().clone();
@@ -379,6 +407,10 @@ pub fn app() -> impl IntoElement {
                                     label()
                                         .text(format!("Messages: {}", chat_history.read().len())),
                                 )
+                                .child(label().text(""))
+                                .child(label().text(format!("Model: {badge_model_id}")))
+                                .child(label().text(format!("Reward: {badge_mean_reward:.3}")))
+                                .child(label().text(format!("Training: {badge_training_status}")))
                                 .child(label().text(""))
                                 .child(
                                     label().text(
