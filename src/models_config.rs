@@ -9,7 +9,7 @@ pub struct ProviderTier {
     pub model: String,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 struct MagiConfig {
     #[serde(default)]
     modelcard: String,
@@ -17,7 +17,7 @@ struct MagiConfig {
     db: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ModelsConfig {
     pub default: ProviderTier,
     #[serde(default)]
@@ -34,11 +34,9 @@ impl ModelsConfig {
     }
 
     pub fn load() -> Result<Self> {
-        let path = dirs::home_dir()
-            .unwrap_or_default()
-            .join(".looprs")
-            .join("models.toml");
-        Self::from_path(&path)
+        let home = dirs::home_dir()
+            .context("could not determine home directory")?;
+        Self::from_path(&home.join(".looprs").join("models.toml"))
     }
 
     pub fn tier(&self, name: &str) -> Option<&ProviderTier> {
