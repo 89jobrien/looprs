@@ -50,6 +50,38 @@ Or use `.looprs/provider.json` for persistent config. SDK aliases reuse the same
 `openai-sdk -> openai` and `anthropic-sdk/claude-sdk -> anthropic`.
 See `.env.example` for all options.
 
+## magi Integration (Local Fine-Tuning)
+
+looprs integrates with [magi](../magi) for automated model fine-tuning. Sessions are
+automatically ingested and scored; the model improves over time via RL.
+
+### Setup
+
+1. Copy the model tier config:
+   ```bash
+   cp .looprs/models.toml.example ~/.looprs/models.toml
+   # Edit [magi] paths to point to your magi install
+   ```
+
+2. Install the magi ingest hook:
+   ```bash
+   mkdir -p ~/.looprs/hooks
+   ln -s ~/dev/magi/hooks/looprs/magi_ingest.yaml ~/.looprs/hooks/
+   ```
+
+3. Start coding. looprs writes session logs to `~/.looprs/sessions/`. At session
+   end, magi ingests Ollama interactions automatically for scoring and RL training.
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `/model-status` | Show model version, mean reward, training status |
+| `/fine-tune` | Boost reward for current session (prioritize for RL) |
+| `/reset-model <name>` | Revert default model to a base version |
+| `/score-session [n]` | Score last N interactions via OpenAI (default 10) |
+| `/outsource` | Re-run current task via OpenAI (not fed to magi) |
+
 ## Desktop UI
 
 The desktop UI lives in `crates/looprs-desktop`.

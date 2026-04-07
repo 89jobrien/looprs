@@ -1,0 +1,15 @@
+# Copy to ~/.looprs/models.toml and adjust paths.
+
+[default]
+provider = "ollama"
+model = "magistral-small-rl-v17"
+
+[tiers]
+fast      = { provider = "ollama", model = "qwen2.5-coder:7b" }
+capable   = { provider = "ollama", model = "magistral-small-rl-v17" }
+outsource = { provider = "openai", model = "gpt-4o" }
+judge     = { provider = "openai", model = "gpt-5.4" }
+
+[magi]
+modelcard = "~/dev/magi/modelcard.yaml"
+db        = "~/dev/magi/db/rewards.db"
