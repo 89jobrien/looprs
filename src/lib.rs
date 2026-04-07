@@ -19,6 +19,7 @@ pub mod observability;
 pub mod observation;
 pub mod observation_manager;
 pub mod pipeline;
+pub mod session_log;
 pub mod plugins;
 pub mod providers;
 pub mod rules;
