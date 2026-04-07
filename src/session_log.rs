@@ -1,10 +1,12 @@
+use anyhow::Context as _;
 use chrono::Utc;
 use serde::Serialize;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
+/// Represents a discrete event that can be recorded in a session log.
 #[derive(Debug, Serialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum SessionEvent {
@@ -32,24 +34,27 @@ pub struct SessionLogger {
 }
 
 impl SessionLogger {
-    pub fn new(sessions_dir: PathBuf) -> Self {
+    /// Creates a new `SessionLogger`, ensuring `sessions_dir` exists.
+    pub fn new(sessions_dir: PathBuf) -> Result<Self, anyhow::Error> {
         let session_id = format!("sess-{}", Uuid::new_v4());
         let date = Utc::now().format("%Y-%m-%d");
         let filename = format!("{}-{}.jsonl", date, session_id);
-        fs::create_dir_all(&sessions_dir).ok();
+        fs::create_dir_all(&sessions_dir)
+            .with_context(|| format!("failed to create sessions dir: {}", sessions_dir.display()))?;
         let path = sessions_dir.join(filename);
-        Self { session_id, path }
+        Ok(Self { session_id, path })
     }
 
     pub fn session_id(&self) -> &str {
         &self.session_id
     }
 
-    pub fn path(&self) -> &PathBuf {
+    pub fn path(&self) -> &Path {
         &self.path
     }
 
-    pub fn log(&mut self, event: SessionEvent) {
+    /// Appends a `SessionEvent` as a JSONL line to the session log file.
+    pub fn log(&mut self, event: SessionEvent) -> Result<(), anyhow::Error> {
         #[derive(Serialize)]
         struct LogLine<'a> {
             ts: String,
@@ -62,13 +67,15 @@ impl SessionLogger {
             session_id: &self.session_id,
             event: &event,
         };
-        if let Ok(mut json) = serde_json::to_string(&line) {
-            json.push('\n');
-            if let Ok(mut file) =
-                OpenOptions::new().create(true).append(true).open(&self.path)
-            {
-                let _ = file.write_all(json.as_bytes());
-            }
-        }
+        let mut json = serde_json::to_string(&line).context("failed to serialize log line")?;
+        json.push('\n');
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+            .with_context(|| format!("failed to open log file: {}", self.path.display()))?;
+        file.write_all(json.as_bytes())
+            .context("failed to write log line")?;
+        Ok(())
     }
 }
