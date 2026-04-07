@@ -10,6 +10,7 @@ use crate::observation_manager::ObservationManager;
 use crate::providers::InferenceRequest;
 use crate::providers::LLMProvider;
 use crate::rules::RuleRegistry;
+use crate::session_log::{SessionEvent, SessionLogger};
 use crate::tools::{ToolContext, execute_tool, get_tool_definitions};
 use crate::ui;
 use std::collections::HashMap;
@@ -52,6 +53,7 @@ pub struct Agent {
     runtime: RuntimeSettings,
     file_ref_policy: FileRefPolicy,
     pending_metadata: HashMap<String, String>,
+    pub session_logger: Option<SessionLogger>,
 }
 
 impl Agent {
@@ -68,6 +70,17 @@ impl Agent {
         runtime: RuntimeSettings,
         file_ref_policy: FileRefPolicy,
     ) -> Result<Self, AgentError> {
+        let sessions_dir = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".looprs")
+            .join("sessions");
+        let session_logger = Some(
+            SessionLogger::new(sessions_dir).unwrap_or_else(|e| {
+                log::warn!("failed to initialize session logger: {e}");
+                SessionLogger::new(std::env::temp_dir().join("looprs-sessions"))
+                    .expect("temp dir session logger should always succeed")
+            }),
+        );
         Ok(Self {
             provider,
             messages: Vec::new(),
@@ -79,6 +92,7 @@ impl Agent {
             runtime,
             file_ref_policy,
             pending_metadata: HashMap::new(),
+            session_logger,
         })
     }
 
@@ -245,6 +259,13 @@ impl Agent {
             })
             .unwrap_or_default();
 
+        if let Some(ref mut logger) = self.session_logger {
+            let _ = logger.log(SessionEvent::UserMessage {
+                content: user_msg.clone(),
+                provider: self.provider.name().to_string(),
+            });
+        }
+
         let mut event_ctx = EventContext::new().with_user_message(user_msg);
         for (key, value) in &self.pending_metadata {
             event_ctx.metadata.insert(key.clone(), value.clone());
@@ -312,6 +333,16 @@ impl Agent {
                 self.provider.infer(&req).await?
             };
 
+            if let Some(ref mut logger) = self.session_logger {
+                let content = response.content.iter().filter_map(|b| {
+                    if let ContentBlock::Text { text } = b { Some(text.as_str()) } else { None }
+                }).collect::<Vec<_>>().join("\n\n");
+                let _ = logger.log(SessionEvent::Inference {
+                    content,
+                    provider: self.provider.name().to_string(),
+                });
+            }
+
             #[cfg(not(test))]
             if let Err(e) =
                 crate::trace::append_turn_trace(self.observations.session_id(), &req, &response)
@@ -365,7 +396,18 @@ impl Agent {
                 self.events.fire(Event::PreToolUse, &event_ctx);
                 self.execute_hooks_for_event(&Event::PreToolUse, &event_ctx);
 
+                if let Some(ref mut logger) = self.session_logger {
+                    let provider_name = self.provider.name().to_string();
+                    let _ = logger.log(SessionEvent::ToolUse {
+                        tool_name: name.to_string(),
+                        input: input.clone(),
+                        tool_use_id: id.to_string(),
+                        provider: provider_name,
+                    });
+                }
+
                 let result = execute_tool(name.as_str(), input, &self.tool_ctx);
+                let tool_is_error = result.is_err();
 
                 let raw_content = match result {
                     Ok(ref output) => {
@@ -397,6 +439,16 @@ impl Agent {
                         err_msg
                     }
                 };
+
+                if let Some(ref mut logger) = self.session_logger {
+                    let provider_name = self.provider.name().to_string();
+                    let _ = logger.log(SessionEvent::ToolResult {
+                        tool_use_id: id.to_string(),
+                        output: raw_content.clone(),
+                        is_error: tool_is_error,
+                        provider: provider_name,
+                    });
+                }
 
                 let content = truncate_tool_result_for_context(&raw_content);
 
