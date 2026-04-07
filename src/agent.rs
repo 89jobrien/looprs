@@ -2,6 +2,7 @@ use crate::api::ContentBlock;
 use crate::api::Message;
 use crate::app_config::DefaultsConfig;
 use crate::errors::AgentError;
+use crate::models_config::ModelsConfig;
 use crate::events::{Event, EventContext, EventManager};
 use crate::file_refs::FileRefPolicy;
 use crate::fs_mode::FsMode;
@@ -54,6 +55,7 @@ pub struct Agent {
     file_ref_policy: FileRefPolicy,
     pending_metadata: HashMap<String, String>,
     session_logger: Option<SessionLogger>,
+    models_config: Option<ModelsConfig>,
 }
 
 impl Agent {
@@ -101,6 +103,7 @@ impl Agent {
             file_ref_policy,
             pending_metadata: HashMap::new(),
             session_logger,
+            models_config: ModelsConfig::load().ok(),
         })
     }
 
@@ -315,6 +318,9 @@ impl Agent {
             }
         }
 
+        let mut tool_call_counts: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+
         loop {
             let mut max_tokens = self.provider.model().max_tokens();
             if let Some(override_tokens) = self.runtime.max_tokens_override {
@@ -414,6 +420,23 @@ impl Agent {
                     });
                 }
 
+                let count = tool_call_counts
+                    .entry(name.as_str().to_string())
+                    .or_insert(0);
+                *count += 1;
+                if *count >= 3 {
+                    log::info!(
+                        "on-repeat trigger: {} called {} times",
+                        name.as_str(),
+                        count
+                    );
+                    self.maybe_score(crate::scorer::ScoreTrigger::OnRepeat {
+                        tool_name: name.as_str().to_string(),
+                        count: *count,
+                    })
+                    .await;
+                }
+
                 let result = execute_tool(name.as_str(), input, &self.tool_ctx);
                 let tool_is_error = result.is_err();
 
@@ -444,6 +467,7 @@ impl Agent {
                             .with_error(err_msg.clone());
                         self.events.fire(Event::OnError, &event_ctx);
                         self.execute_hooks_for_event(&Event::OnError, &event_ctx);
+                        self.maybe_score(crate::scorer::ScoreTrigger::OnError).await;
                         err_msg
                     }
                 };
@@ -478,6 +502,43 @@ impl Agent {
         }
 
         Ok(())
+    }
+
+    async fn maybe_score(&self, trigger: crate::scorer::ScoreTrigger) {
+        let Some(ref logger) = self.session_logger else {
+            return;
+        };
+        let Some(ref config) = self.models_config else {
+            return;
+        };
+
+        let scorer_model = config
+            .tier("judge")
+            .map(|t| t.model.as_str())
+            .unwrap_or("gpt-4o");
+        let db_path = config.magi_db();
+        let db_opt = if db_path.is_empty() {
+            None
+        } else {
+            Some(db_path)
+        };
+
+        let n = match &trigger {
+            crate::scorer::ScoreTrigger::OnError => 1,
+            crate::scorer::ScoreTrigger::OnRepeat { .. } => 3,
+            crate::scorer::ScoreTrigger::OnDemand { n } => *n,
+        };
+
+        match crate::scorer::load_last_n_ollama_pairs(logger.path(), n) {
+            Ok(pairs) => {
+                if let Err(e) =
+                    crate::scorer::run_scorer(&pairs, scorer_model, db_opt).await
+                {
+                    log::warn!("scoring failed: {e}");
+                }
+            }
+            Err(e) => log::warn!("failed to load session pairs for scoring: {e}"),
+        }
     }
 }
 
