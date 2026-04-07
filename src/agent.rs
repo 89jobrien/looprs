@@ -421,10 +421,10 @@ impl Agent {
                 }
 
                 let count = tool_call_counts
-                    .entry(name.as_str().to_string())
+                    .entry(name.to_string())
                     .or_insert(0);
                 *count += 1;
-                if *count >= 3 {
+                if *count == 3 {
                     log::info!(
                         "on-repeat trigger: {} called {} times",
                         name.as_str(),
