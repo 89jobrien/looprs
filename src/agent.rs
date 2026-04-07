@@ -53,7 +53,7 @@ pub struct Agent {
     runtime: RuntimeSettings,
     file_ref_policy: FileRefPolicy,
     pending_metadata: HashMap<String, String>,
-    pub session_logger: Option<SessionLogger>,
+    session_logger: Option<SessionLogger>,
 }
 
 impl Agent {
@@ -70,17 +70,25 @@ impl Agent {
         runtime: RuntimeSettings,
         file_ref_policy: FileRefPolicy,
     ) -> Result<Self, AgentError> {
-        let sessions_dir = dirs::home_dir()
-            .unwrap_or_default()
-            .join(".looprs")
-            .join("sessions");
-        let session_logger = Some(
-            SessionLogger::new(sessions_dir).unwrap_or_else(|e| {
-                log::warn!("failed to initialize session logger: {e}");
-                SessionLogger::new(std::env::temp_dir().join("looprs-sessions"))
-                    .expect("temp dir session logger should always succeed")
-            }),
-        );
+        let session_logger = {
+            let primary = dirs::home_dir()
+                .map(|h| h.join(".looprs").join("sessions"));
+            primary
+                .and_then(|d| SessionLogger::new(d).ok())
+                .or_else(|| {
+                    match SessionLogger::new(std::env::temp_dir().join("looprs-sessions")) {
+                        Ok(logger) => Some(logger),
+                        Err(e) => {
+                            log::warn!("failed to initialize fallback session logger: {e}");
+                            None
+                        }
+                    }
+                })
+                .or_else(|| {
+                    log::warn!("session logging disabled — could not create logger");
+                    None
+                })
+        };
         Ok(Self {
             provider,
             messages: Vec::new(),
