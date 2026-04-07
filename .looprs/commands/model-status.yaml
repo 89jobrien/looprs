@@ -1,0 +1,29 @@
+name: model-status
+description: Show current magi model version, mean reward, and training status
+action:
+  type: shell
+  command: |
+    python3 - << 'EOF'
+    import yaml, sys, os, tomllib
+    cfg_path = os.path.expanduser("~/.looprs/models.toml")
+    try:
+        with open(cfg_path, "rb") as f:
+            cfg = tomllib.load(f)
+        mc_path = cfg.get("magi", {}).get("modelcard", "")
+    except Exception:
+        mc_path = ""
+    if not mc_path or not os.path.exists(mc_path):
+        print("model: unknown (modelcard not found)")
+        sys.exit(0)
+    with open(mc_path) as f:
+        mc = yaml.safe_load(f)
+    model = mc.get("model_id", "unknown")
+    status = mc.get("training_status", "idle")
+    evals = mc.get("eval_results", {})
+    rewards = [v.get("mean_reward", 0) for v in evals.values() if isinstance(v, dict)]
+    mean = sum(rewards) / len(rewards) if rewards else 0.0
+    print(f"model:   {model}")
+    print(f"status:  {status}")
+    print(f"reward:  {mean:.3f} (mean across {len(rewards)} tasks)")
+    EOF
+  inject_output: true

@@ -1,0 +1,40 @@
+name: fine-tune
+description: Flag current session as high-priority for magi RL training
+action:
+  type: shell
+  command: |
+    python3 - << 'EOF'
+    import os, glob, sqlite3, json, tomllib
+    sessions_dir = os.path.expanduser("~/.looprs/sessions")
+    files = sorted(glob.glob(os.path.join(sessions_dir, "*.jsonl")))
+    if not files:
+        print("No session logs found.")
+        exit(0)
+    session_id = None
+    with open(files[-1]) as f:
+        for line in f:
+            try:
+                ev = json.loads(line)
+                session_id = ev.get("session_id")
+            except Exception:
+                pass
+    cfg_path = os.path.expanduser("~/.looprs/models.toml")
+    try:
+        with open(cfg_path, "rb") as f:
+            cfg = tomllib.load(f)
+        db_path = cfg.get("magi", {}).get("db", "")
+    except Exception:
+        db_path = ""
+    if not db_path or not os.path.exists(db_path):
+        print(f"Session {session_id}: flagged locally (magi db not found).")
+        exit(0)
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "UPDATE interactions SET reward = MIN(reward + 0.2, 1.0) WHERE source_session = ?",
+        (session_id,)
+    )
+    conn.commit()
+    conn.close()
+    print(f"Session {session_id}: reward boosted in magi db.")
+    EOF
+  inject_output: true

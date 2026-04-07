@@ -1,0 +1,28 @@
+name: reset-model
+description: "Revert models.toml default model. Usage: /reset-model <model-name>"
+action:
+  type: shell
+  command: |
+    python3 - {args} << 'EOF'
+    import sys, os, re
+    args = sys.argv[1:]
+    if not args:
+        print("Usage: /reset-model <model-name>  e.g. /reset-model magistral-small-2506")
+        sys.exit(1)
+    target = args[0]
+    cfg_path = os.path.expanduser("~/.looprs/models.toml")
+    if not os.path.exists(cfg_path):
+        print(f"models.toml not found at {cfg_path}")
+        sys.exit(1)
+    with open(cfg_path) as f:
+        content = f.read()
+    updated = re.sub(
+        r'(\[default\].*?model\s*=\s*)["\'].*?["\']',
+        lambda m: m.group(1) + f'"{target}"',
+        content, flags=re.DOTALL
+    )
+    with open(cfg_path, "w") as f:
+        f.write(updated)
+    print(f"Default model reset to: {target}")
+    EOF
+  inject_output: true

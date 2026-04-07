@@ -1,0 +1,7 @@
+name: outsource
+description: Re-run the last user prompt against the outsource tier (OpenAI gpt-4o)
+action:
+  type: message
+  text: |
+    Switching to outsource provider (OpenAI gpt-4o) for this task.
+    Note: this interaction will NOT be fed to magi training.

@@ -1,0 +1,81 @@
+name: score-session
+description: "Score last N session interactions via OpenAI. Usage: /score-session [n=10]"
+action:
+  type: shell
+  command: |
+    python3 - {args} << 'EOF'
+    import sys, os, glob, json, tomllib, urllib.request, sqlite3
+    n = int(sys.argv[1]) if len(sys.argv) > 1 else 10
+    sessions_dir = os.path.expanduser("~/.looprs/sessions")
+    files = sorted(glob.glob(os.path.join(sessions_dir, "*.jsonl")))
+    if not files:
+        print("No session logs found.")
+        sys.exit(0)
+    cfg_path = os.path.expanduser("~/.looprs/models.toml")
+    try:
+        with open(cfg_path, "rb") as f:
+            cfg = tomllib.load(f)
+        scorer_model = cfg.get("tiers", {}).get("judge", {}).get("model", "gpt-4o")
+        db_path = cfg.get("magi", {}).get("db", "")
+    except Exception:
+        scorer_model, db_path = "gpt-4o", ""
+    events = []
+    with open(files[-1]) as f:
+        for line in f:
+            try:
+                ev = json.loads(line)
+                if ev.get("provider") == "ollama":
+                    events.append(ev)
+            except Exception:
+                pass
+    pairs = []
+    i = 0
+    while i + 1 < len(events):
+        if events[i]["event"] == "user_message" and events[i+1]["event"] == "inference":
+            pairs.append((events[i]["content"], events[i+1]["content"],
+                          events[i].get("session_id", "")))
+            i += 2
+        else:
+            i += 1
+    pairs = pairs[-n:]
+    if not pairs:
+        print("No ollama interactions found in session.")
+        sys.exit(0)
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        print("OPENAI_API_KEY not set — skipping scoring.")
+        sys.exit(0)
+    print(f"Scoring {len(pairs)} interactions with {scorer_model}...")
+    for prompt, response, session_id in pairs:
+        body = json.dumps({
+            "model": scorer_model,
+            "messages": [
+                {"role": "system", "content": 'Score this coding response 0.0-1.0. Reply: {"score": <float>}'},
+                {"role": "user", "content": f"Task: {prompt}\n\nResponse: {response}"}
+            ],
+            "temperature": 0.0
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions", data=body,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                data = json.loads(r.read())
+            content = data["choices"][0]["message"]["content"]
+            score = json.loads(content).get("score", 0.5)
+            print(f"  score={score:.3f}  prompt={prompt[:60]}")
+            if db_path and os.path.exists(db_path):
+                conn = sqlite3.connect(db_path)
+                conn.execute(
+                    "INSERT OR IGNORE INTO interactions "
+                    "(task, response, judge_score, reward, processed, source_session) "
+                    "VALUES (?,?,?,?,0,?)",
+                    (prompt, response, score, score, session_id)
+                )
+                conn.commit()
+                conn.close()
+        except Exception as e:
+            print(f"  scoring call failed: {e}")
+    EOF
+  inject_output: true
