@@ -25,16 +25,22 @@ action:
         db_path = cfg.get("magi", {}).get("db", "")
     except Exception:
         db_path = ""
+    if not session_id:
+        print("Could not extract session_id from session log.")
+        exit(1)
     if not db_path or not os.path.exists(db_path):
         print(f"Session {session_id}: flagged locally (magi db not found).")
         exit(0)
-    conn = sqlite3.connect(db_path)
-    conn.execute(
-        "UPDATE interactions SET reward = MIN(reward + 0.2, 1.0) WHERE source_session = ?",
-        (session_id,)
-    )
-    conn.commit()
-    conn.close()
-    print(f"Session {session_id}: reward boosted in magi db.")
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "UPDATE interactions SET reward = MIN(reward + 0.2, 1.0) WHERE source_session = ?",
+            (session_id,)
+        )
+        conn.commit()
+        conn.close()
+        print(f"Session {session_id}: reward boosted in magi db.")
+    except sqlite3.Error as e:
+        print(f"db error: {e}")
     EOF
   inject_output: true

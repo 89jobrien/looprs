@@ -15,8 +15,12 @@ action:
     if not mc_path or not os.path.exists(mc_path):
         print("model: unknown (modelcard not found)")
         sys.exit(0)
-    with open(mc_path) as f:
-        mc = yaml.safe_load(f)
+    try:
+        with open(mc_path) as f:
+            mc = yaml.safe_load(f)
+    except Exception as e:
+        print(f"model: error reading modelcard: {e}")
+        sys.exit(0)
     model = mc.get("model_id", "unknown")
     status = mc.get("training_status", "idle")
     evals = mc.get("eval_results", {})

@@ -62,7 +62,11 @@ action:
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
                 data = json.loads(r.read())
-            content = data["choices"][0]["message"]["content"]
+            choices = data.get("choices", [])
+            if not choices:
+                print("  empty response from scorer")
+                continue
+            content = choices[0]["message"]["content"]
             score = json.loads(content).get("score", 0.5)
             print(f"  score={score:.3f}  prompt={prompt[:60]}")
             if db_path and os.path.exists(db_path):
