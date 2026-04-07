@@ -143,8 +143,8 @@ async fn write_score_to_db(
         conn.execute(
             "INSERT OR IGNORE INTO interactions \
              (task, response, judge_score, reward, processed, source_session) \
-             VALUES (?1, ?2, ?3, ?3, 0, ?4)",
-            rusqlite::params![task, response, score as f64, session_id],
+             VALUES (?1, ?2, ?3, ?4, 0, ?5)",
+            rusqlite::params![task, response, score as f64, score as f64, session_id],
         )?;
         Ok(())
     })
