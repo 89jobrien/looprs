@@ -40,12 +40,17 @@ pub fn load_badge_state(modelcard_path: &PathBuf) -> ModelBadgeState {
             }
         }
     };
-    let rewards: Vec<f32> = mc
+    let mut all_rewards: Vec<f32> = mc
         .eval_results
         .values()
         .filter_map(|v| v.get("mean_reward")?.as_f64())
         .map(|f| f as f32)
         .collect();
+    let rewards: Vec<f32> = {
+        let len = all_rewards.len();
+        let start = len.saturating_sub(50);
+        all_rewards.drain(start..).collect()
+    };
     let mean = if rewards.is_empty() {
         0.0
     } else {
@@ -95,9 +100,7 @@ mod tests {
         writeln!(f, "  debugging:").unwrap();
         writeln!(f, "    mean_reward: 0.74").unwrap();
         let state = load_badge_state(&f.path().to_path_buf());
-        assert_eq!(state.model_id, "magistral-small-rl-v17");
-        assert_eq!(state.training_status, "idle");
-        assert!((state.mean_reward - 0.78).abs() < 0.01);
+        insta::assert_debug_snapshot!(state);
     }
 
     #[test]

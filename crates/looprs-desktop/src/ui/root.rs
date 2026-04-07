@@ -1,5 +1,5 @@
 use crate::services::agent_adapter::run_turn_for_prompt;
-use crate::services::model_badge::{load_badge_state, spawn_badge_poller, ModelBadgeState};
+use crate::services::model_badge::{load_badge_state, ModelBadgeState};
 use crate::services::generative_ui::{
     GenerativeUiCommand, GenerativeUiUpdate, LiveGenerativeUiHandle, start_live_generative_ui,
 };
@@ -12,7 +12,7 @@ use crate::ui::editor::editor_screen;
 use crate::ui::gen_demo::gen_demo_screen;
 use crate::ui::terminal::terminal_screen;
 use freya::prelude::*;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 
 #[derive(Clone)]
@@ -73,22 +73,20 @@ pub fn app() -> impl IntoElement {
     let genui_handle = use_state(|| Option::<LiveGenerativeUiHandle>::None);
     let genui_update = use_state(|| Arc::new(GenerativeUiUpdate::default()));
 
-    let badge_arc: Arc<RwLock<ModelBadgeState>> =
-        Arc::new(RwLock::new(ModelBadgeState::default()));
     let mut badge_ui = use_state(ModelBadgeState::default);
     {
-        let badge_arc = Arc::clone(&badge_arc);
         let mut badge_ui = badge_ui;
         use_side_effect(move || {
             if let Ok(cfg) = looprs::models_config::ModelsConfig::load() {
                 let mc_path = std::path::PathBuf::from(cfg.magi_modelcard());
                 if !mc_path.as_os_str().is_empty() {
-                    let initial = load_badge_state(&mc_path);
-                    badge_ui.set(initial.clone());
-                    if let Ok(mut s) = badge_arc.write() {
-                        *s = initial;
-                    }
-                    spawn_badge_poller(mc_path, Arc::clone(&badge_arc));
+                    spawn(async move {
+                        loop {
+                            let fresh = load_badge_state(&mc_path);
+                            badge_ui.set(fresh);
+                            tokio::time::sleep(Duration::from_secs(60)).await;
+                        }
+                    });
                 }
             }
         });
