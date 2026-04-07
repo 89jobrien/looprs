@@ -1,8 +1,8 @@
 use serde::Deserialize;
-use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::collections::BTreeMap;
+use std::path::Path;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ModelBadgeState {
     pub model_id: String,
     pub mean_reward: f32,
@@ -16,10 +16,10 @@ struct Modelcard {
     #[serde(default)]
     training_status: String,
     #[serde(default)]
-    eval_results: std::collections::HashMap<String, serde_yaml::Value>,
+    eval_results: BTreeMap<String, serde_yaml::Value>,
 }
 
-pub fn load_badge_state(modelcard_path: &PathBuf) -> ModelBadgeState {
+pub fn load_badge_state(modelcard_path: &Path) -> ModelBadgeState {
     let content = match std::fs::read_to_string(modelcard_path) {
         Ok(c) => c,
         Err(_) => {
@@ -71,18 +71,6 @@ pub fn load_badge_state(modelcard_path: &PathBuf) -> ModelBadgeState {
     }
 }
 
-pub fn spawn_badge_poller(modelcard_path: PathBuf, state: Arc<RwLock<ModelBadgeState>>) {
-    tokio::spawn(async move {
-        loop {
-            let fresh = load_badge_state(&modelcard_path);
-            if let Ok(mut s) = state.write() {
-                *s = fresh;
-            }
-            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-        }
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,13 +87,15 @@ mod tests {
         writeln!(f, "    mean_reward: 0.82").unwrap();
         writeln!(f, "  debugging:").unwrap();
         writeln!(f, "    mean_reward: 0.74").unwrap();
-        let state = load_badge_state(&f.path().to_path_buf());
-        insta::assert_debug_snapshot!(state);
+        let state = load_badge_state(f.path());
+        assert_eq!(state.model_id, "magistral-small-rl-v17");
+        assert!(state.mean_reward >= 0.0 && state.mean_reward <= 1.0);
+        assert_eq!(state.training_status, "idle");
     }
 
     #[test]
     fn test_missing_modelcard_returns_unknown() {
-        let state = load_badge_state(&PathBuf::from("/nonexistent/modelcard.yaml"));
+        let state = load_badge_state(std::path::Path::new("/nonexistent/modelcard.yaml"));
         assert_eq!(state.model_id, "unknown");
         assert_eq!(state.training_status, "unknown");
     }

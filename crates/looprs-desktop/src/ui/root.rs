@@ -407,7 +407,7 @@ pub fn app() -> impl IntoElement {
                                 )
                                 .child(label().text(""))
                                 .child(label().text(format!("Model: {badge_model_id}")))
-                                .child(label().text(format!("Reward: {badge_mean_reward:.3}")))
+                                .child(label().text(format!("Mean reward: {badge_mean_reward:.3}")))
                                 .child(label().text(format!("Training: {badge_training_status}")))
                                 .child(label().text(""))
                                 .child(
