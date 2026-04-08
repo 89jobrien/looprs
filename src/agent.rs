@@ -501,6 +501,10 @@ impl Agent {
             self.execute_hooks_for_event(&Event::DelegationComplete, &event_ctx);
         }
 
+        if let Some(ref mut logger) = self.session_logger {
+            let _ = logger.log(SessionEvent::SessionEnd);
+        }
+
         Ok(())
     }
 

@@ -1,7 +1,24 @@
 name: outsource
-description: Re-run the last user prompt against the outsource tier (OpenAI gpt-4o)
+description: Re-run the last user prompt against the outsource tier provider
+# NOTE: This command reads and displays the outsource provider from models.toml.
+# Actually switching the active provider for the current inference turn requires
+# agent-level support (future work — the agent would need to intercept the next
+# run_turn call and swap self.provider before inference).
 action:
-  type: message
-  text: |
-    Switching to outsource provider (OpenAI gpt-4o) for this task.
-    Note: this interaction will NOT be fed to magi training.
+  type: shell
+  command: |
+    python3 -c "
+import tomllib, pathlib, sys
+path = pathlib.Path.home() / '.looprs' / 'models.toml'
+try:
+    with open(path, 'rb') as f:
+        cfg = tomllib.load(f)
+    tier = cfg.get('tiers', {}).get('outsource', {})
+    provider = tier.get('provider', 'unknown')
+    model = tier.get('model', 'unknown')
+    print(f'Routing to outsource provider: {provider} / {model}')
+    print('Note: this interaction will NOT be fed to magi training.')
+except Exception as e:
+    print(f'Error reading models.toml: {e}', file=sys.stderr)
+    sys.exit(1)
+"
