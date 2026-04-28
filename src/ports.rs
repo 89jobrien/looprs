@@ -6,6 +6,80 @@
 use std::ffi::OsString;
 use std::process::Output;
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use tokio::sync::broadcast;
+
+// ── Domain type ──────────────────────────────────────────────────────────────
+
+/// A message routed through the pub/sub broker.
+///
+/// `payload` is an untyped JSON value so the broker can fan-out without
+/// deserializing into concrete types.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Message {
+    /// Originating component or subsystem name.
+    pub source: String,
+    /// Wall-clock time the message was created.
+    pub timestamp: DateTime<Utc>,
+    /// Logical topic string (e.g. `"agent.output"`, `"tool.result"`).
+    pub topic: String,
+    /// Schema version of the payload — increment when the shape changes.
+    pub schema_version: u32,
+    /// Unstructured payload; consumers are responsible for deserialization.
+    pub payload: serde_json::Value,
+}
+
+impl Message {
+    /// Convenience constructor using the current UTC time.
+    pub fn new(
+        source: impl Into<String>,
+        topic: impl Into<String>,
+        schema_version: u32,
+        payload: serde_json::Value,
+    ) -> Self {
+        Self {
+            source: source.into(),
+            timestamp: Utc::now(),
+            topic: topic.into(),
+            schema_version,
+            payload,
+        }
+    }
+}
+
+// ── Port ─────────────────────────────────────────────────────────────────────
+
+/// Port: fan-out message broker for inter-component pub/sub.
+///
+/// Implementations must be cheaply cloneable (`Arc`-backed) so callers
+/// can hold a handle without worrying about lifetimes.
+///
+/// # Drop-on-lag policy
+///
+/// When a subscriber's receive buffer is full the broker **drops the message**
+/// rather than blocking the publisher. Subscribers that cannot keep up will
+/// miss messages — they must handle `RecvError::Lagged` from the channel.
+pub trait MessageBroker: Send + Sync {
+    /// Publish `msg` to all current subscribers of `msg.topic`.
+    ///
+    /// Returns the number of active receivers that received the message.
+    /// Returns 0 if there are no subscribers (not an error).
+    fn publish(&self, msg: Message) -> usize;
+
+    /// Subscribe to all messages on `topic`.
+    ///
+    /// Each call returns an independent `Receiver`. The receiver buffer
+    /// holds up to 64 messages before lagging.
+    fn subscribe(&self, topic: &str) -> broadcast::Receiver<Message>;
+
+    /// Close the broker, dropping all sender handles.
+    ///
+    /// Outstanding receivers will drain buffered messages then see
+    /// `RecvError::Closed`.
+    fn close(&self);
+}
+
 /// Port: Execute named CLI tools (plugins).
 ///
 /// This port abstracts plugin execution, allowing the domain layer to request

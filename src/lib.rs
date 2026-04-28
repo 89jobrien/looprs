@@ -1,5 +1,5 @@
-mod agent;
 pub mod adapters;
+mod agent;
 pub mod agents;
 mod api;
 pub mod app_config;
@@ -26,8 +26,8 @@ pub mod ports;
 pub mod providers;
 pub mod rules;
 pub mod runtime;
-pub mod scorer;
 mod sanitize;
+pub mod scorer;
 pub mod seed;
 pub mod session_log;
 pub mod skills;
@@ -37,7 +37,7 @@ pub mod trace;
 pub mod types;
 pub mod ui;
 
-pub use crate::adapters::PluginsAdapter;
+pub use crate::adapters::{ChannelBroker, PluginsAdapter, RetryProvider};
 pub use crate::agent::{Agent, RuntimeSettings};
 pub use crate::agents::{AgentDefinition, AgentRegistry};
 pub use crate::approval::{console_approval_prompt, console_prompt, console_secret_prompt};
@@ -52,6 +52,7 @@ pub use crate::hooks::{ApprovalCallback, Hook, HookExecutor, HookRegistry, Promp
 pub use crate::observation::Observation;
 pub use crate::observation_manager::ObservationManager;
 pub use crate::ports::PluginExecutor;
+pub use crate::ports::{Message, MessageBroker};
 pub use crate::providers::{ProviderOverrides, create_provider_with_overrides};
 pub use crate::rules::{Rule, RuleRegistry};
 pub use crate::skills::{Skill, SkillRegistry};
