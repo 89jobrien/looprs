@@ -125,6 +125,24 @@ mod tests {
     }
 
     #[test]
+    fn observation_bd_description() {
+        let obs = Observation::new(
+            "bash".to_string(),
+            serde_json::json!({"command": "test"}),
+            "success".to_string(),
+            Some(ToolId::new("tool_7")),
+            "sess-123".to_string(),
+        )
+        .with_context("Test execution".to_string());
+
+        let desc = obs.to_bd_description();
+        assert!(desc.contains("bash"));
+        assert!(desc.contains("tool_7"));
+        assert!(desc.contains("success"));
+        assert!(desc.contains("Test execution"));
+    }
+
+    #[test]
     fn bd_title_with_context() {
         let obs = Observation::new(
             "bash".to_string(),
