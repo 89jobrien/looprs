@@ -1,41 +1,7 @@
 project: looprs
-updated: "20260429:132540"
+updated: "20260429:160832"
 
 items:
-  - id: HX-001
-    title: "Phase 2: Extract looprs-adapters crate"
-    description: >
-      Move adapter implementations (ChannelBroker, PluginsAdapter, RetryProvider,
-      providers/, session_log.rs) into crates/looprs-adapters/. Add SessionStore
-      and UserOutput ports to looprs-core. Implement FsSessionStore and
-      TerminalOutput adapters. Wire looprs-core dep from looprs-adapters.
-    priority: P1
-    status: open
-    files:
-      - crates/looprs-adapters/
-      - src/adapters/
-      - src/providers/
-      - src/session_log.rs
-      - src/ui.rs
-
-  - id: HX-002
-    title: "Phase 3: Extract looprs-cli crate"
-    description: >
-      Move binary entrypoint, REPL, commands, config into crates/looprs-cli/.
-      This becomes the composition root. Root Cargo.toml becomes workspace-only.
-    priority: P1
-    status: open
-    depends_on: [HX-001]
-    files:
-      - crates/looprs-cli/
-      - src/bin/
-      - src/runtime/
-      - src/commands.rs
-      - src/config.rs
-      - src/config_file.rs
-      - src/app_config.rs
-      - src/models_config.rs
-
   - id: HX-003
     title: "Phase 4: Wire Agent through ports"
     description: >
@@ -50,30 +16,60 @@ items:
       - src/agent.rs
       - crates/looprs-core/src/ports.rs
 
-  - id: HX-004
-    title: "Re-export looprs-core from root src/lib.rs"
+  - id: HX-005
+    title: "Deduplicate SessionEvent from src/session_log.rs"
     description: >
-      Update root src/lib.rs to re-export types from looprs-core instead of
-      duplicating them. Eliminates the current parallel definitions of types,
-      api, events, observation, ports in both src/ and crates/looprs-core/.
+      src/session_log.rs defines SessionEvent independently. Now that
+      looprs-core::ports::session_store defines the same type, replace
+      the root definition with a re-export from looprs-core.
     priority: P1
     status: open
     files:
-      - src/lib.rs
-      - src/types.rs
-      - src/api.rs
-      - src/events.rs
-      - src/observation.rs
-      - src/ports.rs
+      - src/session_log.rs
+      - crates/looprs-core/src/ports/session_store.rs
+
+  - id: HX-006
+    title: "Extract LLMProvider trait to looprs-core::ports"
+    description: >
+      Move the LLMProvider trait from src/providers/mod.rs into
+      crates/looprs-core/src/ports/inference_provider.rs. First-class
+      port alongside MessageBroker, PluginExecutor, SessionStore, UserOutput.
+    priority: P1
+    status: open
+    files:
+      - src/providers/mod.rs
+      - crates/looprs-core/src/ports/
+
+  - id: HX-007
+    title: "DRY provider factory: extract resolve_model helper"
+    description: >
+      create_provider_by_name in src/providers/mod.rs has 5 near-identical
+      match arms each resolving the model the same way. Extract a
+      resolve_model(overrides, config, provider) helper.
+    priority: P2
+    status: open
+    files:
+      - src/providers/mod.rs
 
 log:
+  - date: "20260429:160832"
+    session: 2
+    summary: >
+      Hexagonal refactor Phases 2-4: extracted looprs-cli crate (binary, REPL,
+      runtime); split ports.rs into ports/ directory with SessionStore and
+      UserOutput ports; moved adapters to looprs-core; re-exported types/api/
+      events/observation from looprs-core. Captured 8 improvement todos via valerie.
+    commits:
+      - 4b46bb8
+      - 2d8f8c9
+      - dc1f79d
+      - 71e1475
   - date: "20260429:132540"
     session: 1
     summary: >
       Hexagonal refactor Phase 1: extracted looprs-core crate with domain types,
       ports, and newtype_id!/domain_event! macros. Added ChannelBroker,
-      RetryProvider adapters. Fixed global pre-commit hook (gitleaks separate,
-      cargo check scoped to root crate).
+      RetryProvider adapters. Fixed global pre-commit hook.
     commits:
       - e2c3fcf
       - c34a04e
