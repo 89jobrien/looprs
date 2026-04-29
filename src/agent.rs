@@ -2,11 +2,11 @@ use crate::api::ContentBlock;
 use crate::api::Message;
 use crate::app_config::DefaultsConfig;
 use crate::errors::AgentError;
-use crate::models_config::ModelsConfig;
 use crate::events::{Event, EventContext, EventManager};
 use crate::file_refs::FileRefPolicy;
 use crate::fs_mode::FsMode;
 use crate::hooks::{ApprovalCallback, HookExecutor, HookRegistry, PromptCallback};
+use crate::models_config::ModelsConfig;
 use crate::observation_manager::ObservationManager;
 use crate::providers::InferenceRequest;
 use crate::providers::LLMProvider;
@@ -73,8 +73,7 @@ impl Agent {
         file_ref_policy: FileRefPolicy,
     ) -> Result<Self, AgentError> {
         let session_logger = {
-            let primary = dirs::home_dir()
-                .map(|h| h.join(".looprs").join("sessions"));
+            let primary = dirs::home_dir().map(|h| h.join(".looprs").join("sessions"));
             primary
                 .and_then(|d| SessionLogger::new(d).ok())
                 .or_else(|| {
@@ -348,9 +347,18 @@ impl Agent {
             };
 
             if let Some(ref mut logger) = self.session_logger {
-                let content = response.content.iter().filter_map(|b| {
-                    if let ContentBlock::Text { text } = b { Some(text.as_str()) } else { None }
-                }).collect::<Vec<_>>().join("\n\n");
+                let content = response
+                    .content
+                    .iter()
+                    .filter_map(|b| {
+                        if let ContentBlock::Text { text } = b {
+                            Some(text.as_str())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n\n");
                 let _ = logger.log(SessionEvent::Inference {
                     content,
                     provider: self.provider.name().to_string(),
@@ -420,9 +428,7 @@ impl Agent {
                     });
                 }
 
-                let count = tool_call_counts
-                    .entry(name.to_string())
-                    .or_insert(0);
+                let count = tool_call_counts.entry(name.to_string()).or_insert(0);
                 *count += 1;
                 if *count == 3 {
                     log::info!(
@@ -535,9 +541,7 @@ impl Agent {
 
         match crate::scorer::load_last_n_ollama_pairs(logger.path(), n) {
             Ok(pairs) => {
-                if let Err(e) =
-                    crate::scorer::run_scorer(&pairs, scorer_model, db_opt).await
-                {
+                if let Err(e) = crate::scorer::run_scorer(&pairs, scorer_model, db_opt).await {
                     log::warn!("scoring failed: {e}");
                 }
             }

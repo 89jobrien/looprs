@@ -106,8 +106,7 @@ pub async fn run_scorer(
                 let content = v["choices"][0]["message"]["content"]
                     .as_str()
                     .unwrap_or("{}");
-                let parsed: serde_json::Value =
-                    serde_json::from_str(content).unwrap_or_default();
+                let parsed: serde_json::Value = serde_json::from_str(content).unwrap_or_default();
                 parsed["score"].as_f64().unwrap_or(0.5) as f32
             }
             _ => {
@@ -119,7 +118,9 @@ pub async fn run_scorer(
         scores.push(score);
 
         if let Some(db) = db_path {
-            if let Err(e) = write_score_to_db(db, &pair.session_id, &pair.prompt, &pair.response, score).await {
+            if let Err(e) =
+                write_score_to_db(db, &pair.session_id, &pair.prompt, &pair.response, score).await
+            {
                 log::warn!("failed to write score to magi db: {e}");
             }
         }

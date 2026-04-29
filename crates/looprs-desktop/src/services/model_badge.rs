@@ -27,7 +27,7 @@ pub fn load_badge_state(modelcard_path: &Path) -> ModelBadgeState {
                 model_id: "unknown".into(),
                 mean_reward: 0.0,
                 training_status: "unknown".into(),
-            }
+            };
         }
     };
     let mc: Modelcard = match serde_yaml::from_str(&content) {
@@ -37,7 +37,7 @@ pub fn load_badge_state(modelcard_path: &Path) -> ModelBadgeState {
                 model_id: "unknown".into(),
                 mean_reward: 0.0,
                 training_status: "unknown".into(),
-            }
+            };
         }
     };
     let mut all_rewards: Vec<f32> = mc

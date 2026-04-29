@@ -202,7 +202,8 @@ impl Component for GenContainer {
         let gen_ctx = use_try_consume::<super::context::GenerativeContext>();
 
         // Get generated style if available
-        let final_background = if let (Some(slot_id), Some(ctx)) = (&self.slot_id, gen_ctx.as_ref()) {
+        let final_background = if let (Some(slot_id), Some(ctx)) = (&self.slot_id, gen_ctx.as_ref())
+        {
             ctx.get_color(slot_id).unwrap_or(self.background)
         } else {
             self.background

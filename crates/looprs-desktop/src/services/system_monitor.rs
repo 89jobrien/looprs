@@ -171,8 +171,7 @@ mod tests {
         monitor.record_error();
 
         // Manually add an old error (> 1 minute ago)
-        let old_timestamp =
-            std::time::Instant::now() - std::time::Duration::from_secs(61);
+        let old_timestamp = std::time::Instant::now() - std::time::Duration::from_secs(61);
         monitor.error_count_window.push_back((old_timestamp, 1));
 
         // Collect metrics should clean old entries

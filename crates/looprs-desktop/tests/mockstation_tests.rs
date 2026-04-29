@@ -40,11 +40,19 @@ fn test_websocket_lifecycle() {
 
     runtime.start_websocket();
     let snapshot = runtime.snapshot();
-    assert!(snapshot.transport_log.contains("websocket transport online"));
+    assert!(
+        snapshot
+            .transport_log
+            .contains("websocket transport online")
+    );
 
     runtime.stop_websocket();
     let snapshot = runtime.snapshot();
-    assert!(snapshot.transport_log.contains("websocket transport offline"));
+    assert!(
+        snapshot
+            .transport_log
+            .contains("websocket transport offline")
+    );
 }
 
 #[test]

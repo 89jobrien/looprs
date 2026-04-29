@@ -97,7 +97,10 @@ impl GenerativeProvider {
         Self { context }
     }
 
-    pub fn child(self, child: impl freya::prelude::IntoElement) -> impl freya::prelude::IntoElement {
+    pub fn child(
+        self,
+        child: impl freya::prelude::IntoElement,
+    ) -> impl freya::prelude::IntoElement {
         freya::prelude::use_provide_context(|| self.context.clone());
         child
     }

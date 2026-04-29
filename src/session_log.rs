@@ -10,8 +10,14 @@ use uuid::Uuid;
 #[derive(Debug, Serialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum SessionEvent {
-    UserMessage { content: String, provider: String },
-    Inference { content: String, provider: String },
+    UserMessage {
+        content: String,
+        provider: String,
+    },
+    Inference {
+        content: String,
+        provider: String,
+    },
     ToolUse {
         tool_name: String,
         input: serde_json::Value,
@@ -39,8 +45,9 @@ impl SessionLogger {
         let session_id = format!("sess-{}", Uuid::new_v4());
         let date = Utc::now().format("%Y-%m-%d");
         let filename = format!("{}-{}.jsonl", date, session_id);
-        fs::create_dir_all(&sessions_dir)
-            .with_context(|| format!("failed to create sessions dir: {}", sessions_dir.display()))?;
+        fs::create_dir_all(&sessions_dir).with_context(|| {
+            format!("failed to create sessions dir: {}", sessions_dir.display())
+        })?;
         let path = sessions_dir.join(filename);
         Ok(Self { session_id, path })
     }
