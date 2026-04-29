@@ -22,6 +22,7 @@ use looprs::{ProviderConfig, ProviderSettings};
 mod args;
 mod cli;
 mod repl;
+mod runtime;
 use args::CliArgs;
 use cli::{CliCommand, parse_input};
 use repl::{MatchSets, ReplHelper, bind_repl_keys};
@@ -66,8 +67,7 @@ async fn main() -> Result<()> {
 
     ui::init_logging();
 
-    let bootstrap =
-        looprs::runtime::bootstrap_runtime(cli_args.model.clone().map(ModelId::new)).await?;
+    let bootstrap = runtime::bootstrap_runtime(cli_args.model.clone().map(ModelId::new)).await?;
     let app_config = bootstrap.app_config;
     let provider_name = bootstrap.provider_name;
     let model = bootstrap.model;

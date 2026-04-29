@@ -3288,6 +3288,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "looprs-cli"
+version = "0.1.11"
+dependencies = [
+ "anyhow",
+ "colored",
+ "looprs",
+ "rustyline 14.0.0",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "looprs-core"
 version = "0.1.0"
 dependencies = [

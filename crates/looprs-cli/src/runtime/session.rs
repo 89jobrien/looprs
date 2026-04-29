@@ -1,7 +1,8 @@
-use crate::agent::Agent;
-use crate::errors::AgentError;
+use looprs::Agent;
+use looprs::AgentError;
 use std::collections::HashMap;
 
+#[allow(dead_code)]
 pub async fn run_single_turn(
     agent: &mut Agent,
     prompt: impl Into<String>,

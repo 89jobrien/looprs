@@ -1,8 +1,9 @@
-use crate::agent::{Agent, RuntimeSettings};
-use crate::app_config::AppConfig;
-use crate::config_file::ProviderConfig;
-use crate::providers::{ProviderOverrides, create_provider_with_overrides};
-use crate::types::ModelId;
+use looprs::Agent;
+use looprs::ModelId;
+use looprs::ProviderConfig;
+use looprs::RuntimeSettings;
+use looprs::app_config::AppConfig;
+use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
 
 pub struct BootstrappedRuntime {
     pub app_config: AppConfig,
