@@ -1,10 +1,4 @@
-//! Ports (hexagonal architecture) — outbound interfaces to external systems.
-//!
-//! Ports define what the application domain needs from external infrastructure,
-//! not how those needs are fulfilled. Adapters provide concrete implementations.
-
-use std::ffi::OsString;
-use std::process::Output;
+//! MessageBroker port — fan-out pub/sub message routing.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -39,7 +33,7 @@ impl Message {
     }
 }
 
-// ── Ports ───────────────────────────────────────────────────────────────
+// ── Port ─────────────────────────────────────────────────────────────────
 
 /// Port: fan-out message broker for inter-component pub/sub.
 ///
@@ -49,15 +43,4 @@ pub trait MessageBroker: Send + Sync {
     fn publish(&self, msg: Message) -> usize;
     fn subscribe(&self, topic: &str) -> broadcast::Receiver<Message>;
     fn close(&self);
-}
-
-/// Port: Execute named CLI tools (plugins).
-///
-/// Abstracts plugin execution so the domain layer can request tool
-/// execution without knowing about subprocess details or PATH resolution.
-pub trait PluginExecutor: Send + Sync {
-    fn has_tool(&self, tool: &str) -> bool;
-    fn execute_tool(&self, tool: &str, args: Vec<OsString>) -> std::io::Result<Output>;
-    fn execute_tool_if_available(&self, tool: &str, args: Vec<OsString>) -> Option<Output>;
-    fn probe_tool_success(&self, tool: &str, args: Vec<OsString>) -> bool;
 }

@@ -18,8 +18,8 @@ const CHANNEL_CAPACITY: usize = 64;
 /// # Example
 ///
 /// ```rust
-/// use looprs::adapters::channel_broker::ChannelBroker;
-/// use looprs::ports::{Message, MessageBroker};
+/// use looprs_core::adapters::channel_broker::ChannelBroker;
+/// use looprs_core::ports::{Message, MessageBroker};
 ///
 /// let broker = ChannelBroker::new();
 /// let mut rx = broker.subscribe("my.topic");

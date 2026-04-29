@@ -12,6 +12,7 @@ rust-version = "1.88"
 members = ["crates/looprs-core", "crates/looprs-desktop", "crates/looprs-desktop-baml-client"]
 
 [dependencies]
+looprs-core = { path = "crates/looprs-core" }
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }

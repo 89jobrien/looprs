@@ -1,11 +1,15 @@
 //! Adapters (hexagonal architecture) — implementations of ports.
 //!
-//! Adapters bridge the gap between domain ports and concrete infrastructure.
+//! Portable adapters live in `looprs_core::adapters` and are re-exported here
+//! for backwards compatibility. Adapters that depend on looprs internals
+//! (`PluginsAdapter`, `RetryProvider`) remain in this module.
 
-pub mod channel_broker;
 pub mod plugin_executor;
 pub mod retry_provider;
 
-pub use channel_broker::ChannelBroker;
+// Re-export portable adapters from looprs-core.
+pub use looprs_core::adapters::ChannelBroker;
+pub use looprs_core::adapters::FsSessionStore;
+pub use looprs_core::adapters::TerminalOutput;
 pub use plugin_executor::PluginsAdapter;
 pub use retry_provider::RetryProvider;
