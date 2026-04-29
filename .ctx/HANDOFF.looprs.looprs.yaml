@@ -1,0 +1,80 @@
+project: looprs
+updated: "20260429:132540"
+
+items:
+  - id: HX-001
+    title: "Phase 2: Extract looprs-adapters crate"
+    description: >
+      Move adapter implementations (ChannelBroker, PluginsAdapter, RetryProvider,
+      providers/, session_log.rs) into crates/looprs-adapters/. Add SessionStore
+      and UserOutput ports to looprs-core. Implement FsSessionStore and
+      TerminalOutput adapters. Wire looprs-core dep from looprs-adapters.
+    priority: P1
+    status: open
+    files:
+      - crates/looprs-adapters/
+      - src/adapters/
+      - src/providers/
+      - src/session_log.rs
+      - src/ui.rs
+
+  - id: HX-002
+    title: "Phase 3: Extract looprs-cli crate"
+    description: >
+      Move binary entrypoint, REPL, commands, config into crates/looprs-cli/.
+      This becomes the composition root. Root Cargo.toml becomes workspace-only.
+    priority: P1
+    status: open
+    depends_on: [HX-001]
+    files:
+      - crates/looprs-cli/
+      - src/bin/
+      - src/runtime/
+      - src/commands.rs
+      - src/config.rs
+      - src/config_file.rs
+      - src/app_config.rs
+      - src/models_config.rs
+
+  - id: HX-003
+    title: "Phase 4: Wire Agent through ports"
+    description: >
+      Refactor Agent::run_turn to use injected port traits (UserOutput,
+      SessionStore) instead of direct ui::*, SessionLogger, dirs::home_dir()
+      calls. Agent should depend only on looprs-core types and port traits.
+      Add NullOutput test double.
+    priority: P2
+    status: open
+    depends_on: [HX-002]
+    files:
+      - src/agent.rs
+      - crates/looprs-core/src/ports.rs
+
+  - id: HX-004
+    title: "Re-export looprs-core from root src/lib.rs"
+    description: >
+      Update root src/lib.rs to re-export types from looprs-core instead of
+      duplicating them. Eliminates the current parallel definitions of types,
+      api, events, observation, ports in both src/ and crates/looprs-core/.
+    priority: P1
+    status: open
+    files:
+      - src/lib.rs
+      - src/types.rs
+      - src/api.rs
+      - src/events.rs
+      - src/observation.rs
+      - src/ports.rs
+
+log:
+  - date: "20260429:132540"
+    session: 1
+    summary: >
+      Hexagonal refactor Phase 1: extracted looprs-core crate with domain types,
+      ports, and newtype_id!/domain_event! macros. Added ChannelBroker,
+      RetryProvider adapters. Fixed global pre-commit hook (gitleaks separate,
+      cargo check scoped to root crate).
+    commits:
+      - e2c3fcf
+      - c34a04e
+      - 61dd3e8

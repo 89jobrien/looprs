@@ -1,7 +1,9 @@
 /target
 *.local.md
 *.local.json
-.ctx/
+.ctx/*
+!.ctx/HANDOFF.*.yaml
+.ctx/HANDOFF.*.state.yaml
 thoughts/
 docs/
 
