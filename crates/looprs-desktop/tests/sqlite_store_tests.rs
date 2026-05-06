@@ -65,7 +65,7 @@ async fn test_append_observability_event() {
     append_observability_event("chat.send", "test payload").await;
 
     // Verify event was stored by ensuring no errors occurred
-    // TODO: Add query function to retrieve events for testing
+    // TODO(#10): Add query function to retrieve events for testing
 }
 
 #[tokio::test]
