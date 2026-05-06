@@ -3,7 +3,7 @@ use super::{NamedTool, Plugins};
 /// Thin adapters for named external binaries.
 ///
 /// These are intentionally "dumb": they only provide tool identity + execution.
-/// Higher-level modules (jj/bd/kan/tools) own argument construction and parsing.
+/// Higher-level modules (jj/kan/tools) own argument construction and parsing.
 macro_rules! define_tool {
     ($name:ident, $bin:literal) => {
         pub struct $name<'a> {
@@ -33,7 +33,6 @@ macro_rules! define_tool {
 }
 
 define_tool!(Jj, "jj");
-define_tool!(Bd, "bd");
 define_tool!(Kan, "kan");
 define_tool!(Rg, "rg");
 define_tool!(Fd, "fd");

@@ -1,7 +1,9 @@
 /target
 *.local.md
 *.local.json
-.ctx/
+.ctx/*
+!.ctx/HANDOFF.*.yaml
+.ctx/HANDOFF.*.state.yaml
 thoughts/
 docs/
 
@@ -36,3 +38,13 @@ target/llvm-cov/
 
 # vendored crates
 third_party/**/target/
+
+# handoff-begin
+.ctx/*
+!.ctx/HANDOFF.*.yaml
+.ctx/HANDOFF.*.state.yaml
+!.ctx/handoff.*.config.toml.example
+.ctx/HANDOFF.*.*.state.yaml
+.ctx/HANDOFF.hj.hj.state.yaml
+.ctx/.initialized
+# handoff-end

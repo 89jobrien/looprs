@@ -1,8 +1,8 @@
 use looprs_desktop_baml_client::types::{UiContext, WorkflowStage, WorkflowState};
-use looprs_desktop_baml_client::{init as baml_init, B};
+use looprs_desktop_baml_client::{B, init as baml_init};
 use std::collections::VecDeque;
 use std::sync::Arc;
-use tokio::sync::{mpsc, watch, RwLock};
+use tokio::sync::{RwLock, mpsc, watch};
 
 const MAX_HISTORY_SIZE: usize = 100;
 

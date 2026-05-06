@@ -45,12 +45,12 @@ pub struct MaterialTheme {
     pub label_small: f32,
 
     // Spacing system (4dp grid)
-    pub spacing_xs: f32,   // 4dp
-    pub spacing_sm: f32,   // 8dp
-    pub spacing_md: f32,   // 16dp
-    pub spacing_lg: f32,   // 24dp
-    pub spacing_xl: f32,   // 32dp
-    pub spacing_xxl: f32,  // 48dp
+    pub spacing_xs: f32,  // 4dp
+    pub spacing_sm: f32,  // 8dp
+    pub spacing_md: f32,  // 16dp
+    pub spacing_lg: f32,  // 24dp
+    pub spacing_xl: f32,  // 32dp
+    pub spacing_xxl: f32, // 48dp
 
     // Elevation shadows
     pub elevation_0: f32,
@@ -62,12 +62,12 @@ pub struct MaterialTheme {
 
     // Corner radius
     pub radius_none: f32,
-    pub radius_xs: f32,    // 4dp
-    pub radius_sm: f32,    // 8dp
-    pub radius_md: f32,    // 12dp
-    pub radius_lg: f32,    // 16dp
-    pub radius_xl: f32,    // 28dp
-    pub radius_full: f32,  // 999dp
+    pub radius_xs: f32,   // 4dp
+    pub radius_sm: f32,   // 8dp
+    pub radius_md: f32,   // 12dp
+    pub radius_lg: f32,   // 16dp
+    pub radius_xl: f32,   // 28dp
+    pub radius_full: f32, // 999dp
 }
 
 impl MaterialTheme {
@@ -75,15 +75,15 @@ impl MaterialTheme {
     pub fn light() -> Self {
         Self {
             // Material Design 3 color tokens (Blue theme)
-            primary: (33, 150, 243),           // Blue 500
+            primary: (33, 150, 243), // Blue 500
             on_primary: (255, 255, 255),
             primary_container: (187, 222, 251), // Blue 100
             on_primary_container: (1, 87, 155), // Blue 900
 
-            secondary: (103, 58, 183),         // Deep Purple 500
+            secondary: (103, 58, 183), // Deep Purple 500
             on_secondary: (255, 255, 255),
 
-            error: (244, 67, 54),              // Red 500
+            error: (244, 67, 54), // Red 500
             on_error: (255, 255, 255),
             error_container: (255, 205, 210),  // Red 100
             on_error_container: (183, 28, 28), // Red 900
@@ -143,15 +143,15 @@ impl MaterialTheme {
     /// Create a dark theme
     pub fn dark() -> Self {
         Self {
-            primary: (144, 202, 249),          // Blue 200
+            primary: (144, 202, 249), // Blue 200
             on_primary: (1, 87, 155),
-            primary_container: (1, 87, 155),   // Blue 900
+            primary_container: (1, 87, 155), // Blue 900
             on_primary_container: (187, 222, 251),
 
-            secondary: (179, 136, 255),        // Deep Purple 200
+            secondary: (179, 136, 255), // Deep Purple 200
             on_secondary: (49, 27, 146),
 
-            error: (239, 83, 80),              // Red 300
+            error: (239, 83, 80), // Red 300
             on_error: (183, 28, 28),
             error_container: (183, 28, 28),
             on_error_container: (255, 205, 210),
@@ -174,18 +174,18 @@ impl MaterialTheme {
 
         match urgency {
             5 => ContextColors {
-                primary: (244, 67, 54),       // Red 500 - Critical
-                container: (255, 205, 210),   // Red 100
-                on_container: (183, 28, 28),  // Red 900
+                primary: (244, 67, 54),      // Red 500 - Critical
+                container: (255, 205, 210),  // Red 100
+                on_container: (183, 28, 28), // Red 900
                 border: Some((244, 67, 54)),
                 corner_radius: 2.0,
                 spacing: 4.0,
                 border_width: 2.0,
             },
             4 => ContextColors {
-                primary: (255, 152, 0),       // Orange 500 - High
-                container: (255, 224, 178),   // Orange 100
-                on_container: (230, 81, 0),   // Orange 900
+                primary: (255, 152, 0),     // Orange 500 - High
+                container: (255, 224, 178), // Orange 100
+                on_container: (230, 81, 0), // Orange 900
                 border: Some((255, 152, 0)),
                 corner_radius: 4.0,
                 spacing: 8.0,
@@ -201,18 +201,18 @@ impl MaterialTheme {
                 border_width: 1.0,
             },
             2 => ContextColors {
-                primary: (33, 150, 243),      // Blue 500 - Low
-                container: (187, 222, 251),   // Blue 100
-                on_container: (1, 87, 155),   // Blue 900
+                primary: (33, 150, 243),    // Blue 500 - Low
+                container: (187, 222, 251), // Blue 100
+                on_container: (1, 87, 155), // Blue 900
                 border: None,
                 corner_radius: 12.0,
                 spacing: 16.0,
                 border_width: 1.0,
             },
             _ => ContextColors {
-                primary: (76, 175, 80),       // Green 500 - Healthy
-                container: (200, 230, 201),   // Green 100
-                on_container: (27, 94, 32),   // Green 900
+                primary: (76, 175, 80),     // Green 500 - Healthy
+                container: (200, 230, 201), // Green 100
+                on_container: (27, 94, 32), // Green 900
                 border: None,
                 corner_radius: 16.0,
                 spacing: 24.0,
@@ -302,7 +302,8 @@ mod tests {
     #[test]
     fn test_urgency_calculation_healthy() {
         let theme = MaterialTheme::light();
-        let mut context = super::super::super::super::services::context_engine::default_ui_context();
+        let mut context =
+            super::super::super::super::services::context_engine::default_ui_context();
         context.system_health = Some(looprs_desktop_baml_client::types::SystemHealth {
             status: HealthStatus::Healthy,
             cpu_usage: 30.0,
@@ -320,7 +321,8 @@ mod tests {
     #[test]
     fn test_urgency_calculation_critical() {
         let theme = MaterialTheme::light();
-        let mut context = super::super::super::super::services::context_engine::default_ui_context();
+        let mut context =
+            super::super::super::super::services::context_engine::default_ui_context();
         context.system_health = Some(looprs_desktop_baml_client::types::SystemHealth {
             status: HealthStatus::Critical,
             cpu_usage: 95.0,
@@ -330,17 +332,15 @@ mod tests {
             active_alerts: 5,
             recommendations: vec!["Scale up resources".to_string()],
         });
-        context.anomalies = vec![
-            looprs_desktop_baml_client::types::DataAnomaly {
-                r#type: looprs_desktop_baml_client::types::AnomalyType::Spike,
-                severity: AnomalySeverity::Critical,
-                metric: "cpu".to_string(),
-                current_value: 95.0,
-                expected_range: serde_json::json!([20.0, 60.0]),
-                description: "CPU spike".to_string(),
-                timestamp: "2026-02-28T12:00:00Z".to_string(),
-            },
-        ];
+        context.anomalies = vec![looprs_desktop_baml_client::types::DataAnomaly {
+            r#type: looprs_desktop_baml_client::types::AnomalyType::Spike,
+            severity: AnomalySeverity::Critical,
+            metric: "cpu".to_string(),
+            current_value: 95.0,
+            expected_range: serde_json::json!([20.0, 60.0]),
+            description: "CPU spike".to_string(),
+            timestamp: "2026-02-28T12:00:00Z".to_string(),
+        }];
 
         let urgency = theme.calculate_urgency(&context);
         assert!(urgency >= 4); // Critical health (3) + critical anomaly (1)
@@ -349,7 +349,8 @@ mod tests {
     #[test]
     fn test_colors_for_critical_context() {
         let theme = MaterialTheme::light();
-        let mut context = super::super::super::super::services::context_engine::default_ui_context();
+        let mut context =
+            super::super::super::super::services::context_engine::default_ui_context();
         context.system_health = Some(looprs_desktop_baml_client::types::SystemHealth {
             status: HealthStatus::Critical,
             cpu_usage: 95.0,
@@ -362,8 +363,8 @@ mod tests {
 
         let colors = theme.colors_for_context(&context);
         assert_eq!(colors.primary, (244, 67, 54)); // Red
-        assert_eq!(colors.corner_radius, 2.0);     // Sharp corners
-        assert_eq!(colors.spacing, 4.0);           // Tight spacing
-        assert!(colors.border.is_some());          // Has border
+        assert_eq!(colors.corner_radius, 2.0); // Sharp corners
+        assert_eq!(colors.spacing, 4.0); // Tight spacing
+        assert!(colors.border.is_some()); // Has border
     }
 }

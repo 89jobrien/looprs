@@ -1,6 +1,6 @@
 use looprs_desktop::services::sqlite_store::*;
-use tempfile::TempDir;
 use serial_test::serial;
+use tempfile::TempDir;
 
 #[tokio::test]
 #[serial]
@@ -65,7 +65,7 @@ async fn test_append_observability_event() {
     append_observability_event("chat.send", "test payload").await;
 
     // Verify event was stored by ensuring no errors occurred
-    // TODO: Add query function to retrieve events for testing
+    // TODO(#10): Add query function to retrieve events for testing
 }
 
 #[tokio::test]
@@ -94,7 +94,10 @@ async fn test_concurrent_writes() {
 async fn test_database_connection_failure_handling() {
     // Set invalid observability dir to force connection failure
     unsafe {
-        std::env::set_var("LOOPRS_OBSERVABILITY_DIR", "/invalid/path/that/cannot/exist");
+        std::env::set_var(
+            "LOOPRS_OBSERVABILITY_DIR",
+            "/invalid/path/that/cannot/exist",
+        );
     }
 
     // Should not panic, should return empty vec

@@ -28,14 +28,13 @@ pub struct ModelsConfig {
 
 impl ModelsConfig {
     pub fn from_path(path: &Path) -> Result<Self> {
-        let content = std::fs::read_to_string(path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let content =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         toml::from_str(&content).context("parsing models.toml")
     }
 
     pub fn load() -> Result<Self> {
-        let home = dirs::home_dir()
-            .context("could not determine home directory")?;
+        let home = dirs::home_dir().context("could not determine home directory")?;
         Self::from_path(&home.join(".looprs").join("models.toml"))
     }
 

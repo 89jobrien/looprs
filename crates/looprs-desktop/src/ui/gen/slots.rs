@@ -10,8 +10,13 @@ use std::time::Instant;
 pub enum GenerationStatus {
     Pending,
     Generating,
-    Cached { generated_at: Instant },
-    Failed { error: String, fallback_active: bool },
+    Cached {
+        generated_at: Instant,
+    },
+    Failed {
+        error: String,
+        fallback_active: bool,
+    },
 }
 
 /// Cache for generated slot values

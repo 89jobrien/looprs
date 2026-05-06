@@ -1,9 +1,9 @@
 use crate::services::agent_adapter::run_turn_for_prompt;
-use crate::services::model_badge::{load_badge_state, ModelBadgeState};
 use crate::services::generative_ui::{
     GenerativeUiCommand, GenerativeUiUpdate, LiveGenerativeUiHandle, start_live_generative_ui,
 };
 use crate::services::mockstation::{MockstationRuntime, build_mockstation_runtime};
+use crate::services::model_badge::{ModelBadgeState, load_badge_state};
 use crate::services::sqlite_store::{
     append_chat_message, append_observability_event, clear_chat_messages, load_chat_messages,
 };

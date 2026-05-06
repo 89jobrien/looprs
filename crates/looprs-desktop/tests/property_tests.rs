@@ -1,6 +1,6 @@
+use looprs_desktop::services::generative_ui::*;
 use proptest::prelude::*;
 use serde_json::Value;
-use looprs_desktop::services::generative_ui::*;
 
 proptest! {
     #[test]

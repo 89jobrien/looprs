@@ -21,6 +21,6 @@ fn test_terminal_renders_ui() {
 
 #[test]
 fn test_terminal_handles_missing_bash() {
-    // TODO: Mock CommandBuilder to test failure path
+    // TODO(#11): Mock CommandBuilder to test failure path
     // This requires adding a trait abstraction for terminal process spawning
 }

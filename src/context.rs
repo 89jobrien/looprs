@@ -1,4 +1,4 @@
-use crate::{bd, jj, kan};
+use crate::{jj, kan};
 use serde::{Deserialize, Serialize};
 
 /// Context available at session start
@@ -6,17 +6,15 @@ use serde::{Deserialize, Serialize};
 pub struct SessionContext {
     pub jj_status: Option<jj::JjStatus>,
     pub jj_recent_commits: Option<Vec<String>>,
-    pub bd_open_issues: Option<Vec<bd::BdIssue>>,
     pub kan_status: Option<kan::KanStatus>,
 }
 
 impl SessionContext {
-    /// Collect context from jj, bd, and kan if available
+    /// Collect context from jj and kan if available
     pub fn collect() -> Self {
         SessionContext {
             jj_status: jj::get_status(),
             jj_recent_commits: jj::get_recent_commits(5),
-            bd_open_issues: bd::list_open_issues(),
             kan_status: kan::get_status(),
         }
     }
@@ -43,23 +41,6 @@ impl SessionContext {
             parts.push(format!("## Recent Commits\n{commits_str}"));
         }
 
-        // Format open issues if available
-        if let Some(ref issues) = self.bd_open_issues {
-            let issues_str = issues
-                .iter()
-                .map(|i| {
-                    format!(
-                        "  - [{}] {}: {}",
-                        i.id,
-                        i.title,
-                        i.priority.as_ref().unwrap_or(&"normal".to_string())
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            parts.push(format!("## Open Issues\n{issues_str}"));
-        }
-
         // Format kan status if available
         if let Some(ref kan) = self.kan_status {
             let columns_str = kan
@@ -83,10 +64,7 @@ impl SessionContext {
 
     /// Check if there is any context available
     pub fn is_empty(&self) -> bool {
-        self.jj_status.is_none()
-            && self.jj_recent_commits.is_none()
-            && self.bd_open_issues.is_none()
-            && self.kan_status.is_none()
+        self.jj_status.is_none() && self.jj_recent_commits.is_none() && self.kan_status.is_none()
     }
 }
 
@@ -96,9 +74,9 @@ mod tests {
 
     #[test]
     fn test_session_context_collect() {
-        // Should work even with no jj/bd repo
+        // Should work even with no jj repo
         let ctx = SessionContext::collect();
-        assert!(ctx.is_empty()); // No jj/bd in current env
+        assert!(ctx.is_empty()); // No jj in current env
     }
 
     #[test]
@@ -106,7 +84,6 @@ mod tests {
         let ctx = SessionContext {
             jj_status: None,
             jj_recent_commits: None,
-            bd_open_issues: None,
             kan_status: None,
         };
         assert!(ctx.format_for_prompt().is_none());
@@ -121,31 +98,11 @@ mod tests {
                 description: "Initial commit".to_string(),
             }),
             jj_recent_commits: None,
-            bd_open_issues: None,
             kan_status: None,
         };
 
         let text = ctx.format_for_prompt().expect("expected formatted prompt");
         assert!(text.contains("main"));
         assert!(text.contains("abc123"));
-    }
-
-    #[test]
-    fn test_session_context_format_with_issues() {
-        let ctx = SessionContext {
-            jj_status: None,
-            jj_recent_commits: None,
-            bd_open_issues: Some(vec![bd::BdIssue {
-                id: "1".to_string(),
-                title: "Test issue".to_string(),
-                status: "open".to_string(),
-                priority: Some("high".to_string()),
-            }]),
-            kan_status: None,
-        };
-
-        let text = ctx.format_for_prompt().expect("expected formatted prompt");
-        assert!(text.contains("Test issue"));
-        assert!(text.contains("high"));
     }
 }

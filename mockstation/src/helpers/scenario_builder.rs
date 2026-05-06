@@ -79,7 +79,7 @@ impl Scenario {
     pub async fn run(&self) -> Result<()> {
         tracing::info!(scenario = %self.name, "Running scenario");
 
-        // TODO: Implement scenario execution
+        // TODO(#8): Implement scenario execution
         // - Execute steps in order
         // - Collect results
         // - Verify expectations

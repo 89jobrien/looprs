@@ -19,10 +19,10 @@
 //!
 //! ```text
 //! CLI (NDJSON)                        Browser (JSON)
-//!     |                                    |
+//!     |                                   |
 //!     +---- handle_cli_message() -------> |
 //!     |     (assistant, stream, result)   |
-//!     |                                    |
+//!     |                                   |
 //!     | <---- handle_browser_message()----+
 //!           (permission_response)
 //! ```

@@ -3270,6 +3270,7 @@ dependencies = [
  "insta",
  "libc",
  "log",
+ "looprs-core",
  "proptest",
  "regex",
  "reqwest 0.12.28",
@@ -3287,6 +3288,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "looprs-cli"
+version = "0.1.11"
+dependencies = [
+ "anyhow",
+ "colored",
+ "looprs",
+ "rustyline 14.0.0",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "looprs-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "looprs-desktop"
 version = "0.1.0"
 dependencies = [
@@ -3300,6 +3327,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
+ "serde_yaml",
  "serial_test",
  "sqlx",
  "sysinfo",

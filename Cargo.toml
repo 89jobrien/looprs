@@ -9,9 +9,15 @@ readme = "README.md"
 rust-version = "1.88"
 
 [workspace]
-members = ["crates/looprs-desktop", "crates/looprs-desktop-baml-client"]
+members = [
+    "crates/looprs-core",
+    "crates/looprs-cli",
+    "crates/looprs-desktop",
+    "crates/looprs-desktop-baml-client",
+]
 
 [dependencies]
+looprs-core = { path = "crates/looprs-core" }
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
