@@ -45,7 +45,7 @@ impl Observation {
         self
     }
 
-    pub fn to_bd_description(&self) -> String {
+    pub fn to_description(&self) -> String {
         let input_str = serde_json::to_string_pretty(&self.input).unwrap_or_default();
         let output_preview = if self.output.len() > 500 {
             format!("{}...", &self.output[..500])
@@ -78,7 +78,7 @@ impl Observation {
         )
     }
 
-    pub fn to_bd_title(&self) -> String {
+    pub fn to_title(&self) -> String {
         if let Some(ctx) = &self.context {
             format!("Observation: {}", ctx.chars().take(60).collect::<String>())
         } else {
@@ -125,7 +125,7 @@ mod tests {
     }
 
     #[test]
-    fn observation_bd_description() {
+    fn observation_description() {
         let obs = Observation::new(
             "bash".to_string(),
             serde_json::json!({"command": "test"}),
@@ -135,7 +135,7 @@ mod tests {
         )
         .with_context("Test execution".to_string());
 
-        let desc = obs.to_bd_description();
+        let desc = obs.to_description();
         assert!(desc.contains("bash"));
         assert!(desc.contains("tool_7"));
         assert!(desc.contains("success"));
@@ -143,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn bd_title_with_context() {
+    fn title_with_context() {
         let obs = Observation::new(
             "bash".to_string(),
             serde_json::json!({}),
@@ -153,7 +153,7 @@ mod tests {
         )
         .with_context("Fixed parser edge case".to_string());
 
-        let title = obs.to_bd_title();
+        let title = obs.to_title();
         assert!(title.contains("Fixed parser edge case"));
         assert!(title.starts_with("Observation:"));
     }

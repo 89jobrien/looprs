@@ -1,0 +1,131 @@
+{
+    "version": "2026-05-06.r1",
+    "inputs": [
+        {
+            "name": "task",
+            "type": "text"
+        }
+    ],
+    "runtime_vars": {
+        "provider": {
+            "type": "string",
+            "default": "anthropic"
+        },
+        "model": {
+            "type": "string",
+            "default": "claude-sonnet-4-6"
+        },
+        "max_turns": {
+            "type": "integer",
+            "default": 10
+        },
+        "dry_run": {
+            "type": "boolean",
+            "default": false
+        }
+    },
+    "agent_schema": {
+        "type": "object",
+        "properties": {
+            "task_summary": {
+                "type": "string",
+                "description": "One-sentence summary of the task that was executed."
+            },
+            "provider_used": {
+                "type": "string",
+                "description": "LLM provider that handled the session.",
+                "enum": ["anthropic", "openai", "ollama"]
+            },
+            "model_used": {
+                "type": "string",
+                "description": "Model identifier used for the session."
+            },
+            "tool_calls_made": {
+                "type": "integer",
+                "description": "Total number of tool invocations across all turns.",
+                "minimum": 0
+            },
+            "turns_used": {
+                "type": "integer",
+                "description": "Number of agentic turns consumed.",
+                "minimum": 1
+            },
+            "outcome": {
+                "type": "string",
+                "description": "High-level result of the session.",
+                "enum": ["success", "partial", "failed", "aborted"]
+            },
+            "confidence": {
+                "type": "number",
+                "description": "Agent self-reported confidence in the outcome, 0 exclusive to 1 inclusive.",
+                "exclusiveMinimum": 0,
+                "maximum": 1
+            },
+            "observation_stored": {
+                "type": "boolean",
+                "description": "Whether the session observation was persisted to the observation store."
+            }
+        }
+    },
+    "actions": [
+        {
+            "name": "notify_success",
+            "logic": { "==": [{ "var": "outcome" }, "success"] },
+            "run": [
+                {
+                    "kind": "email_me",
+                    "subject": "looprs session complete",
+                    "text": "Task finished successfully. Provider: claude-sonnet-4-6. Turns used recorded in structured output."
+                }
+            ]
+        },
+        {
+            "name": "log_session",
+            "logic": { "!=": [{ "var": "outcome" }, "aborted"] },
+            "run": [
+                {
+                    "kind": "exec",
+                    "program": "/usr/bin/env",
+                    "args": [
+                        "sh", "-c",
+                        "echo looprs session logged"
+                    ],
+                    "output_variable": "log_result",
+                    "failure_mode": "continue"
+                },
+                {
+                    "kind": "exec",
+                    "program": "/usr/bin/env",
+                    "args": ["sh", "-c", "echo log_status: ok"],
+                    "when": { "==": [{ "var": "log_result_status" }, "succeeded"] },
+                    "output_variable": "log_confirm"
+                }
+            ]
+        },
+        {
+            "name": "alert_failure",
+            "logic": {
+                "in": [{ "var": "outcome" }, ["failed", "aborted"]]
+            },
+            "run": [
+                {
+                    "kind": "email_me",
+                    "subject": "looprs session failed",
+                    "text": "Session ended with a non-success outcome. Check structured output for details."
+                }
+            ]
+        },
+        {
+            "name": "dry_run_gate",
+            "logic": { "==": [{ "var": "runtime.dry_run" }, true] },
+            "run": [
+                {
+                    "kind": "exec",
+                    "program": "/bin/echo",
+                    "args": ["dry-run mode: no side effects committed"],
+                    "platform": ["macos", "linux"]
+                }
+            ]
+        }
+    ]
+}

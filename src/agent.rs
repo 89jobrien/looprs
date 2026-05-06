@@ -8,10 +8,11 @@ use crate::fs_mode::FsMode;
 use crate::hooks::{ApprovalCallback, HookExecutor, HookRegistry, PromptCallback};
 use crate::models_config::ModelsConfig;
 use crate::observation_manager::ObservationManager;
+use crate::ports::SessionStore;
 use crate::providers::InferenceRequest;
 use crate::providers::LLMProvider;
 use crate::rules::RuleRegistry;
-use crate::session_log::{SessionEvent, SessionLogger};
+use crate::session_log::SessionEvent;
 use crate::tools::{ToolContext, execute_tool, get_tool_definitions};
 use crate::ui;
 use std::collections::HashMap;
@@ -54,7 +55,7 @@ pub struct Agent {
     runtime: RuntimeSettings,
     file_ref_policy: FileRefPolicy,
     pending_metadata: HashMap<String, String>,
-    session_logger: Option<SessionLogger>,
+    session_logger: Option<Box<dyn SessionStore>>,
     models_config: Option<ModelsConfig>,
 }
 
@@ -72,13 +73,15 @@ impl Agent {
         runtime: RuntimeSettings,
         file_ref_policy: FileRefPolicy,
     ) -> Result<Self, AgentError> {
-        let session_logger = {
+        use crate::adapters::FsSessionStore;
+        let session_logger: Option<Box<dyn SessionStore>> = {
             let primary = dirs::home_dir().map(|h| h.join(".looprs").join("sessions"));
             primary
-                .and_then(|d| SessionLogger::new(d).ok())
+                .and_then(|d| FsSessionStore::new(d).ok())
+                .map(|s| Box::new(s) as Box<dyn SessionStore>)
                 .or_else(|| {
-                    match SessionLogger::new(std::env::temp_dir().join("looprs-sessions")) {
-                        Ok(logger) => Some(logger),
+                    match FsSessionStore::new(std::env::temp_dir().join("looprs-sessions")) {
+                        Ok(logger) => Some(Box::new(logger) as Box<dyn SessionStore>),
                         Err(e) => {
                             log::warn!("failed to initialize fallback session logger: {e}");
                             None
@@ -539,7 +542,10 @@ impl Agent {
             crate::scorer::ScoreTrigger::OnDemand { n } => *n,
         };
 
-        match crate::scorer::load_last_n_ollama_pairs(logger.path(), n) {
+        let Some(path) = logger.path() else {
+            return;
+        };
+        match crate::scorer::load_last_n_ollama_pairs(path, n) {
             Ok(pairs) => {
                 if let Err(e) = crate::scorer::run_scorer(&pairs, scorer_model, db_opt).await {
                     log::warn!("scoring failed: {e}");

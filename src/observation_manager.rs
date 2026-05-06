@@ -1,10 +1,9 @@
 use anyhow::Result;
 use serde_json::Value;
-use std::ffi::OsString;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::observation::Observation;
-use crate::plugins::{NamedTool, binaries::Bd};
+use crate::ports::ObservationStore;
 use crate::types::ToolId;
 
 /// Manages observation capture and storage across a session
@@ -62,58 +61,12 @@ impl ObservationManager {
         self.observations.len()
     }
 
-    /// Save all observations to bd as issues
-    pub fn save_to_bd(&self) -> Result<()> {
-        if self.observations.is_empty() {
-            return Ok(());
-        }
-
-        // Check if bd is available
-        if !Bd::system().is_available() {
-            // bd not installed, silently skip
-            return Ok(());
-        }
-
-        // Try to create bd issues for each observation
-        for obs in &self.observations {
-            let title = obs.to_bd_title();
-            let description = obs.to_bd_description();
-
-            let args = Self::bd_create_args(&title, &description);
-            let output = Bd::system().output(args);
-
-            // Log but don't fail if individual observation save fails
-            match output {
-                Ok(output) if output.status.success() => {
-                    // Saved successfully
-                }
-                Ok(output) => {
-                    crate::ui::warn(format!(
-                        "Warning: Failed to save observation: {}",
-                        String::from_utf8_lossy(&output.stderr)
-                    ));
-                }
-                Err(e) => {
-                    crate::ui::warn(format!("Warning: Error saving observation to bd: {e}"));
-                }
-            }
-        }
-
-        Ok(())
+    /// Save all observations via the given store.
+    pub fn save(&self, store: &dyn ObservationStore) -> Result<()> {
+        store.save(&self.observations)
     }
 
-    fn bd_create_args(title: &str, description: &str) -> Vec<OsString> {
-        vec![
-            "create".into(),
-            title.into(),
-            "--description".into(),
-            description.into(),
-            "--labels".into(),
-            "observation,automated".into(),
-        ]
-    }
-
-    /// Clear all observations (usually called after saving to bd)
+    /// Clear all observations (usually called after saving)
     pub fn clear(&mut self) {
         self.observations.clear();
     }
@@ -122,51 +75,6 @@ impl ObservationManager {
 impl Default for ObservationManager {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Load recent observations from bd
-pub fn load_recent_observations(limit: usize) -> Option<Vec<String>> {
-    // Check if bd is available
-    if !Bd::system().is_available() {
-        return None;
-    }
-
-    // Query bd for recent observations
-    let args: Vec<OsString> = vec![
-        "list".into(),
-        "--tag".into(),
-        "observation".into(),
-        "--limit".into(),
-        limit.to_string().into(),
-        "--json".into(),
-    ];
-
-    let output = Bd::system().output_if_available(args)?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let output_str = String::from_utf8_lossy(&output.stdout);
-    let mut summaries = Vec::new();
-
-    for line in output_str.lines() {
-        if line.is_empty() {
-            continue;
-        }
-
-        if let Ok(issue) = serde_json::from_str::<serde_json::Value>(line)
-            && let Some(title) = issue.get("title").and_then(|t| t.as_str())
-        {
-            summaries.push(title.to_string());
-        }
-    }
-
-    if summaries.is_empty() {
-        None
-    } else {
-        Some(summaries)
     }
 }
 
@@ -234,17 +142,5 @@ mod tests {
 
         mgr.clear();
         assert_eq!(mgr.count(), 0);
-    }
-
-    #[test]
-    fn test_bd_create_args_uses_labels_not_tags() {
-        let args = ObservationManager::bd_create_args("title", "desc");
-
-        let args_strs: Vec<String> = args
-            .iter()
-            .map(|a| a.to_string_lossy().to_string())
-            .collect();
-        assert!(args_strs.contains(&"--labels".to_string()));
-        assert!(!args_strs.contains(&"--tags".to_string()));
     }
 }

@@ -9,7 +9,6 @@ use std::env;
 use looprs::ModelId;
 use looprs::app_config::AppConfig;
 use looprs::file_refs::{AtReference, resolve_at_reference};
-use looprs::observation_manager::load_recent_observations;
 use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
 use looprs::ui;
 use looprs::{
@@ -283,7 +282,7 @@ async fn run_interactive(
     };
     bind_repl_keys(&mut rl, repl_state, repl_sets, agent.fs_mode_handle());
 
-    // Collect session context (jj status, bd issues, etc.)
+    // Collect session context (jj status, kan board, etc.)
     let context = SessionContext::collect();
 
     ui::header(
@@ -327,14 +326,6 @@ async fn run_interactive(
                     value.clone()
                 };
                 ui::kv_preview(key, &preview);
-            }
-        }
-
-        // Display recent observations if available
-        if let Some(observations) = load_recent_observations(5) {
-            ui::section_title("Recent observations:");
-            for (i, obs) in observations.iter().enumerate() {
-                ui::info(format!("  {} {}", (i + 1).to_string().cyan(), obs.dimmed()));
             }
         }
     }
@@ -511,17 +502,6 @@ async fn run_interactive(
     let event_ctx = EventContext::new();
     agent.events.fire(Event::SessionEnd, &event_ctx);
     let _ = agent.execute_hooks_for_event(&Event::SessionEnd, &event_ctx);
-
-    // Save observations to bd
-    if let Err(e) = agent.observations.save_to_bd() {
-        ui::warn(format!("Warning: Failed to save observations: {e}"));
-    } else if agent.observations.count() > 0 {
-        ui::info(format!(
-            "\n{} Saved {} observations to bd",
-            "✓".green(),
-            agent.observations.count()
-        ));
-    }
 
     Ok(())
 }

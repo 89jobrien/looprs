@@ -1,76 +1,83 @@
 project: looprs
-updated: "20260429:160832"
-
+id: looprs
+updated: 2026-05-06
 items:
   - id: HX-003
-    title: "Phase 4: Wire Agent through ports"
-    description: >
-      Refactor Agent::run_turn to use injected port traits (UserOutput,
-      SessionStore) instead of direct ui::*, SessionLogger, dirs::home_dir()
-      calls. Agent should depend only on looprs-core types and port traits.
-      Add NullOutput test double.
+    doob_uuid: null
+    name: null
     priority: P2
     status: open
-    depends_on: [HX-002]
+    title: "Phase 4: Wire Agent through ports"
+    description: |
+      Refactor Agent::run_turn to use injected port traits (UserOutput, SessionStore) instead of direct ui::*, SessionLogger, dirs::home_dir() calls. Agent should depend only on looprs-core types and port traits. Add NullOutput test double.
     files:
       - src/agent.rs
       - crates/looprs-core/src/ports.rs
-
+    completed: null
+    extra: []
+    depends_on:
+      - HX-002
   - id: HX-005
-    title: "Deduplicate SessionEvent from src/session_log.rs"
-    description: >
-      src/session_log.rs defines SessionEvent independently. Now that
-      looprs-core::ports::session_store defines the same type, replace
-      the root definition with a re-export from looprs-core.
+    doob_uuid: null
+    name: null
     priority: P1
     status: open
+    title: Deduplicate SessionEvent from src/session_log.rs
+    description: |
+      src/session_log.rs defines SessionEvent independently. Now that looprs-core::ports::session_store defines the same type, replace the root definition with a re-export from looprs-core.
     files:
       - src/session_log.rs
       - crates/looprs-core/src/ports/session_store.rs
-
+    completed: null
+    extra: []
   - id: HX-006
-    title: "Extract LLMProvider trait to looprs-core::ports"
-    description: >
-      Move the LLMProvider trait from src/providers/mod.rs into
-      crates/looprs-core/src/ports/inference_provider.rs. First-class
-      port alongside MessageBroker, PluginExecutor, SessionStore, UserOutput.
+    doob_uuid: null
+    name: null
     priority: P1
     status: open
+    title: Extract LLMProvider trait to looprs-core::ports
+    description: |
+      Move the LLMProvider trait from src/providers/mod.rs into crates/looprs-core/src/ports/inference_provider.rs. First-class port alongside MessageBroker, PluginExecutor, SessionStore, UserOutput.
     files:
       - src/providers/mod.rs
       - crates/looprs-core/src/ports/
-
+    completed: null
+    extra: []
   - id: HX-007
-    title: "DRY provider factory: extract resolve_model helper"
-    description: >
-      create_provider_by_name in src/providers/mod.rs has 5 near-identical
-      match arms each resolving the model the same way. Extract a
-      resolve_model(overrides, config, provider) helper.
+    doob_uuid: null
+    name: null
     priority: P2
     status: open
+    title: "DRY provider factory: extract resolve_model helper"
+    description: |
+      create_provider_by_name in src/providers/mod.rs has 5 near-identical match arms each resolving the model the same way. Extract a resolve_model(overrides, config, provider) helper.
     files:
       - src/providers/mod.rs
-
+    completed: null
+    extra: []
 log:
-  - date: "20260429:160832"
-    session: 2
-    summary: >
-      Hexagonal refactor Phases 2-4: extracted looprs-cli crate (binary, REPL,
-      runtime); split ports.rs into ports/ directory with SessionStore and
-      UserOutput ports; moved adapters to looprs-core; re-exported types/api/
-      events/observation from looprs-core. Captured 8 improvement todos via valerie.
+  - date: 2026-05-06
+    summary: session closed
+    commits:
+      - 1cd2aef
+  - date: 20260429:160832
+    summary: |
+      Hexagonal refactor Phases 2-4: extracted looprs-cli crate (binary, REPL, runtime); split ports.rs into ports/ directory with SessionStore and UserOutput ports; moved adapters to looprs-core; re-exported types/api/ events/observation from looprs-core. Captured 8 improvement todos via valerie.
     commits:
       - 4b46bb8
       - 2d8f8c9
       - dc1f79d
       - 71e1475
-  - date: "20260429:132540"
-    session: 1
-    summary: >
-      Hexagonal refactor Phase 1: extracted looprs-core crate with domain types,
-      ports, and newtype_id!/domain_event! macros. Added ChannelBroker,
-      RetryProvider adapters. Fixed global pre-commit hook.
+    session: 2
+  - date: 20260429:132540
+    summary: |
+      Hexagonal refactor Phase 1: extracted looprs-core crate with domain types, ports, and newtype_id!/domain_event! macros. Added ChannelBroker, RetryProvider adapters. Fixed global pre-commit hook.
     commits:
       - e2c3fcf
       - c34a04e
       - 61dd3e8
+    session: 1
+  - date: 2026-05-06
+    summary: session closed
+    commits:
+      - 1cd2aef

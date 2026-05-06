@@ -117,12 +117,11 @@ pub async fn run_scorer(
 
         scores.push(score);
 
-        if let Some(db) = db_path {
-            if let Err(e) =
+        if let Some(db) = db_path
+            && let Err(e) =
                 write_score_to_db(db, &pair.session_id, &pair.prompt, &pair.response, score).await
-            {
-                log::warn!("failed to write score to magi db: {e}");
-            }
+        {
+            log::warn!("failed to write score to magi db: {e}");
         }
     }
 

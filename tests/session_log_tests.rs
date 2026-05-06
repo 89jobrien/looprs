@@ -1,4 +1,4 @@
-use looprs::session_log::{SessionEvent, SessionLogger};
+use looprs::session_log::{SessionEvent, SessionLogger, SessionStore};
 use std::io::BufRead;
 use tempfile::tempdir;
 
@@ -14,8 +14,8 @@ fn test_writes_valid_jsonl() {
         .unwrap();
     logger.log(SessionEvent::SessionEnd).unwrap();
 
-    let path = logger.path();
-    let file = std::fs::File::open(&path).unwrap();
+    let path = logger.path().expect("should have a path");
+    let file = std::fs::File::open(path).unwrap();
     let lines: Vec<String> = std::io::BufReader::new(file)
         .lines()
         .map(|l| l.unwrap())
@@ -39,7 +39,7 @@ fn test_provider_tag_preserved() {
             provider: "openai".into(),
         })
         .unwrap();
-    let content = std::fs::read_to_string(logger.path()).unwrap();
+    let content = std::fs::read_to_string(logger.path().unwrap()).unwrap();
     let event: serde_json::Value = serde_json::from_str(&content).unwrap();
     assert_eq!(event["provider"], "openai");
 }
@@ -79,7 +79,7 @@ fn test_all_event_types_serialize() {
         .unwrap();
     logger.log(SessionEvent::SessionEnd).unwrap();
 
-    let path = logger.path();
+    let path = logger.path().unwrap();
     let lines: Vec<String> = std::io::BufReader::new(std::fs::File::open(path).unwrap())
         .lines()
         .map(|l| l.unwrap())
