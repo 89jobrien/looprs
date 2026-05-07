@@ -9,6 +9,7 @@
 pub mod macros;
 
 pub mod adapters;
+pub mod ai_types;
 pub mod api;
 pub mod events;
 pub mod observation;

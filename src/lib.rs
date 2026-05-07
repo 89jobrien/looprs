@@ -59,3 +59,4 @@ pub use crate::providers::{ProviderOverrides, create_provider_with_overrides};
 pub use crate::rules::{Rule, RuleRegistry};
 pub use crate::skills::{Skill, SkillRegistry};
 pub use crate::types::{ModelId, ToolId, ToolName};
+pub use looprs_core::ai_types;

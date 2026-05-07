@@ -121,7 +121,7 @@ impl SessionStore for SqliteSessionStore {
     }
 
     fn path(&self) -> Option<&Path> {
-        if self.db_path == PathBuf::from(":memory:") {
+        if self.db_path == Path::new(":memory:") {
             None
         } else {
             Some(&self.db_path)

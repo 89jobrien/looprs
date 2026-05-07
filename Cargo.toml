@@ -12,8 +12,6 @@ rust-version = "1.88"
 members = [
     "crates/looprs-core",
     "crates/looprs-cli",
-    "crates/looprs-desktop",
-    "crates/looprs-desktop-baml-client",
 ]
 
 [dependencies]
