@@ -1,19 +1,22 @@
 project: looprs
 id: looprs
-updated: 2026-05-06
+updated: 2026-05-07
 items:
   - id: HX-003
     doob_uuid: null
     name: null
     priority: P2
-    status: open
+    status: done
     title: "Phase 4: Wire Agent through ports"
     description: |
-      Refactor Agent::run_turn to use injected port traits (UserOutput, SessionStore) instead of direct ui::*, SessionLogger, dirs::home_dir() calls. Agent should depend only on looprs-core types and port traits. Add NullOutput test double.
+      Refactor Agent::run_turn to use injected port traits (UserOutput, SessionStore) instead
+      of direct ui::*, SessionLogger, dirs::home_dir() calls. Agent should depend only on
+      looprs-core types and port traits. Add NullOutput test double.
     files:
       - src/agent.rs
-      - crates/looprs-core/src/ports.rs
-    completed: null
+      - src/adapters/ui_output.rs
+      - crates/looprs-core/src/adapters/null_output.rs
+    completed: 2026-05-07
     extra: []
     depends_on:
       - HX-002
@@ -21,48 +24,56 @@ items:
     doob_uuid: null
     name: null
     priority: P1
-    status: open
+    status: done
     title: Deduplicate SessionEvent from src/session_log.rs
     description: |
-      src/session_log.rs defines SessionEvent independently. Now that looprs-core::ports::session_store defines the same type, replace the root definition with a re-export from looprs-core.
+      src/session_log.rs defines SessionEvent independently. Now that
+      looprs-core::ports::session_store defines the same type, replace the root definition
+      with a re-export from looprs-core.
     files:
       - src/session_log.rs
       - crates/looprs-core/src/ports/session_store.rs
-    completed: null
+    completed: 2026-05-06
     extra: []
   - id: HX-006
     doob_uuid: null
     name: null
     priority: P1
-    status: open
+    status: done
     title: Extract LLMProvider trait to looprs-core::ports
     description: |
-      Move the LLMProvider trait from src/providers/mod.rs into crates/looprs-core/src/ports/inference_provider.rs. First-class port alongside MessageBroker, PluginExecutor, SessionStore, UserOutput.
+      Move the LLMProvider trait from src/providers/mod.rs into
+      crates/looprs-core/src/ports/inference_provider.rs. First-class port alongside
+      MessageBroker, PluginExecutor, SessionStore, UserOutput.
     files:
       - src/providers/mod.rs
-      - crates/looprs-core/src/ports/
-    completed: null
+      - crates/looprs-core/src/ports/inference_provider.rs
+    completed: 2026-05-07
     extra: []
   - id: HX-007
     doob_uuid: null
     name: null
     priority: P2
-    status: open
+    status: done
     title: "DRY provider factory: extract resolve_model helper"
     description: |
-      create_provider_by_name in src/providers/mod.rs has 5 near-identical match arms each resolving the model the same way. Extract a resolve_model(overrides, config, provider) helper.
+      create_provider_by_name in src/providers/mod.rs had 5 near-identical match arms each
+      resolving the model the same way. Extracted resolve_model(overrides, config, provider)
+      helper.
     files:
       - src/providers/mod.rs
-    completed: null
+    completed: 2026-05-06
     extra: []
 log:
-  - date: 2026-05-06
+  - date: 2026-05-07
     summary: session closed
     commits:
-      - 06cc24d
+      - d3221af
   - date: 20260429:160832
     summary: |
-      Hexagonal refactor Phases 2-4: extracted looprs-cli crate (binary, REPL, runtime); split ports.rs into ports/ directory with SessionStore and UserOutput ports; moved adapters to looprs-core; re-exported types/api/ events/observation from looprs-core. Captured 8 improvement todos via valerie.
+      Hexagonal refactor Phases 2-4: extracted looprs-cli crate (binary, REPL, runtime);
+      split ports.rs into ports/ directory with SessionStore and UserOutput ports; moved
+      adapters to looprs-core; re-exported types/api/events/observation from looprs-core.
     commits:
       - 4b46bb8
       - 2d8f8c9
@@ -71,49 +82,23 @@ log:
     session: 2
   - date: 20260429:132540
     summary: |
-      Hexagonal refactor Phase 1: extracted looprs-core crate with domain types, ports, and newtype_id!/domain_event! macros. Added ChannelBroker, RetryProvider adapters. Fixed global pre-commit hook.
+      Hexagonal refactor Phase 1: extracted looprs-core crate with domain types, ports, and
+      newtype_id!/domain_event! macros. Added ChannelBroker, RetryProvider adapters. Fixed
+      global pre-commit hook.
     commits:
       - e2c3fcf
       - c34a04e
       - 61dd3e8
     session: 1
-  - date: 2026-05-06
-    summary: session closed
+  - date: 2026-05-07
+    summary: |
+      Completed hexagonal refactor: HX-003 (Agent wired through UserOutput port — UiOutput
+      and NullOutput adapters added, crate::ui removed from agent.rs), HX-006 (LLMProvider
+      unified with InferenceProvider from looprs-core), HX-005 and HX-007 confirmed done.
+      Three PRs merged: #12 (plugin executor port), #13 (unify LLMProvider), #14 (agent
+      port wiring).
     commits:
-      - 06cc24d
-  - date: 2026-05-06
-    summary: session closed
-    commits:
-      - 06cc24d
-  - date: 2026-05-06
-    summary: session closed
-    commits:
-      - 06cc24d
-  - date: 2026-05-06
-    summary: session closed
-    commits:
-      - 06cc24d
-  - date: 2026-05-06
-    summary: session closed
-    commits:
-      - 7d78620
-  - date: 2026-05-06
-    summary: session closed
-    commits:
-      - 7d78620
-  - date: 2026-05-06
-    summary: session closed
-    commits:
-      - 7d78620
-  - date: 2026-05-06
-    summary: session closed
-    commits:
-      - 7d78620
-  - date: 2026-05-06
-    summary: session closed
-    commits:
-      - 1cd2aef
-  - date: 2026-05-06
-    summary: session closed
-    commits:
-      - 1cd2aef
+      - 58cb471
+      - a6318f7
+      - d3221af
+    session: 3
