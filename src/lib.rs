@@ -35,7 +35,9 @@ pub mod trace;
 pub mod types;
 pub mod ui;
 
-pub use crate::adapters::{ChannelBroker, PluginsAdapter, RetryProvider};
+pub use crate::adapters::{
+    ChannelBroker, NullOutput, PluginsAdapter, RetryProvider, SqliteSessionStore,
+};
 pub use crate::agent::{Agent, RuntimeSettings};
 pub use crate::agents::{AgentDefinition, AgentRegistry};
 pub use crate::approval::{console_approval_prompt, console_prompt, console_secret_prompt};
