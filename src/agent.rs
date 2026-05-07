@@ -8,13 +8,12 @@ use crate::fs_mode::FsMode;
 use crate::hooks::{ApprovalCallback, HookExecutor, HookRegistry, PromptCallback};
 use crate::models_config::ModelsConfig;
 use crate::observation_manager::ObservationManager;
-use crate::ports::SessionStore;
+use crate::ports::{SessionStore, UserOutput};
 use crate::providers::InferenceRequest;
 use crate::providers::LLMProvider;
 use crate::rules::RuleRegistry;
 use crate::session_log::SessionEvent;
 use crate::tools::{ToolContext, execute_tool, get_tool_definitions};
-use crate::ui;
 use std::collections::HashMap;
 use tokio::time::{Duration, timeout};
 
@@ -56,6 +55,7 @@ pub struct Agent {
     file_ref_policy: FileRefPolicy,
     pending_metadata: HashMap<String, String>,
     session_logger: Option<Box<dyn SessionStore>>,
+    output: Box<dyn UserOutput>,
     models_config: Option<ModelsConfig>,
 }
 
@@ -73,7 +73,7 @@ impl Agent {
         runtime: RuntimeSettings,
         file_ref_policy: FileRefPolicy,
     ) -> Result<Self, AgentError> {
-        use crate::adapters::FsSessionStore;
+        use crate::adapters::{FsSessionStore, UiOutput};
         let session_logger: Option<Box<dyn SessionStore>> = {
             let primary = dirs::home_dir().map(|h| h.join(".looprs").join("sessions"));
             primary
@@ -105,8 +105,16 @@ impl Agent {
             file_ref_policy,
             pending_metadata: HashMap::new(),
             session_logger,
+            output: Box::new(UiOutput),
             models_config: ModelsConfig::load().ok(),
         })
+    }
+
+    /// Replace the output adapter. Useful for tests (inject `NullOutput`) or
+    /// alternative frontends (GUI, JSON stream, etc.).
+    pub fn with_output(mut self, output: Box<dyn UserOutput>) -> Self {
+        self.output = output;
+        self
     }
 
     pub fn with_hooks(mut self, hooks: HookRegistry) -> Self {
@@ -155,7 +163,8 @@ impl Agent {
             ) {
                 Ok(resolved_text) => resolved_text,
                 Err(e) => {
-                    ui::warn(format!("Warning: Error resolving file references: {e}"));
+                    self.output
+                        .warn(&format!("Warning: Error resolving file references: {e}"));
                     text_str.clone()
                 }
             }
@@ -375,7 +384,8 @@ impl Agent {
             if let Err(e) =
                 crate::trace::append_turn_trace(self.observations.session_id(), &req, &response)
             {
-                ui::warn(format!("Warning: Failed to append turn trace: {e}"));
+                self.output
+                    .warn(&format!("Warning: Failed to append turn trace: {e}"));
             }
 
             // Fire InferenceComplete event
@@ -389,7 +399,7 @@ impl Agent {
             for (idx, block) in assistant_blocks.iter().enumerate() {
                 match block {
                     ContentBlock::Text { text } => {
-                        ui::assistant_text(text);
+                        self.output.assistant_text(text);
                     }
                     ContentBlock::ToolUse { name, input, .. } => {
                         let preview = serde_json::to_string(&input)
@@ -398,7 +408,7 @@ impl Agent {
                             .take(60)
                             .collect::<String>();
 
-                        ui::tool_call(name.as_str(), &preview);
+                        self.output.tool_call(name.as_str(), &preview);
                         tool_indices.push(idx);
                     }
                     _ => {}
@@ -454,7 +464,7 @@ impl Agent {
 
                 let raw_content = match result {
                     Ok(ref output) => {
-                        ui::tool_ok();
+                        self.output.tool_ok();
                         // Capture observation
                         self.observations.capture(
                             name.as_str().to_string(),
@@ -472,7 +482,7 @@ impl Agent {
                     }
                     Err(e) => {
                         let err_msg = format!("error: {e}");
-                        ui::tool_err(&err_msg);
+                        self.output.tool_err(&err_msg);
                         // Fire OnError event
                         let event_ctx = EventContext::new()
                             .with_tool_name(name.as_str().to_string())
@@ -563,6 +573,7 @@ impl Agent {
 mod tests {
     use super::*;
 
+    use crate::adapters::NullOutput;
     use crate::providers::{InferenceResponse, Usage};
 
     // Mock provider for testing
@@ -570,6 +581,14 @@ mod tests {
         model: crate::types::ModelId,
         responses: Vec<InferenceResponse>,
         call_count: std::sync::Arc<std::sync::Mutex<usize>>,
+    }
+
+    /// Convenience wrapper: creates an Agent with NullOutput so tests don't
+    /// produce terminal output.
+    fn agent_for_test(provider: MockProvider) -> Agent {
+        Agent::new(Box::new(provider))
+            .unwrap()
+            .with_output(Box::new(NullOutput))
     }
 
     impl MockProvider {
@@ -638,14 +657,14 @@ mod tests {
     #[test]
     fn test_agent_new() {
         let provider = MockProvider::simple_text("test");
-        let agent = Agent::new(Box::new(provider));
+        let agent = Agent::new(Box::new(provider)).map(|a| a.with_output(Box::new(NullOutput)));
         assert!(agent.is_ok());
     }
 
     #[test]
     fn test_agent_add_user_message() {
         let provider = MockProvider::simple_text("test");
-        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        let mut agent = agent_for_test(provider);
 
         agent.add_user_message("Hello");
         assert_eq!(agent.messages.len(), 1);
@@ -655,7 +674,7 @@ mod tests {
     #[test]
     fn test_agent_add_multiple_messages() {
         let provider = MockProvider::simple_text("test");
-        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        let mut agent = agent_for_test(provider);
 
         agent.add_user_message("First");
         agent.add_user_message("Second");
@@ -681,7 +700,7 @@ mod tests {
     #[test]
     fn test_agent_clear_history() {
         let provider = MockProvider::simple_text("test");
-        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        let mut agent = agent_for_test(provider);
 
         agent.add_user_message("Test");
         assert_eq!(agent.messages.len(), 1);
@@ -693,7 +712,7 @@ mod tests {
     #[test]
     fn test_latest_assistant_text_none_when_no_assistant() {
         let provider = MockProvider::simple_text("test");
-        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        let mut agent = agent_for_test(provider);
         agent.add_user_message("Hello");
         assert_eq!(agent.latest_assistant_text(), None);
     }
@@ -715,7 +734,7 @@ mod tests {
                 output_tokens: 3,
             },
         }]);
-        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        let mut agent = agent_for_test(provider);
         agent.add_user_message("Hello");
 
         agent.run_turn().await.unwrap();
@@ -731,7 +750,7 @@ mod tests {
         let provider = MockProvider::simple_text("test");
         let hooks = HookRegistry::new();
 
-        let agent = Agent::new(Box::new(provider)).unwrap().with_hooks(hooks);
+        let agent = agent_for_test(provider).with_hooks(hooks);
 
         // Just verify it works
         assert_eq!(agent.messages.len(), 0);
@@ -740,7 +759,7 @@ mod tests {
     #[test]
     fn test_execute_hooks_for_event_no_hooks() {
         let provider = MockProvider::simple_text("test");
-        let agent = Agent::new(Box::new(provider)).unwrap();
+        let agent = agent_for_test(provider);
 
         let ctx = EventContext::new().with_user_message("test".to_string());
         let enriched = agent.execute_hooks_for_event(&Event::SessionStart, &ctx);
@@ -756,7 +775,7 @@ mod tests {
         // Create a hook registry (empty is fine, we're just testing it doesn't crash)
         let hooks = HookRegistry::new();
 
-        let agent = Agent::new(Box::new(provider)).unwrap().with_hooks(hooks);
+        let agent = agent_for_test(provider).with_hooks(hooks);
 
         let ctx = EventContext::new();
         let enriched = agent.execute_hooks_for_event(&Event::SessionStart, &ctx);
@@ -794,7 +813,7 @@ actions:
         // Load hooks from temp directory
         let hooks = HookRegistry::load_from_directory(&temp_dir.path().to_path_buf()).unwrap();
 
-        let agent = Agent::new(Box::new(provider)).unwrap().with_hooks(hooks);
+        let agent = agent_for_test(provider).with_hooks(hooks);
 
         let ctx = EventContext::new();
         let enriched = agent.execute_hooks_for_event(&Event::SessionStart, &ctx);
@@ -838,7 +857,7 @@ actions:
 
         let hooks = HookRegistry::load_from_directory(&temp_dir.path().to_path_buf()).unwrap();
 
-        let agent = Agent::new(Box::new(provider)).unwrap().with_hooks(hooks);
+        let agent = agent_for_test(provider).with_hooks(hooks);
 
         let ctx = EventContext::new();
         let enriched = agent.execute_hooks_for_event(&Event::SessionStart, &ctx);
@@ -850,7 +869,7 @@ actions:
     #[test]
     fn test_context_injection_large_value_truncation() {
         let provider = MockProvider::simple_text("test");
-        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        let mut agent = agent_for_test(provider);
 
         // Create context with a very large injected value
         let large_value = "x".repeat(5000);
@@ -869,7 +888,7 @@ actions:
     #[tokio::test]
     async fn test_run_turn_simple() {
         let provider = MockProvider::simple_text("Hello response");
-        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        let mut agent = agent_for_test(provider);
 
         agent.add_user_message("Hello");
         let result = agent.run_turn().await;
@@ -883,7 +902,7 @@ actions:
     #[test]
     fn test_observation_manager_initialized() {
         let provider = MockProvider::simple_text("test");
-        let agent = Agent::new(Box::new(provider)).unwrap();
+        let agent = agent_for_test(provider);
 
         assert_eq!(agent.observations.count(), 0);
     }
@@ -891,7 +910,7 @@ actions:
     #[test]
     fn test_event_manager_initialized() {
         let provider = MockProvider::simple_text("test");
-        let agent = Agent::new(Box::new(provider)).unwrap();
+        let agent = agent_for_test(provider);
 
         // EventManager should be initialized and ready to use
         let ctx = EventContext::new();
@@ -910,7 +929,7 @@ actions:
         writeln!(file, "Hello from file!").unwrap();
 
         let provider = MockProvider::simple_text("test");
-        let mut agent = Agent::new(Box::new(provider)).unwrap();
+        let mut agent = agent_for_test(provider);
 
         // Override working directory to temp dir for this test
         agent.tool_ctx.working_dir = temp_dir.path().to_path_buf();
