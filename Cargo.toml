@@ -41,6 +41,7 @@ thiserror = "1.0"
 toml = "0.8"
 dirs = "5"
 tokio = { version = "1.38", features = ["macros", "rt-multi-thread"] }
+sysinfo = "0.30"
 walkdir = "2.5"
 
 [[bin]]
