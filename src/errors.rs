@@ -38,6 +38,9 @@ pub enum AgentError {
     #[error("Provider error: {0}")]
     Provider(#[from] ProviderError),
 
+    #[error("Inference error: {0}")]
+    Inference(String),
+
     #[error("Provider request timed out")]
     Timeout,
 }

@@ -106,7 +106,10 @@ impl OpenAIProvider {
 
 #[async_trait::async_trait]
 impl LLMProvider for OpenAIProvider {
-    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse, ProviderError> {
+    async fn infer(
+        &self,
+        req: &InferenceRequest,
+    ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
         let tools = req
             .tools
             .iter()
@@ -172,9 +175,9 @@ impl LLMProvider for OpenAIProvider {
         if !res.status().is_success() {
             let status = res.status();
             let err_text = res.text().await?;
-            return Err(ProviderError::ApiError(format!(
-                "OpenAI API Error {status}: {err_text}"
-            )));
+            return Err(
+                ProviderError::ApiError(format!("OpenAI API Error {status}: {err_text}")).into(),
+            );
         }
 
         let response_json: Value = res.json().await?;
@@ -259,9 +262,9 @@ impl LLMProvider for OpenAIProvider {
         &self.model
     }
 
-    fn validate_config(&self) -> Result<(), ProviderError> {
+    fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.key.is_empty() {
-            return Err(ProviderError::Config("OpenAI API key is empty".to_string()));
+            return Err(ProviderError::Config("OpenAI API key is empty".to_string()).into());
         }
         Ok(())
     }

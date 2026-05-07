@@ -137,7 +137,10 @@ impl OpenAISdkProvider {
 
 #[async_trait::async_trait]
 impl LLMProvider for OpenAISdkProvider {
-    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse, ProviderError> {
+    async fn infer(
+        &self,
+        req: &InferenceRequest,
+    ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
         let tools = req
             .tools
             .iter()
@@ -259,9 +262,9 @@ impl LLMProvider for OpenAISdkProvider {
         &self.model
     }
 
-    fn validate_config(&self) -> Result<(), ProviderError> {
+    fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.key.is_empty() {
-            return Err(ProviderError::Config("OpenAI API key is empty".to_string()));
+            return Err(ProviderError::Config("OpenAI API key is empty".to_string()).into());
         }
         Ok(())
     }

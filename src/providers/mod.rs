@@ -11,7 +11,8 @@ use crate::errors::ProviderError;
 use crate::types::ModelId;
 use reqwest::Client;
 
-// Re-export the canonical inference types from looprs-core.
+// Re-export the canonical inference types and trait from looprs-core.
+pub use looprs_core::ports::InferenceProvider as LLMProvider;
 pub use looprs_core::ports::inference_provider::{InferenceRequest, InferenceResponse, Usage};
 
 pub(crate) struct ProviderHttpClient {
@@ -32,27 +33,6 @@ impl ProviderHttpClient {
 
     pub fn client(&self) -> &Client {
         &self.client
-    }
-}
-
-/// Trait for LLM providers
-#[async_trait::async_trait]
-pub trait LLMProvider: Send + Sync {
-    /// Run inference with the given request
-    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse, ProviderError>;
-
-    /// Get the name of this provider
-    fn name(&self) -> &str;
-
-    /// Get the model being used
-    fn model(&self) -> &ModelId;
-
-    /// Validate that this provider is properly configured
-    fn validate_config(&self) -> Result<(), ProviderError>;
-
-    /// Whether this provider supports tool use (function calling)
-    fn supports_tool_use(&self) -> bool {
-        true
     }
 }
 

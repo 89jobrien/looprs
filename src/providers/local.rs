@@ -100,7 +100,10 @@ impl LocalProvider {
 
 #[async_trait::async_trait]
 impl LLMProvider for LocalProvider {
-    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse, ProviderError> {
+    async fn infer(
+        &self,
+        req: &InferenceRequest,
+    ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
         let mut messages = vec![json!({
             "role": "system",
             "content": req.system
@@ -128,9 +131,9 @@ impl LLMProvider for LocalProvider {
         if !res.status().is_success() {
             let status = res.status();
             let err_text = res.text().await?;
-            return Err(ProviderError::ApiError(format!(
-                "Ollama API Error {status}: {err_text}"
-            )));
+            return Err(
+                ProviderError::ApiError(format!("Ollama API Error {status}: {err_text}")).into(),
+            );
         }
 
         let response_json: Value = res.json().await?;
@@ -207,9 +210,9 @@ impl LLMProvider for LocalProvider {
         &self.model
     }
 
-    fn validate_config(&self) -> Result<(), ProviderError> {
+    fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.host.is_empty() {
-            return Err(ProviderError::Config("Ollama host is empty".to_string()));
+            return Err(ProviderError::Config("Ollama host is empty".to_string()).into());
         }
         Ok(())
     }
