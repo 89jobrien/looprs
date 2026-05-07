@@ -14,7 +14,6 @@ use std::time::Duration;
 use async_trait::async_trait;
 use tokio::time::sleep;
 
-use crate::errors::ProviderError;
 use crate::providers::{InferenceRequest, InferenceResponse, LLMProvider};
 use crate::types::ModelId;
 
@@ -57,8 +56,11 @@ impl<P: LLMProvider> RetryProvider<P> {
 
 #[async_trait]
 impl<P: LLMProvider> LLMProvider for RetryProvider<P> {
-    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse, ProviderError> {
-        let mut last_err = None;
+    async fn infer(
+        &self,
+        req: &InferenceRequest,
+    ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
+        let mut last_err: Option<Box<dyn std::error::Error + Send + Sync>> = None;
 
         for attempt in 0..self.max_attempts {
             if attempt > 0 {
@@ -85,7 +87,7 @@ impl<P: LLMProvider> LLMProvider for RetryProvider<P> {
         self.inner.model()
     }
 
-    fn validate_config(&self) -> Result<(), ProviderError> {
+    fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.inner.validate_config()
     }
 
@@ -101,6 +103,7 @@ mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
 
     use crate::api::{ContentBlock, Message as ApiMessage};
+    use crate::errors::ProviderError;
     use crate::providers::Usage;
 
     struct CountingProvider {
@@ -124,10 +127,13 @@ mod tests {
 
     #[async_trait]
     impl LLMProvider for CountingProvider {
-        async fn infer(&self, _req: &InferenceRequest) -> Result<InferenceResponse, ProviderError> {
+        async fn infer(
+            &self,
+            _req: &InferenceRequest,
+        ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
             let n = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
             if n <= self.fail_times {
-                Err(ProviderError::ApiError(format!("simulated failure #{n}")))
+                Err(ProviderError::ApiError(format!("simulated failure #{n}")).into())
             } else {
                 Ok(InferenceResponse {
                     content: vec![ContentBlock::Text {
@@ -148,7 +154,7 @@ mod tests {
         fn model(&self) -> &ModelId {
             &self.model
         }
-        fn validate_config(&self) -> Result<(), ProviderError> {
+        fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(())
         }
     }

@@ -342,11 +342,14 @@ impl Agent {
 
             let response = if let Some(timeout_secs) = self.runtime.defaults.timeout_seconds {
                 match timeout(Duration::from_secs(timeout_secs), self.provider.infer(&req)).await {
-                    Ok(res) => res?,
+                    Ok(res) => res.map_err(|e| AgentError::Inference(e.to_string()))?,
                     Err(_) => return Err(AgentError::Timeout),
                 }
             } else {
-                self.provider.infer(&req).await?
+                self.provider
+                    .infer(&req)
+                    .await
+                    .map_err(|e| AgentError::Inference(e.to_string()))?
             };
 
             if let Some(ref mut logger) = self.session_logger {
@@ -559,7 +562,7 @@ impl Agent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::errors::ProviderError;
+
     use crate::providers::{InferenceResponse, Usage};
 
     // Mock provider for testing
@@ -594,7 +597,10 @@ mod tests {
 
     #[async_trait::async_trait]
     impl LLMProvider for MockProvider {
-        async fn infer(&self, _req: &InferenceRequest) -> Result<InferenceResponse, ProviderError> {
+        async fn infer(
+            &self,
+            _req: &InferenceRequest,
+        ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
             let mut count = self.call_count.lock().unwrap();
             let idx = *count;
             *count += 1;
@@ -624,7 +630,7 @@ mod tests {
             &self.model
         }
 
-        fn validate_config(&self) -> Result<(), ProviderError> {
+        fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(())
         }
     }

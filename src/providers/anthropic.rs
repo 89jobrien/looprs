@@ -29,7 +29,10 @@ impl AnthropicProvider {
 
 #[async_trait::async_trait]
 impl LLMProvider for AnthropicProvider {
-    async fn infer(&self, req: &InferenceRequest) -> Result<InferenceResponse, ProviderError> {
+    async fn infer(
+        &self,
+        req: &InferenceRequest,
+    ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
         let mut body = json!({
             "model": req.model.as_str(),
             "max_tokens": req.max_tokens,
@@ -64,7 +67,8 @@ impl LLMProvider for AnthropicProvider {
             let err_text = res.text().await?;
             return Err(ProviderError::ApiError(format!(
                 "Anthropic API Error {status}: {err_text}"
-            )));
+            ))
+            .into());
         }
 
         let response_json: Value = res.json().await?;
@@ -148,11 +152,9 @@ impl LLMProvider for AnthropicProvider {
         &self.model
     }
 
-    fn validate_config(&self) -> Result<(), ProviderError> {
+    fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if self.key.is_empty() {
-            return Err(ProviderError::Config(
-                "Anthropic API key is empty".to_string(),
-            ));
+            return Err(ProviderError::Config("Anthropic API key is empty".to_string()).into());
         }
         Ok(())
     }
