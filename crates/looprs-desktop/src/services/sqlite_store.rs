@@ -116,6 +116,49 @@ pub async fn clear_chat_messages() {
         .await;
 }
 
+/// An event record from the `app_events` table.
+#[derive(Clone)]
+pub struct PersistedEvent {
+    pub kind: String,
+    pub payload: String,
+}
+
+/// Load the most recent `limit` observability events, oldest-first.
+pub async fn load_observability_events(limit: usize) -> Vec<PersistedEvent> {
+    let Ok(pool) = open_pool().await else {
+        return Vec::new();
+    };
+
+    let Ok(rows) = sqlx::query(
+        "
+        SELECT kind, payload
+        FROM app_events
+        ORDER BY id DESC
+        LIMIT ?
+        ",
+    )
+    .bind(limit as i64)
+    .fetch_all(&pool)
+    .await
+    else {
+        return Vec::new();
+    };
+
+    let mut events = Vec::new();
+    for row in rows {
+        let Ok(kind) = row.try_get::<String, _>("kind") else {
+            continue;
+        };
+        let Ok(payload) = row.try_get::<String, _>("payload") else {
+            continue;
+        };
+        events.push(PersistedEvent { kind, payload });
+    }
+
+    events.reverse();
+    events
+}
+
 pub async fn append_observability_event(kind: &str, payload: &str) {
     let Ok(pool) = open_pool().await else {
         return;

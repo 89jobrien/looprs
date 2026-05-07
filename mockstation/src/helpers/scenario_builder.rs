@@ -75,15 +75,22 @@ impl ScenarioBuilder {
 }
 
 impl Scenario {
-    /// Run the scenario.
+    /// Run the scenario, executing all steps in order.
     pub async fn run(&self) -> Result<()> {
-        tracing::info!(scenario = %self.name, "Running scenario");
+        tracing::info!(scenario = %self.name, steps = self.steps.len(), "Running scenario");
 
-        // TODO(#8): Implement scenario execution
-        // - Execute steps in order
-        // - Collect results
-        // - Verify expectations
+        let ctx = ScenarioContext {
+            cli: MockCliProcess::new(),
+            browser: MockBrowser::new(),
+        };
 
+        for (i, step) in self.steps.iter().enumerate() {
+            tracing::debug!(scenario = %self.name, step = i, name = %step.name, "Executing step");
+            (step.action)(&ctx);
+            tracing::debug!(scenario = %self.name, step = i, name = %step.name, "Step complete");
+        }
+
+        tracing::info!(scenario = %self.name, "Scenario complete");
         Ok(())
     }
 }

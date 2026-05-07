@@ -1,4 +1,7 @@
-use looprs_desktop::services::sqlite_store::*;
+use looprs_desktop::services::sqlite_store::{
+    append_chat_message, append_observability_event, clear_chat_messages, load_chat_messages,
+    load_observability_events,
+};
 use serial_test::serial;
 use tempfile::TempDir;
 
@@ -64,8 +67,10 @@ async fn test_append_observability_event() {
 
     append_observability_event("chat.send", "test payload").await;
 
-    // Verify event was stored by ensuring no errors occurred
-    // TODO(#10): Add query function to retrieve events for testing
+    let events = load_observability_events(10).await;
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].kind, "chat.send");
+    assert_eq!(events[0].payload, "test payload");
 }
 
 #[tokio::test]
