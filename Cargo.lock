@@ -3254,7 +3254,7 @@ dependencies = [
 
 [[package]]
 name = "looprs"
-version = "0.1.11"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-openai",
@@ -3289,7 +3289,7 @@ dependencies = [
 
 [[package]]
 name = "looprs-cli"
-version = "0.1.11"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "colored",
@@ -3302,7 +3302,7 @@ dependencies = [
 
 [[package]]
 name = "looprs-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
