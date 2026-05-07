@@ -6,10 +6,13 @@
 
 pub mod plugin_executor;
 pub mod retry_provider;
+pub mod ui_output;
 
 // Re-export portable adapters from looprs-core.
 pub use looprs_core::adapters::ChannelBroker;
 pub use looprs_core::adapters::FsSessionStore;
+pub use looprs_core::adapters::NullOutput;
 pub use looprs_core::adapters::TerminalOutput;
 pub use plugin_executor::PluginsAdapter;
 pub use retry_provider::RetryProvider;
+pub use ui_output::UiOutput;
