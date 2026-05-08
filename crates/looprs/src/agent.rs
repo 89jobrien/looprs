@@ -6,6 +6,7 @@ use crate::events::{Event, EventContext, EventManager};
 use crate::file_refs::FileRefPolicy;
 use crate::fs_mode::FsMode;
 use crate::hooks::{ApprovalCallback, HookExecutor, HookRegistry, PromptCallback};
+use crate::model_badge::{ModelBadgeState, load_badge_state};
 use crate::models_config::ModelsConfig;
 use crate::observation_manager::ObservationManager;
 use crate::ports::{SessionStore, UserOutput};
@@ -13,6 +14,7 @@ use crate::providers::InferenceRequest;
 use crate::providers::LLMProvider;
 use crate::rules::RuleRegistry;
 use crate::session_log::SessionEvent;
+use crate::system_monitor::SystemMonitor;
 use crate::tools::{ToolContext, execute_tool, get_tool_definitions};
 use std::collections::HashMap;
 use tokio::time::{Duration, timeout};
@@ -57,6 +59,7 @@ pub struct Agent {
     session_logger: Option<Box<dyn SessionStore>>,
     output: Box<dyn UserOutput>,
     models_config: Option<ModelsConfig>,
+    system_monitor: SystemMonitor,
 }
 
 impl Agent {
@@ -107,6 +110,7 @@ impl Agent {
             session_logger,
             output: Box::new(UiOutput),
             models_config: ModelsConfig::load().ok(),
+            system_monitor: SystemMonitor::new(),
         })
     }
 
@@ -199,6 +203,17 @@ impl Agent {
 
     pub fn working_dir(&self) -> &std::path::Path {
         &self.tool_ctx.working_dir
+    }
+
+    /// Load the modelcard badge from `.looprs/modelcard.yaml` in the working
+    /// directory. Returns a state with `"unknown"` fields if absent.
+    pub fn model_badge(&self) -> ModelBadgeState {
+        let path = self
+            .tool_ctx
+            .working_dir
+            .join(".looprs")
+            .join("modelcard.yaml");
+        load_badge_state(&path)
     }
 
     pub fn execute_hooks_for_event(&self, event: &Event, context: &EventContext) -> EventContext {
@@ -388,6 +403,21 @@ impl Agent {
                     .warn(&format!("Warning: Failed to append turn trace: {e}"));
             }
 
+            #[cfg(not(test))]
+            {
+                let metrics = self.system_monitor.collect_metrics();
+                let _ = crate::observability::append_named_jsonl(
+                    "system_metrics",
+                    &serde_json::json!({
+                        "session_id": self.observations.session_id(),
+                        "cpu_usage": metrics.cpu_usage,
+                        "memory_usage": metrics.memory_usage,
+                        "error_rate": metrics.error_rate,
+                        "response_time_p95": metrics.response_time_p95,
+                    }),
+                );
+            }
+
             // Fire InferenceComplete event
             let event_ctx = EventContext::new();
             self.events.fire(Event::InferenceComplete, &event_ctx);
@@ -483,6 +513,7 @@ impl Agent {
                     Err(e) => {
                         let err_msg = format!("error: {e}");
                         self.output.tool_err(&err_msg);
+                        self.system_monitor.record_error();
                         // Fire OnError event
                         let event_ctx = EventContext::new()
                             .with_tool_name(name.as_str().to_string())

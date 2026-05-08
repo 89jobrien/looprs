@@ -1,17 +1,17 @@
 [package]
 name = "looprs-cli"
-version = "0.2.2"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 description = "looprs binary: interactive REPL and scriptable entrypoint"
-license = "MIT"
-rust-version = "1.88"
+license.workspace = true
+rust-version.workspace = true
 
 [[bin]]
 name = "looprs"
 path = "src/main.rs"
 
 [dependencies]
-looprs = { path = "../.." }
+looprs = { path = "../looprs" }
 anyhow = "1.0"
 colored = "2.1"
 rustyline = { version = "14.0", features = ["custom-bindings"] }
