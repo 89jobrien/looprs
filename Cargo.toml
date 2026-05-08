@@ -1,6 +1,6 @@
 [package]
 name = "looprs"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Concise coding assistant REPL"
 license = "MIT"
@@ -41,14 +41,6 @@ dirs = "5"
 tokio = { version = "1.38", features = ["macros", "rt-multi-thread"] }
 sysinfo = "0.30"
 walkdir = "2.5"
-
-[[bin]]
-name = "looprs-gui"
-path = "src/bin/looprs-gui.rs"
-required-features = ["gui"]
-
-[features]
-gui = []
 
 [dev-dependencies]
 tempfile = "3.12"
