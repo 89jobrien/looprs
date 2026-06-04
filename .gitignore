@@ -40,7 +40,8 @@ target/llvm-cov/
 # Per-crate runtime state (observability, traces)
 **/crates/**/.looprs/
 
-# Fuzz artifacts (corpus and crashes are committed; artifacts are not)
+# Fuzz runtime output (corpus, crashes, artifacts)
+fuzz/corpus/
 fuzz/artifacts/
 
 #mockstation/
