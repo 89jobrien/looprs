@@ -7,6 +7,9 @@ use crate::errors::ProviderError;
 use super::{InferenceRequest, InferenceResponse, LLMProvider, Usage};
 use crate::types::ModelId;
 
+const OLLAMA_TIMEOUT_SECS: u64 = 120;
+const HEALTH_CHECK_TIMEOUT_SECS: u64 = 5;
+
 pub struct LocalProvider {
     client: reqwest::Client,
     host: String,
@@ -24,7 +27,7 @@ impl LocalProvider {
 
     pub fn new_with_model(model: Option<ModelId>) -> Result<Self, ProviderError> {
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(120))
+            .timeout(Duration::from_secs(OLLAMA_TIMEOUT_SECS))
             .build()?;
 
         let host =
@@ -56,7 +59,7 @@ impl LocalProvider {
         let host =
             std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://localhost:11434".to_string());
         let client = match reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(HEALTH_CHECK_TIMEOUT_SECS))
             .build()
         {
             Ok(c) => c,

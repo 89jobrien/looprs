@@ -107,7 +107,8 @@ pub async fn run_scorer(
                     .as_str()
                     .unwrap_or("{}");
                 let parsed: serde_json::Value = serde_json::from_str(content).unwrap_or_default();
-                parsed["score"].as_f64().unwrap_or(0.5) as f32
+                const DEFAULT_SCORE: f64 = 0.5;
+                parsed["score"].as_f64().unwrap_or(DEFAULT_SCORE) as f32
             }
             _ => {
                 log::warn!("OpenAI scoring call failed — skipping interaction");

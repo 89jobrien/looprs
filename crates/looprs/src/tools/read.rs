@@ -6,6 +6,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::io::{BufRead, BufReader};
 
+// qual:allow(iosp) reason: "I/O boundary — parses args, reads file, formats output"
 pub(super) fn tool_read(args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
     let args = ToolArgs::new(args);
     let path = args.get_str("path")?;

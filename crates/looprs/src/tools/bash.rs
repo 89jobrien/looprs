@@ -3,6 +3,7 @@ use super::error::ToolError;
 use serde_json::Value;
 use std::process::{Command, Stdio};
 
+// qual:allow(iosp) reason: "I/O boundary — parses args, runs shell, returns output"
 pub(super) fn tool_bash(args: &Value) -> Result<String, ToolError> {
     let args = ToolArgs::new(args);
     let cmd = args.get_str("cmd")?;

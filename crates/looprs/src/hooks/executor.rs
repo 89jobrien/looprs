@@ -34,6 +34,7 @@ impl HookExecutor {
     }
 
     /// Execute a hook with approval and prompt callbacks
+    // qual:allow(iosp) reason: "I/O boundary — orchestrates hook action execution"
     pub fn execute_hook_with_callbacks(
         hook: &Hook,
         context: &EventContext,
@@ -74,6 +75,7 @@ impl HookExecutor {
     }
 
     /// Execute a single action and return (output, inject_key)
+    // qual:allow(iosp) reason: "I/O boundary — dispatches hook actions"
     fn execute_action(
         action: &Action,
         _context: &EventContext,
@@ -204,6 +206,7 @@ impl HookExecutor {
     }
 
     /// Run a shell command and capture output
+    // qual:allow(iosp) reason: "I/O boundary — spawns shell process"
     fn run_command(command_str: &str) -> anyhow::Result<String> {
         let output = if cfg!(windows) {
             Command::new("cmd").arg("/C").arg(command_str).output()?
@@ -225,6 +228,7 @@ impl HookExecutor {
     }
 
     /// Evaluate simple conditions (very basic for now)
+    // qual:allow(iosp) reason: "I/O boundary — evaluates conditions with shell commands"
     fn eval_condition(
         condition: &str,
         local_ctx: &HashMap<String, String>,

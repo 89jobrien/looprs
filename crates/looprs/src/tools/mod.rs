@@ -378,6 +378,7 @@ fn normalize_relative(p: &Path) -> Result<PathBuf, ()> {
     Ok(out)
 }
 
+// qual:allow(iosp) reason: "I/O boundary — validates filesystem mode before tool execution"
 fn enforce_fs_mode(tool: Tool, args: &Value, ctx: &ToolContext) -> Result<(), ToolError> {
     let mode = ctx.fs_mode();
     match mode {

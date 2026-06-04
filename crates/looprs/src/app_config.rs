@@ -19,6 +19,7 @@ pub struct AppConfig {
 
 impl AppConfig {
     /// Load from user-owned `.looprs/config.json`, then overlay onboarding from app state file.
+    // qual:allow(iosp) reason: "I/O boundary — reads config file and deserializes"
     pub fn load() -> anyhow::Result<Self> {
         let path = Path::new(".looprs/config.json");
         let mut config: Self = if path.exists() {

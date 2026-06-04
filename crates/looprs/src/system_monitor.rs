@@ -9,6 +9,13 @@ use std::time::{Duration, Instant};
 
 use sysinfo::{Pid, System};
 
+const ERROR_WINDOW_SECS: u64 = 60;
+const CPU_LOW_THRESHOLD: f32 = 50.0;
+const CPU_HIGH_THRESHOLD: f32 = 80.0;
+const RESPONSE_LOW_MS: f64 = 10.0;
+const RESPONSE_MID_MS: f64 = 50.0;
+const RESPONSE_HIGH_MS: f64 = 200.0;
+
 /// Snapshot of system-level performance metrics.
 #[derive(Debug, Clone)]
 pub struct SystemMetrics {
@@ -98,7 +105,7 @@ impl SystemMonitor {
     }
 
     fn evict_old_entries(&mut self, now: Instant) {
-        let cutoff = now - Duration::from_secs(60);
+        let cutoff = now - Duration::from_secs(ERROR_WINDOW_SECS);
         while let Some((ts, _)) = self.error_count_window.front() {
             if *ts < cutoff {
                 self.error_count_window.pop_front();
@@ -110,12 +117,12 @@ impl SystemMonitor {
 
     fn estimate_response_time(&self) -> f64 {
         let cpu = self.sys.global_cpu_info().cpu_usage();
-        if cpu < 50.0 {
-            10.0
-        } else if cpu < 80.0 {
-            50.0
+        if cpu < CPU_LOW_THRESHOLD {
+            RESPONSE_LOW_MS
+        } else if cpu < CPU_HIGH_THRESHOLD {
+            RESPONSE_MID_MS
         } else {
-            200.0
+            RESPONSE_HIGH_MS
         }
     }
 }

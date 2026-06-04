@@ -4,6 +4,7 @@ use super::error::ToolError;
 use serde_json::Value;
 use std::fs;
 
+// qual:allow(iosp) reason: "I/O boundary — parses args, writes file"
 pub(super) fn tool_write(args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
     let args = ToolArgs::new(args);
     let path = args.get_str("path")?;

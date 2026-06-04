@@ -254,6 +254,7 @@ async fn run_scriptable(
 }
 
 #[allow(clippy::too_many_arguments)]
+// qual:allow(iosp) reason: "CLI dispatch — interactive session entry point"
 async fn run_interactive(
     cli_args: &CliArgs,
     mut model: String,

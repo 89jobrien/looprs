@@ -88,15 +88,15 @@ fn get_branch() -> Option<String> {
     }
 }
 
-/// Get current commit ID from jj
-fn get_current_commit() -> Option<String> {
+/// Query the current jj revision with a template string.
+fn jj_log_current(template: &str) -> Option<String> {
     let args: Vec<OsString> = vec![
         "log".into(),
         "-r".into(),
         "@".into(),
         "--no-pager".into(),
         "-T".into(),
-        r#"{change_id.short()}"#.into(),
+        template.into(),
     ];
     let output = Jj::system().output_if_available(args)?;
 
@@ -104,38 +104,19 @@ fn get_current_commit() -> Option<String> {
         return None;
     }
 
-    let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
-    if commit.is_empty() {
-        None
-    } else {
-        Some(commit)
-    }
+    if text.is_empty() { None } else { Some(text) }
+}
+
+/// Get current commit ID from jj
+fn get_current_commit() -> Option<String> {
+    jj_log_current(r#"{change_id.short()}"#)
 }
 
 /// Get current commit description from jj
 fn get_current_description() -> Option<String> {
-    let args: Vec<OsString> = vec![
-        "log".into(),
-        "-r".into(),
-        "@".into(),
-        "--no-pager".into(),
-        "-T".into(),
-        r#"{description}"#.into(),
-    ];
-    let output = Jj::system().output_if_available(args)?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let description = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-    if description.is_empty() {
-        None
-    } else {
-        Some(description)
-    }
+    jj_log_current(r#"{description}"#)
 }
 
 #[cfg(test)]

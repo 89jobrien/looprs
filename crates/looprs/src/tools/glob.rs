@@ -5,6 +5,7 @@ use crate::config::{MAX_GLOB_HITS, MAX_GLOB_OUTPUT_CHARS};
 use serde_json::Value;
 use std::fs;
 
+// qual:allow(iosp) reason: "I/O boundary — parses args, walks filesystem"
 pub(super) fn tool_glob(args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
     let args = ToolArgs::new(args);
     let pattern = args.get_str("pat")?;

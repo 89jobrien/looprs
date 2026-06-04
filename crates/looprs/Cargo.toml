@@ -37,6 +37,7 @@ sysinfo = "0.30"
 walkdir = "2.5"
 
 [dev-dependencies]
+looprs-core = { path = "../looprs-core", features = ["test-contracts"] }
 tempfile = "3.12"
 criterion = "0.6"
 proptest = "1.4"

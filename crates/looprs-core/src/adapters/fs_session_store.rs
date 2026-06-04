@@ -65,3 +65,16 @@ impl SessionStore for FsSessionStore {
         &self.session_id
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn conformance() {
+        let dir = tempfile::tempdir().expect("failed to create tempdir");
+        let mut store =
+            FsSessionStore::new(dir.path().join("sessions")).expect("failed to create store");
+        crate::ports::test_contracts::assert_session_store_contract(&mut store);
+    }
+}

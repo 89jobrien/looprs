@@ -4,6 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::types::ToolId;
 
+const OUTPUT_PREVIEW_LEN: usize = 500;
+
 /// A captured observation from tool usage in a session
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Observation {
@@ -47,8 +49,8 @@ impl Observation {
 
     pub fn to_description(&self) -> String {
         let input_str = serde_json::to_string_pretty(&self.input).unwrap_or_default();
-        let output_preview = if self.output.len() > 500 {
-            format!("{}...", &self.output[..500])
+        let output_preview = if self.output.len() > OUTPUT_PREVIEW_LEN {
+            format!("{}...", &self.output[..OUTPUT_PREVIEW_LEN])
         } else {
             self.output.clone()
         };

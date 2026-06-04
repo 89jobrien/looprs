@@ -44,7 +44,54 @@ pub fn parse_skill_file(path: &Path, content: &str) -> Result<super::Skill> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
     use std::path::PathBuf;
+
+    // ── Property tests ──────────────────────────────────────────────────
+
+    proptest! {
+        #[test]
+        fn parse_never_panics(content in "\\PC{0,500}") {
+            let path = PathBuf::from("/test/SKILL.md");
+            let _ = parse_skill_file(&path, &content);
+        }
+
+        #[test]
+        fn valid_frontmatter_round_trips(
+            name in "[a-z][a-z0-9]{1,20}",
+            trigger in "[a-z]{1,30}",
+            body in "[a-zA-Z0-9 ]{0,100}",
+        ) {
+            // Use serde_yaml to safely encode the trigger value
+            let trigger_yaml = serde_yaml::to_string(&trigger).unwrap();
+            let content = format!(
+                "---\nname: {name}\ntriggers:\n  - {trigger_yaml}---\n{body}"
+            );
+            let path = PathBuf::from("/test/SKILL.md");
+            let skill = parse_skill_file(&path, &content)
+                .expect("valid frontmatter should parse");
+            prop_assert_eq!(&skill.name, &name);
+            prop_assert_eq!(&skill.triggers[0], &trigger);
+            prop_assert_eq!(&skill.source_path, &path);
+        }
+
+        #[test]
+        fn parsed_name_is_never_empty(
+            name in "[a-z][a-z0-9]{1,20}",
+            trigger in "[a-z]{1,10}",
+        ) {
+            let trigger_yaml = serde_yaml::to_string(&trigger).unwrap();
+            let content = format!(
+                "---\nname: {name}\ntriggers:\n  - {trigger_yaml}---\ncontent"
+            );
+            let path = PathBuf::from("/test/SKILL.md");
+            let skill = parse_skill_file(&path, &content).unwrap();
+            prop_assert!(!skill.name.is_empty());
+            prop_assert!(!skill.triggers.is_empty());
+        }
+    }
+
+    // ── Unit tests ──────────────────────────────────────────────────────
 
     #[test]
     fn test_parse_valid_skill_with_description() {

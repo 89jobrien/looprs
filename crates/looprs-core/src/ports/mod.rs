@@ -10,6 +10,9 @@ pub mod plugin_executor;
 pub mod session_store;
 pub mod user_output;
 
+#[cfg(any(test, feature = "test-contracts"))]
+pub mod test_contracts;
+
 // Re-export all port traits and the Message domain type.
 pub use inference_provider::{InferenceProvider, InferenceRequest, InferenceResponse, Usage};
 pub use message_broker::{Message, MessageBroker};

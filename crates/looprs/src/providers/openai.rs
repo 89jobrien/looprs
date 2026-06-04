@@ -32,75 +32,8 @@ impl OpenAIProvider {
         Ok(Self { http, key, model })
     }
 
-    /// Check if a model is a reasoning model (o1, o3 series)
-    fn is_reasoning_model(model: &str) -> bool {
-        model.starts_with("o1") || model.starts_with("o3")
-    }
-
-    /// Check if a model supports temperature parameter
-    fn supports_temperature(model: &str) -> bool {
-        !Self::is_reasoning_model(model) && !model.starts_with("gpt-5")
-    }
-
     fn convert_to_openai_messages(msg: &crate::api::Message) -> Vec<Value> {
-        let mut messages = Vec::new();
-        let mut text_parts = Vec::new();
-        let mut tool_calls = Vec::new();
-
-        // Separate content into text, tool uses, and tool results
-        for block in &msg.content {
-            match block {
-                ContentBlock::Text { text } => {
-                    text_parts.push(text.clone());
-                }
-                ContentBlock::ToolUse { id, name, input } => {
-                    // OpenAI format: tool_calls array in assistant message
-                    tool_calls.push(json!({
-                        "id": id.as_str(),
-                        "type": "function",
-                        "function": {
-                            "name": name.as_str(),
-                            "arguments": serde_json::to_string(input).unwrap_or_default()
-                        }
-                    }));
-                }
-                ContentBlock::ToolResult {
-                    tool_use_id,
-                    content: result_content,
-                } => {
-                    // OpenAI format: separate message with role "tool"
-                    messages.push(json!({
-                        "role": "tool",
-                        "tool_call_id": tool_use_id.as_str(),
-                        "content": result_content
-                    }));
-                }
-            }
-        }
-
-        // Build the main message if there's text or tool calls
-        if !text_parts.is_empty() || !tool_calls.is_empty() {
-            let mut main_msg = json!({
-                "role": msg.role,
-            });
-
-            // Add content if we have text
-            if !text_parts.is_empty() {
-                main_msg["content"] = json!(text_parts.join("\n"));
-            } else if tool_calls.is_empty() {
-                // OpenAI requires content field if no tool_calls
-                main_msg["content"] = json!("");
-            }
-
-            // Add tool_calls if we have any
-            if !tool_calls.is_empty() {
-                main_msg["tool_calls"] = json!(tool_calls);
-            }
-
-            messages.insert(0, main_msg);
-        }
-
-        messages
+        super::convert_to_openai_messages(msg)
     }
 }
 
@@ -127,7 +60,7 @@ impl LLMProvider for OpenAIProvider {
 
         // GPT-5+, newer GPT-4, and reasoning models use max_completion_tokens instead of max_tokens
         let model = req.model.as_str();
-        let is_reasoning = Self::is_reasoning_model(model);
+        let is_reasoning = super::is_reasoning_model(model);
         let uses_completion_tokens = model.starts_with("gpt-5")
             || model.starts_with("gpt-4o")
             || model.starts_with("gpt-4-turbo-2024")
@@ -156,7 +89,7 @@ impl LLMProvider for OpenAIProvider {
         }
 
         // Only send temperature if the model supports it and user specified it
-        if Self::supports_temperature(model)
+        if super::supports_temperature(model)
             && let Some(temp) = req.temperature
         {
             body["temperature"] = json!(temp);
@@ -276,24 +209,21 @@ mod tests {
 
     #[test]
     fn test_is_reasoning_model() {
-        assert!(OpenAIProvider::is_reasoning_model("o1-preview"));
-        assert!(OpenAIProvider::is_reasoning_model("o1-mini"));
-        assert!(OpenAIProvider::is_reasoning_model("o3-mini"));
-        assert!(!OpenAIProvider::is_reasoning_model("gpt-4"));
-        assert!(!OpenAIProvider::is_reasoning_model("gpt-5"));
+        assert!(crate::providers::is_reasoning_model("o1-preview"));
+        assert!(crate::providers::is_reasoning_model("o1-mini"));
+        assert!(crate::providers::is_reasoning_model("o3-mini"));
+        assert!(!crate::providers::is_reasoning_model("gpt-4"));
+        assert!(!crate::providers::is_reasoning_model("gpt-5"));
     }
 
     #[test]
     fn test_supports_temperature() {
-        // Reasoning models don't support temperature
-        assert!(!OpenAIProvider::supports_temperature("o1-preview"));
-        assert!(!OpenAIProvider::supports_temperature("o1-mini"));
-        assert!(!OpenAIProvider::supports_temperature("o3-mini"));
-
-        // Other models support temperature
-        assert!(OpenAIProvider::supports_temperature("gpt-4"));
-        assert!(!OpenAIProvider::supports_temperature("gpt-5"));
-        assert!(!OpenAIProvider::supports_temperature("gpt-5-mini"));
-        assert!(OpenAIProvider::supports_temperature("gpt-4o"));
+        assert!(!crate::providers::supports_temperature("o1-preview"));
+        assert!(!crate::providers::supports_temperature("o1-mini"));
+        assert!(!crate::providers::supports_temperature("o3-mini"));
+        assert!(crate::providers::supports_temperature("gpt-4"));
+        assert!(!crate::providers::supports_temperature("gpt-5"));
+        assert!(!crate::providers::supports_temperature("gpt-5-mini"));
+        assert!(crate::providers::supports_temperature("gpt-4o"));
     }
 }

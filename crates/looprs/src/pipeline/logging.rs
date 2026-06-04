@@ -20,11 +20,6 @@ impl PipelineLogger {
         })
     }
 
-    pub fn with_run_id(mut self, run_id: impl Into<String>) -> Self {
-        self.run_id = Some(run_id.into());
-        self
-    }
-
     /// Note: `flush` only pushes to OS buffers; it does not guarantee durability on disk.
     /// Use `sync_data`/`sync_all` (or a future config) if fsync-level durability is required.
     pub fn log_event(&self, step: &str, data: serde_json::Value) -> io::Result<()> {

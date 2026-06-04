@@ -106,6 +106,7 @@ impl RuleRegistry {
     }
 
     /// Load rules from both user and repo directories with repo precedence
+    // qual:allow(iosp) reason: "I/O boundary — reads rule files from filesystem"
     pub fn load_all() -> Self {
         let mut registry = Self::new();
 
@@ -134,14 +135,6 @@ impl RuleRegistry {
     /// Get all rules
     pub fn all(&self) -> impl Iterator<Item = &Rule> {
         self.rules.values()
-    }
-
-    /// Get rules by category
-    pub fn get_by_category(&self, category: &str) -> Vec<&Rule> {
-        self.rules
-            .values()
-            .filter(|rule| rule.categories.iter().any(|c| c == category))
-            .collect()
     }
 
     /// Get count of loaded rules

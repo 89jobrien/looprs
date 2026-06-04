@@ -205,6 +205,12 @@ mod tests {
     }
 
     #[test]
+    fn conformance() {
+        let mut store = SqliteSessionStore::in_memory().unwrap();
+        looprs_core::ports::test_contracts::assert_session_store_contract(&mut store);
+    }
+
+    #[test]
     fn event_payload_is_valid_json() {
         let mut store = SqliteSessionStore::in_memory().unwrap();
         store

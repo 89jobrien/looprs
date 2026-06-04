@@ -1,6 +1,6 @@
 project: looprs
 id: looprs
-updated: 2026-05-08
+updated: 2026-06-04
 items:
   - id: HX-003
     doob_uuid: null
@@ -65,130 +65,97 @@ items:
     completed: 2026-05-06
     extra: []
 log:
-  - date: 2026-05-08
-    summary: |
-      Removed looprs-gui binary (freya-based GUI, unused). Restructured as proper virtual
-      workspace: root Cargo.toml is now workspace-only with [workspace.package]; looprs
-      library crate moved from root src/ into crates/looprs/; looprs-cli dep path updated
-      to ../looprs; looprs-core dev-dep duplicate removed. Bumped to v0.3.1.
-    commits:
-      - 687b837
-      - c73f298
-      - 55c2fd9
-    session: 4
   - date: 20260429:160832
     summary: |
       Hexagonal refactor Phases 2-4: extracted looprs-cli crate (binary, REPL, runtime);
       split ports.rs into ports/ directory with SessionStore and UserOutput ports; moved
       adapters to looprs-core; re-exported types/api/events/observation from looprs-core.
-    commits:
-      - 4b46bb8
-      - 2d8f8c9
-      - dc1f79d
-      - 71e1475
+    commits: []
     session: 2
   - date: 20260429:132540
     summary: |
       Hexagonal refactor Phase 1: extracted looprs-core crate with domain types, ports, and
       newtype_id!/domain_event! macros. Added ChannelBroker, RetryProvider adapters. Fixed
       global pre-commit hook.
-    commits:
-      - e2c3fcf
-      - c34a04e
-      - 61dd3e8
+    commits: []
     session: 1
   - date: 2026-05-08
-    summary: session closed
-    commits:
-      - 6190f0b
+    summary: |
+      Removed looprs-gui binary (freya-based GUI, unused). Restructured as proper virtual
+      workspace: root Cargo.toml is now workspace-only with [workspace.package]; looprs
+      library crate moved from root src/ into crates/looprs/; looprs-cli dep path updated
+      to ../looprs; looprs-core dev-dep duplicate removed. Bumped to v0.3.1.
+    commits: []
+    session: 4
   - date: 2026-05-08
     summary: session closed
-    commits:
-      - 6190f0b
+    commits: []
   - date: 2026-05-08
     summary: session closed
-    commits:
-      - 6190f0b
+    commits: []
   - date: 2026-05-08
     summary: session closed
-    commits:
-      - 687b837
+    commits: []
   - date: 2026-05-08
     summary: session closed
-    commits:
-      - 687b837
+    commits: []
   - date: 2026-05-08
     summary: session closed
-    commits:
-      - 687b837
+    commits: []
   - date: 2026-05-08
     summary: session closed
-    commits:
-      - 8b33389
+    commits: []
+  - date: 2026-05-08
+    summary: session closed
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 8b33389
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 8b33389
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 8b33389
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 5fe98e4
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 5fe98e4
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 5fe98e4
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 5fe98e4
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 5fe98e4
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 5fe98e4
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 06eb408
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 06eb408
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 06eb408
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 06eb408
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 2b053d9
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - 2b053d9
+    commits: []
   - date: 2026-05-07
     summary: session closed
-    commits:
-      - d3221af
+    commits: []
   - date: 2026-05-07
     summary: |
       Completed hexagonal refactor: HX-003 (Agent wired through UserOutput port — UiOutput
@@ -196,8 +163,5 @@ log:
       unified with InferenceProvider from looprs-core), HX-005 and HX-007 confirmed done.
       Three PRs merged: #12 (plugin executor port), #13 (unify LLMProvider), #14 (agent
       port wiring).
-    commits:
-      - 58cb471
-      - a6318f7
-      - d3221af
+    commits: []
     session: 3

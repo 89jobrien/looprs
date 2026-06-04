@@ -14,3 +14,13 @@ impl UserOutput for NullOutput {
     fn tool_ok(&self) {}
     fn tool_err(&self, _err_msg: &str) {}
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn conformance() {
+        crate::ports::test_contracts::assert_user_output_contract(&NullOutput);
+    }
+}

@@ -39,3 +39,13 @@ impl UserOutput for TerminalOutput {
         println!("  error: {err_msg}");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn conformance() {
+        crate::ports::test_contracts::assert_user_output_contract(&TerminalOutput);
+    }
+}

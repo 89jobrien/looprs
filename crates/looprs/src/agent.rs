@@ -6,7 +6,6 @@ use crate::events::{Event, EventContext, EventManager};
 use crate::file_refs::FileRefPolicy;
 use crate::fs_mode::FsMode;
 use crate::hooks::{ApprovalCallback, HookExecutor, HookRegistry, PromptCallback};
-use crate::model_badge::{ModelBadgeState, load_badge_state};
 use crate::models_config::ModelsConfig;
 use crate::observation_manager::ObservationManager;
 use crate::ports::{SessionStore, UserOutput};
@@ -18,6 +17,9 @@ use crate::system_monitor::SystemMonitor;
 use crate::tools::{ToolContext, execute_tool, get_tool_definitions};
 use std::collections::HashMap;
 use tokio::time::{Duration, timeout};
+
+const TOOL_PREVIEW_LEN: usize = 60;
+const ON_REPEAT_THRESHOLD: usize = 3;
 
 const MAX_TOOL_RESULT_CHARS_IN_CONTEXT: usize = 16_000;
 
@@ -205,30 +207,11 @@ impl Agent {
         &self.tool_ctx.working_dir
     }
 
-    /// Load the modelcard badge from `.looprs/modelcard.yaml` in the working
-    /// directory. Returns a state with `"unknown"` fields if absent.
-    pub fn model_badge(&self) -> ModelBadgeState {
-        let path = self
-            .tool_ctx
-            .working_dir
-            .join(".looprs")
-            .join("modelcard.yaml");
-        load_badge_state(&path)
-    }
-
     pub fn execute_hooks_for_event(&self, event: &Event, context: &EventContext) -> EventContext {
         self.execute_hooks_for_event_with_callbacks(event, context, None, None, None)
     }
 
-    pub fn execute_hooks_for_event_with_approval(
-        &self,
-        event: &Event,
-        context: &EventContext,
-        approval_fn: Option<&crate::hooks::ApprovalCallback>,
-    ) -> EventContext {
-        self.execute_hooks_for_event_with_callbacks(event, context, approval_fn, None, None)
-    }
-
+    // qual:allow(iosp) reason: "I/O boundary — orchestrates hook execution with callbacks"
     pub fn execute_hooks_for_event_with_callbacks(
         &self,
         event: &Event,
@@ -435,7 +418,7 @@ impl Agent {
                         let preview = serde_json::to_string(&input)
                             .unwrap_or_default()
                             .chars()
-                            .take(60)
+                            .take(TOOL_PREVIEW_LEN)
                             .collect::<String>();
 
                         self.output.tool_call(name.as_str(), &preview);
@@ -476,7 +459,7 @@ impl Agent {
 
                 let count = tool_call_counts.entry(name.to_string()).or_insert(0);
                 *count += 1;
-                if *count == 3 {
+                if *count == ON_REPEAT_THRESHOLD {
                     log::info!(
                         "on-repeat trigger: {} called {} times",
                         name.as_str(),
@@ -582,7 +565,7 @@ impl Agent {
 
         let n = match &trigger {
             crate::scorer::ScoreTrigger::OnError => 1,
-            crate::scorer::ScoreTrigger::OnRepeat { .. } => 3,
+            crate::scorer::ScoreTrigger::OnRepeat { .. } => ON_REPEAT_THRESHOLD,
             crate::scorer::ScoreTrigger::OnDemand { n } => *n,
         };
 

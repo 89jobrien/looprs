@@ -92,6 +92,7 @@ impl AgentRegistry {
         None
     }
 
+    // qual:allow(iosp) reason: "I/O boundary — reads agent YAML files from directory"
     pub fn load_from_directory(dir: &PathBuf) -> anyhow::Result<Self> {
         let mut registry = Self::new();
 
@@ -122,6 +123,7 @@ impl AgentRegistry {
         Ok(registry)
     }
 
+    // qual:allow(iosp) reason: "I/O boundary — loads agents from user + repo directories"
     pub fn load_dual_source(
         user_dir: Option<&PathBuf>,
         repo_dir: Option<&PathBuf>,

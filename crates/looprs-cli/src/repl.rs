@@ -372,6 +372,8 @@ fn best_match<'a>(query: &str, prefix: char, items: &'a [String]) -> Option<&'a 
     best_item
 }
 
+const CONSECUTIVE_MATCH_BONUS: i32 = 10;
+
 fn fuzzy_score(query: &str, candidate: &str) -> Option<i32> {
     let mut score = 0;
     let mut last_match = None;
@@ -382,7 +384,7 @@ fn fuzzy_score(query: &str, candidate: &str) -> Option<i32> {
             let abs = pos + idx;
             if let Some(prev) = last_match {
                 if abs == prev + 1 {
-                    score += 10;
+                    score += CONSECUTIVE_MATCH_BONUS;
                 } else {
                     score += 2;
                 }

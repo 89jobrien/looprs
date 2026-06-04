@@ -1,9 +1,6 @@
 use regex::Regex;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SkillFrontmatterSummary {
@@ -71,6 +68,7 @@ pub fn extract_frontmatter_from_content(content: &str) -> SkillFrontmatterSummar
     SkillFrontmatterSummary { name, description }
 }
 
+// qual:allow(iosp) reason: "I/O boundary — walks filesystem to discover skill files"
 pub fn find_skills_in_dir(dir: &Path, source_type: &str, max_depth: usize) -> Vec<DiscoveredSkill> {
     let mut skills = Vec::new();
     if !dir.exists() {
@@ -119,47 +117,6 @@ pub fn resolve_skill_path(
     None
 }
 
-pub fn check_for_updates(repo_dir: &Path) -> bool {
-    let mut child = match Command::new("sh")
-        .arg("-c")
-        .arg("git fetch origin && git status --porcelain=v1 --branch")
-        .current_dir(repo_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
-        Ok(child) => child,
-        Err(_) => return false,
-    };
-
-    let start = Instant::now();
-    let timeout = Duration::from_secs(3);
-
-    loop {
-        if start.elapsed() > timeout {
-            let _ = child.kill();
-            let _ = child.wait();
-            return false;
-        }
-
-        match child.try_wait() {
-            Ok(Some(_status)) => match child.wait_with_output() {
-                Ok(output) => {
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-                    return stdout
-                        .lines()
-                        .any(|line| line.starts_with("## ") && line.contains("[behind "));
-                }
-                Err(_) => return false,
-            },
-            Ok(None) => {
-                thread::sleep(Duration::from_millis(50));
-            }
-            Err(_) => return false,
-        }
-    }
-}
-
 pub fn strip_frontmatter(content: &str) -> String {
     let mut in_frontmatter = false;
     let mut frontmatter_ended = false;
@@ -183,6 +140,7 @@ pub fn strip_frontmatter(content: &str) -> String {
     content_lines.join("\n").trim().to_string()
 }
 
+// qual:allow(iosp) reason: "I/O boundary — recursive directory traversal"
 fn recurse_skills(
     current_dir: &Path,
     source_type: &str,

@@ -27,66 +27,8 @@ impl OpenAISdkProvider {
         Ok(Self { client, key, model })
     }
 
-    fn is_reasoning_model(model: &str) -> bool {
-        model.starts_with("o1") || model.starts_with("o3")
-    }
-
-    fn supports_temperature(model: &str) -> bool {
-        !Self::is_reasoning_model(model) && !model.starts_with("gpt-5")
-    }
-
     fn convert_to_openai_messages(msg: &crate::api::Message) -> Vec<Value> {
-        let mut messages = Vec::new();
-        let mut text_parts = Vec::new();
-        let mut tool_calls = Vec::new();
-
-        for block in &msg.content {
-            match block {
-                ContentBlock::Text { text } => {
-                    text_parts.push(text.clone());
-                }
-                ContentBlock::ToolUse { id, name, input } => {
-                    tool_calls.push(json!({
-                        "id": id.as_str(),
-                        "type": "function",
-                        "function": {
-                            "name": name.as_str(),
-                            "arguments": serde_json::to_string(input).unwrap_or_default()
-                        }
-                    }));
-                }
-                ContentBlock::ToolResult {
-                    tool_use_id,
-                    content: result_content,
-                } => {
-                    messages.push(json!({
-                        "role": "tool",
-                        "tool_call_id": tool_use_id.as_str(),
-                        "content": result_content
-                    }));
-                }
-            }
-        }
-
-        if !text_parts.is_empty() || !tool_calls.is_empty() {
-            let mut main_msg = json!({
-                "role": msg.role,
-            });
-
-            if !text_parts.is_empty() {
-                main_msg["content"] = json!(text_parts.join("\n"));
-            } else if tool_calls.is_empty() {
-                main_msg["content"] = json!("");
-            }
-
-            if !tool_calls.is_empty() {
-                main_msg["tool_calls"] = json!(tool_calls);
-            }
-
-            messages.insert(0, main_msg);
-        }
-
-        messages
+        super::convert_to_openai_messages(msg)
     }
 
     fn parse_tool_arguments(args: &Value) -> Result<Value, ProviderError> {
@@ -137,6 +79,7 @@ impl OpenAISdkProvider {
 
 #[async_trait::async_trait]
 impl LLMProvider for OpenAISdkProvider {
+    // qual:allow(iosp) reason: "I/O boundary — builds and sends HTTP request to OpenAI API"
     async fn infer(
         &self,
         req: &InferenceRequest,
@@ -157,7 +100,7 @@ impl LLMProvider for OpenAISdkProvider {
             .collect::<Vec<_>>();
 
         let model = req.model.as_str();
-        let is_reasoning = Self::is_reasoning_model(model);
+        let is_reasoning = super::is_reasoning_model(model);
         let uses_completion_tokens = model.starts_with("gpt-5")
             || model.starts_with("gpt-4o")
             || model.starts_with("gpt-4-turbo-2024")
@@ -184,7 +127,7 @@ impl LLMProvider for OpenAISdkProvider {
             body["max_tokens"] = json!(req.max_tokens);
         }
 
-        if Self::supports_temperature(model)
+        if super::supports_temperature(model)
             && let Some(temp) = req.temperature
         {
             body["temperature"] = json!(temp);

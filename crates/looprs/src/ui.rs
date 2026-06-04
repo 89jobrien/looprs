@@ -70,10 +70,6 @@ pub fn warn(msg: impl AsRef<str>) {
     emit_machine_event("warn", serde_json::json!({ "message": raw }));
 }
 
-pub fn warn_full(msg: impl AsRef<str>) {
-    eprintln!("{}", sanitize::sanitize_for_console(msg.as_ref()));
-}
-
 pub fn error(msg: impl AsRef<str>) {
     let raw = msg.as_ref();
     eprintln!("{}", sanitize::sanitize_preview_for_console(raw));

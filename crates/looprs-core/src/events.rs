@@ -63,11 +63,6 @@ impl EventContext {
         self
     }
 
-    pub fn with_warning(mut self, warning: String) -> Self {
-        self.warning = Some(warning);
-        self
-    }
-
     pub fn with_metadata(mut self, key: String, value: String) -> Self {
         self.metadata.insert(key, value);
         self
@@ -115,10 +110,6 @@ impl EventManager {
 
     pub fn clear(&mut self, event: Event) {
         self.handlers.remove(&event);
-    }
-
-    pub fn clear_all(&mut self) {
-        self.handlers.clear();
     }
 }
 

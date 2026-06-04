@@ -17,6 +17,7 @@ pub struct CompactedContext {
     pub files: Vec<String>,
 }
 
+// qual:allow(iosp) reason: "I/O boundary — reads files and runs git commands for context compaction"
 pub fn compact_context(
     repo_root: &Path,
     config: &PipelineCompactionConfig,
@@ -115,6 +116,7 @@ fn add_paths(
     }
 }
 
+// qual:allow(iosp) reason: "I/O boundary — runs git diff"
 fn git_diff_files(repo_root: &Path) -> Vec<PathBuf> {
     let output = Command::new("git")
         .args(["diff", "--name-only"])
@@ -132,6 +134,7 @@ fn git_diff_files(repo_root: &Path) -> Vec<PathBuf> {
     parse_lines(&output.stdout)
 }
 
+// qual:allow(iosp) reason: "I/O boundary — runs git status"
 fn git_status_files(repo_root: &Path) -> Vec<PathBuf> {
     let output = Command::new("git")
         .args(["status", "--porcelain"])
@@ -218,6 +221,7 @@ fn top_k_files(repo_root: &Path, globs: &[String], top_k: usize) -> Vec<PathBuf>
     with_time.into_iter().map(|(_, path)| path).collect()
 }
 
+// qual:allow(iosp) reason: "I/O boundary — runs ripgrep"
 fn rg_files(repo_root: &Path, globs: &[String]) -> Option<Vec<PathBuf>> {
     let mut cmd = Command::new("rg");
     cmd.arg("--files");

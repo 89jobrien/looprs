@@ -12,6 +12,7 @@ use crate::plugins::NamedTool;
 use crate::plugins::binaries::Rg;
 
 /// Try to use ripgrep (rg) if available, fall back to pure regex implementation
+// qual:allow(iosp) reason: "I/O boundary — parses args, searches files via rg or regex"
 pub(super) fn tool_grep(args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
     let args = ToolArgs::new(args);
     let pat_str = args.get_str("pat")?;

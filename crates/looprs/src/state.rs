@@ -24,6 +24,7 @@ impl AppState {
         Self::load_at(Path::new(DEFAULT_STATE_PATH))
     }
 
+    // qual:allow(iosp) reason: "I/O boundary — reads state file and deserializes"
     pub fn load_at(path: &Path) -> anyhow::Result<Self> {
         if !path.exists() {
             return Ok(Self::default());

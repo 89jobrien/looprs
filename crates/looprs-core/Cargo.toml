@@ -15,3 +15,9 @@ serde_json = "1.0"
 tokio = { version = "1.38", features = ["sync"] }
 uuid = { version = "1", features = ["v4"] }
 
+[features]
+test-contracts = []
+
+[dev-dependencies]
+tempfile = "3"
+

@@ -41,12 +41,6 @@ impl<P: LLMProvider> RetryProvider<P> {
         }
     }
 
-    /// Override the maximum number of attempts (minimum 1).
-    pub fn with_max_attempts(mut self, n: u32) -> Self {
-        self.max_attempts = n.max(1);
-        self
-    }
-
     /// Override the base delay in milliseconds.
     pub fn with_base_delay_ms(mut self, ms: u64) -> Self {
         self.base_delay_ms = ms;

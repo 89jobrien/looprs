@@ -7,13 +7,17 @@ pub mod local;
 pub mod openai;
 pub mod openai_sdk;
 
+use crate::api::ContentBlock;
 use crate::errors::ProviderError;
 use crate::types::ModelId;
 use reqwest::Client;
+use serde_json::{Value, json};
 
 // Re-export the canonical inference types and trait from looprs-core.
 pub use looprs_core::ports::InferenceProvider as LLMProvider;
 pub use looprs_core::ports::inference_provider::{InferenceRequest, InferenceResponse, Usage};
+
+const DEFAULT_TIMEOUT_SECS: u64 = 120;
 
 pub(crate) struct ProviderHttpClient {
     client: Client,
@@ -28,7 +32,7 @@ impl ProviderHttpClient {
     }
 
     pub fn default() -> Result<Self, ProviderError> {
-        Self::new(120)
+        Self::new(DEFAULT_TIMEOUT_SECS)
     }
 
     pub fn client(&self) -> &Client {
@@ -42,16 +46,79 @@ pub struct ProviderOverrides {
     pub model: Option<ModelId>,
 }
 
+/// Check if an OpenAI model is a reasoning model (o1, o3 series).
+pub(crate) fn is_reasoning_model(model: &str) -> bool {
+    model.starts_with("o1") || model.starts_with("o3")
+}
+
+/// Check if an OpenAI model supports the temperature parameter.
+pub(crate) fn supports_temperature(model: &str) -> bool {
+    !is_reasoning_model(model) && !model.starts_with("gpt-5")
+}
+
+/// Convert a looprs Message to OpenAI-format JSON messages.
+///
+/// Shared by both `openai` and `openai_sdk` providers.
+pub(crate) fn convert_to_openai_messages(msg: &crate::api::Message) -> Vec<Value> {
+    let mut messages = Vec::new();
+    let mut text_parts = Vec::new();
+    let mut tool_calls = Vec::new();
+
+    for block in &msg.content {
+        match block {
+            ContentBlock::Text { text } => {
+                text_parts.push(text.clone());
+            }
+            ContentBlock::ToolUse { id, name, input } => {
+                tool_calls.push(json!({
+                    "id": id.as_str(),
+                    "type": "function",
+                    "function": {
+                        "name": name.as_str(),
+                        "arguments": serde_json::to_string(input).unwrap_or_default()
+                    }
+                }));
+            }
+            ContentBlock::ToolResult {
+                tool_use_id,
+                content: result_content,
+            } => {
+                messages.push(json!({
+                    "role": "tool",
+                    "tool_call_id": tool_use_id.as_str(),
+                    "content": result_content
+                }));
+            }
+        }
+    }
+
+    if !text_parts.is_empty() || !tool_calls.is_empty() {
+        let mut main_msg = json!({
+            "role": msg.role,
+        });
+
+        if !text_parts.is_empty() {
+            main_msg["content"] = json!(text_parts.join("\n"));
+        } else if tool_calls.is_empty() {
+            main_msg["content"] = json!("");
+        }
+
+        if !tool_calls.is_empty() {
+            main_msg["tool_calls"] = json!(tool_calls);
+        }
+
+        messages.insert(0, main_msg);
+    }
+
+    messages
+}
+
 /// Create a provider based on configuration priority:
 /// 1. Environment variables (highest priority)
 /// 2. .looprs/provider.json config file
 /// 3. Auto-detection from available API keys
 /// 4. Try local Ollama
 /// 5. Error if none found
-pub async fn create_provider() -> Result<Box<dyn LLMProvider>, ProviderError> {
-    create_provider_with_overrides(ProviderOverrides::default()).await
-}
-
 pub async fn create_provider_with_overrides(
     overrides: ProviderOverrides,
 ) -> Result<Box<dyn LLMProvider>, ProviderError> {

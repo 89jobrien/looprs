@@ -203,18 +203,6 @@ impl HookRegistry {
         let event_name = event.name();
         self.hooks_by_event.get(event_name)
     }
-
-    /// Get hook by name
-    pub fn get_hook(&self, name: &str) -> Option<&Hook> {
-        for hooks in self.hooks_by_event.values() {
-            for hook in hooks {
-                if hook.name == name {
-                    return Some(hook);
-                }
-            }
-        }
-        None
-    }
 }
 
 impl Default for HookRegistry {

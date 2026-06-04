@@ -3,6 +3,12 @@ use std::sync::OnceLock;
 
 const DEFAULT_PREVIEW_LEN: usize = 4000;
 
+// ANSI terminal escape bytes.
+const ESC: u8 = 0x1b;
+const BEL: u8 = 0x07;
+const CSI_FINAL_LOW: u8 = 0x40;
+const CSI_FINAL_HIGH: u8 = 0x7e;
+
 pub fn preview_len() -> usize {
     std::env::var("LOOPRS_PREVIEW_LEN")
         .ok()
@@ -38,7 +44,7 @@ pub fn strip_ansi(input: &str) -> String {
     let mut i = 0;
 
     while i < bytes.len() {
-        if bytes[i] == 0x1b {
+        if bytes[i] == ESC {
             if i + 1 >= bytes.len() {
                 break;
             }
@@ -49,7 +55,7 @@ pub fn strip_ansi(input: &str) -> String {
                     while i < bytes.len() {
                         let b = bytes[i];
                         i += 1;
-                        if (0x40..=0x7e).contains(&b) {
+                        if (CSI_FINAL_LOW..=CSI_FINAL_HIGH).contains(&b) {
                             break;
                         }
                     }
@@ -58,11 +64,11 @@ pub fn strip_ansi(input: &str) -> String {
                 b']' => {
                     i += 2;
                     while i < bytes.len() {
-                        if bytes[i] == 0x07 {
+                        if bytes[i] == BEL {
                             i += 1;
                             break;
                         }
-                        if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
+                        if bytes[i] == ESC && i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
                             i += 2;
                             break;
                         }
@@ -73,7 +79,7 @@ pub fn strip_ansi(input: &str) -> String {
                 b'P' | b'_' | b'^' | b'X' => {
                     i += 2;
                     while i < bytes.len() {
-                        if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
+                        if bytes[i] == ESC && i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
                             i += 2;
                             break;
                         }
@@ -176,6 +182,64 @@ fn redact(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+
+    // ── Property tests ──────────────────────────────────────────────────
+
+    proptest! {
+        #[test]
+        fn strip_ansi_never_panics(s in "\\PC*") {
+            let _ = strip_ansi(&s);
+        }
+
+        #[test]
+        fn strip_ansi_is_idempotent(s in "\\PC*") {
+            let once = strip_ansi(&s);
+            let twice = strip_ansi(&once);
+            prop_assert_eq!(&once, &twice);
+        }
+
+        #[test]
+        fn strip_ansi_output_contains_no_esc(s in "\\PC*") {
+            let out = strip_ansi(&s);
+            prop_assert!(
+                !out.contains('\x1b'),
+                "output still contains ESC: {:?}", out
+            );
+        }
+
+        #[test]
+        fn redact_is_idempotent(s in "\\PC{0,500}") {
+            let once = redact(&s);
+            let twice = redact(&once);
+            prop_assert_eq!(&once, &twice);
+        }
+
+        #[test]
+        fn redact_never_panics(s in "\\PC{0,500}") {
+            let _ = redact(&s);
+        }
+
+        #[test]
+        fn truncate_respects_limit(s in "\\PC{0,200}", max in 0usize..300) {
+            let out = truncate_chars(&s, max);
+            if s.chars().count() <= max {
+                prop_assert_eq!(&out, &s);
+            } else {
+                // Truncated output starts with first `max` chars
+                let prefix: String = s.chars().take(max).collect();
+                prop_assert!(out.starts_with(&prefix));
+                prop_assert!(out.contains("[truncated"));
+            }
+        }
+
+        #[test]
+        fn sanitize_for_console_never_panics(s in "\\PC{0,500}") {
+            let _ = sanitize_for_console(&s);
+        }
+    }
+
+    // ── Unit tests ──────────────────────────────────────────────────────
 
     #[test]
     fn redacts_sk_tokens() {

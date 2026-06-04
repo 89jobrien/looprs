@@ -8,6 +8,8 @@ use std::path::Path;
 
 use serde::Deserialize;
 
+const REWARD_WINDOW: usize = 50;
+
 /// Summary of a model's state derived from its modelcard YAML.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ModelBadgeState {
@@ -60,7 +62,7 @@ pub fn load_badge_state(modelcard_path: &Path) -> ModelBadgeState {
         .collect();
     let rewards: Vec<f32> = {
         let len = all_rewards.len();
-        let start = len.saturating_sub(50);
+        let start = len.saturating_sub(REWARD_WINDOW);
         all_rewards.drain(start..).collect()
     };
     let mean = if rewards.is_empty() {

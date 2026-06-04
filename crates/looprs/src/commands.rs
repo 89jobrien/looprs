@@ -46,6 +46,7 @@ impl CommandRegistry {
     }
 
     /// Load commands from a directory
+    // qual:allow(iosp) reason: "I/O boundary — reads command files from directory"
     pub fn load_from_directory(dir: &PathBuf) -> anyhow::Result<Self> {
         let mut registry = CommandRegistry::new();
 

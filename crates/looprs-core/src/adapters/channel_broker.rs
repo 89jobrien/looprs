@@ -181,4 +181,9 @@ mod tests {
         broker2.publish(Message::new("b2", "shared", 1, serde_json::Value::Null));
         assert!(rx.try_recv().is_ok());
     }
+
+    #[test]
+    fn conformance() {
+        crate::ports::test_contracts::assert_message_broker_contract(ChannelBroker::new());
+    }
 }
