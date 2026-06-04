@@ -25,7 +25,7 @@ pub mod plugins;
 pub mod ports;
 pub mod providers;
 pub mod rules;
-mod sanitize;
+pub mod sanitize;
 pub mod scorer;
 pub mod seed;
 pub mod session_log;

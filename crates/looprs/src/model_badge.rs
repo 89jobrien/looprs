@@ -86,11 +86,70 @@ pub fn load_badge_state(modelcard_path: &Path) -> ModelBadgeState {
     }
 }
 
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// Prove that reward window slicing never panics and the mean
+    /// is always finite for any valid f32 rewards in [0.0, 1.0].
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn reward_mean_no_overflow() {
+        let count: usize = kani::any();
+        kani::assume(count <= 4);
+
+        let mut rewards = Vec::new();
+        for _ in 0..count {
+            let r: f32 = kani::any();
+            kani::assume(r >= 0.0 && r <= 1.0 && r.is_finite());
+            rewards.push(r);
+        }
+
+        let len = rewards.len();
+        let start = len.saturating_sub(REWARD_WINDOW);
+        let window = &rewards[start..];
+
+        if !window.is_empty() {
+            let sum: f32 = window.iter().sum();
+            let mean = sum / window.len() as f32;
+            assert!(mean.is_finite());
+            assert!(mean >= 0.0);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
     use std::io::Write;
     use tempfile::NamedTempFile;
+
+    // ── Property tests ──────────────────────────────────────────────────
+
+    proptest! {
+        #[test]
+        fn mean_reward_is_finite(rewards in prop::collection::vec(0.0f32..=1.0, 0..100)) {
+            // Simulate the reward averaging logic directly
+            let len = rewards.len();
+            let start = len.saturating_sub(REWARD_WINDOW);
+            let window: Vec<f32> = rewards[start..].to_vec();
+            let mean = if window.is_empty() {
+                0.0
+            } else {
+                window.iter().sum::<f32>() / window.len() as f32
+            };
+            prop_assert!(mean.is_finite(), "mean reward was not finite: {}", mean);
+            prop_assert!(mean >= 0.0 && mean <= 1.0, "mean out of range: {}", mean);
+        }
+
+        #[test]
+        fn window_size_never_exceeds_constant(count in 0usize..200) {
+            let start = count.saturating_sub(REWARD_WINDOW);
+            let window_size = count - start;
+            prop_assert!(window_size <= REWARD_WINDOW);
+        }
+    }
 
     #[test]
     fn load_from_valid_modelcard() {

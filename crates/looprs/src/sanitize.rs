@@ -179,6 +179,48 @@ fn redact(input: &str) -> String {
     s
 }
 
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// Prove that strip_ansi never indexes out of bounds for any
+    /// 8-byte input. The state machine must always terminate with
+    /// `i` within `[0, len]`.
+    #[kani::proof]
+    #[kani::unwind(12)]
+    fn strip_ansi_no_oob() {
+        // Symbolic 8-byte input — small enough for bounded model checking
+        let len: usize = kani::any();
+        kani::assume(len <= 8);
+        let mut buf = [0u8; 8];
+        for i in 0..len {
+            buf[i] = kani::any();
+        }
+        let s = match std::str::from_utf8(&buf[..len]) {
+            Ok(s) => s,
+            Err(_) => return, // skip non-UTF8
+        };
+        // Must not panic
+        let result = strip_ansi(s);
+        // Output must not contain ESC
+        assert!(!result.as_bytes().iter().any(|&b| b == ESC));
+    }
+
+    /// Prove truncate_chars never overflows or panics.
+    #[kani::proof]
+    #[kani::unwind(10)]
+    fn truncate_chars_no_overflow() {
+        let max: usize = kani::any();
+        kani::assume(max <= 5);
+        // Use a small fixed string
+        let s = "abcde";
+        let result = truncate_chars(s, max);
+        if max >= 5 {
+            assert!(result.len() == s.len());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

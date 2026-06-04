@@ -1,0 +1,10 @@
+---
+name: test-skill
+description: A test skill
+triggers:
+  - "test trigger"
+---
+
+# Test Content
+
+Body text here.

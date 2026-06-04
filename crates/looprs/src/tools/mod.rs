@@ -435,6 +435,63 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
 mod tests {
     use super::*;
     use crate::fs_mode::FsMode;
+    use proptest::prelude::*;
+
+    // ── Property tests ──────────────────────────────────────────────────
+
+    proptest! {
+        #[test]
+        fn get_str_never_panics(key in "[a-z]{1,10}", val in "\\PC{0,50}") {
+            let args = serde_json::json!({ key.clone(): val });
+            let ta = ToolArgs::new(&args);
+            let _ = ta.get_str(&key);
+        }
+
+        #[test]
+        fn get_str_optional_none_on_missing(key in "[a-z]{1,10}") {
+            let args = serde_json::json!({});
+            let ta = ToolArgs::new(&args);
+            let result = ta.get_str_optional(&key).unwrap();
+            prop_assert!(result.is_none());
+        }
+
+        #[test]
+        fn get_u64_never_panics(key in "[a-z]{1,10}", val in proptest::num::u64::ANY) {
+            let args = serde_json::json!({ key.clone(): val });
+            let ta = ToolArgs::new(&args);
+            let _ = ta.get_u64(&key);
+        }
+
+        #[test]
+        fn get_bool_defaults_correctly(key in "[a-z]{1,10}") {
+            let args = serde_json::json!({});
+            let ta = ToolArgs::new(&args);
+            prop_assert_eq!(ta.get_bool(&key, true), true);
+            prop_assert_eq!(ta.get_bool(&key, false), false);
+        }
+
+        #[test]
+        fn normalize_relative_rejects_parent_escape(
+            segments in prop::collection::vec("[a-z]{1,5}", 1..5)
+        ) {
+            // A path that goes up more than it goes down should fail
+            let mut path = String::from("../");
+            for seg in &segments {
+                path.push_str(seg);
+                path.push('/');
+            }
+            let p = std::path::Path::new(&path);
+            let result = normalize_relative(p);
+            // Either fails (parent escape) or succeeds with a safe path
+            if let Ok(normalized) = &result {
+                // Must never contain ".."
+                prop_assert!(
+                    !normalized.to_string_lossy().contains(".."),
+                    "normalized path contains '..': {:?}", normalized
+                );
+            }
+        }
+    }
 
     #[test]
     fn resolve_path_blocks_absolute_paths() {

@@ -1,0 +1,22 @@
+[package]
+name = "looprs-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+looprs = { path = "../crates/looprs" }
+
+[[bin]]
+name = "fuzz_strip_ansi"
+path = "fuzz_targets/fuzz_strip_ansi.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_parse_skill"
+path = "fuzz_targets/fuzz_parse_skill.rs"
+doc = false
