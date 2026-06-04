@@ -34,6 +34,15 @@ target/llvm-cov/
 # Insta snapshots pending review
 *.snap.new
 
+# Knowledge graph data
+.kgx/
+
+# Per-crate runtime state (observability, traces)
+**/crates/**/.looprs/
+
+# Fuzz artifacts (corpus and crashes are committed; artifacts are not)
+fuzz/artifacts/
+
 #mockstation/
 
 # vendored crates
