@@ -436,6 +436,117 @@ mod tests {
     use super::*;
     use crate::fs_mode::FsMode;
     use proptest::prelude::*;
+    use std::io;
+
+    // ── ToolError tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn error_file_not_found_display() {
+        let err = error::ToolError::FileNotFound("test.txt".to_string());
+        assert_eq!(err.to_string(), "File not found: test.txt");
+    }
+
+    #[test]
+    fn error_pattern_not_found_display() {
+        let err = error::ToolError::PatternNotFound("pattern".to_string());
+        assert_eq!(err.to_string(), "Pattern 'pattern' not found in file");
+    }
+
+    #[test]
+    fn error_ambiguous_pattern_display() {
+        let err = error::ToolError::AmbiguousPattern(3);
+        assert_eq!(
+            err.to_string(),
+            "Pattern appears 3 times; use all=true or be more specific"
+        );
+    }
+
+    #[test]
+    fn error_missing_parameter_display() {
+        let err = error::ToolError::MissingParameter("timeout".to_string());
+        assert_eq!(err.to_string(), "Missing required parameter: timeout");
+    }
+
+    #[test]
+    fn error_invalid_parameter_type_display() {
+        let err = error::ToolError::InvalidParameterType {
+            key: "max_size".to_string(),
+            expected: "u32",
+        };
+        assert_eq!(
+            err.to_string(),
+            "Invalid parameter type for max_size: expected u32"
+        );
+    }
+
+    #[test]
+    fn error_unknown_tool_display() {
+        let err = error::ToolError::UnknownTool("fake_tool".to_string());
+        assert_eq!(err.to_string(), "Unknown tool: fake_tool");
+    }
+
+    #[test]
+    fn error_mode_denied_display() {
+        let err = error::ToolError::ModeDenied {
+            tool: "system".to_string(),
+            mode: "sandbox".to_string(),
+            reason: "security policy".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "Tool 'system' is not allowed in sandbox mode: security policy"
+        );
+    }
+
+    #[test]
+    fn error_command_failed_display() {
+        let err = error::ToolError::CommandFailed("exit code 1".to_string());
+        assert_eq!(err.to_string(), "Command execution failed: exit code 1");
+    }
+
+    #[test]
+    fn error_path_outside_working_dir_display() {
+        let err = error::ToolError::PathOutsideWorkingDir("../../../etc/passwd".to_string());
+        assert_eq!(
+            err.to_string(),
+            "Path escapes working directory: ../../../etc/passwd"
+        );
+    }
+
+    #[test]
+    fn error_invalid_path_display() {
+        let err = error::ToolError::InvalidPath("/invalid\0path".to_string());
+        assert_eq!(err.to_string(), "Invalid path: /invalid\0path");
+    }
+
+    #[test]
+    fn error_from_io_error() {
+        let io_err = io::Error::new(io::ErrorKind::NotFound, "file not found");
+        let err: error::ToolError = io_err.into();
+
+        let display = err.to_string();
+        assert!(display.starts_with("IO error:"));
+        assert!(display.contains("file not found"));
+    }
+
+    #[test]
+    fn error_from_regex_error() {
+        let regex_err = regex::Error::Syntax("invalid regex".to_string());
+        let err: error::ToolError = regex_err.into();
+
+        let display = err.to_string();
+        assert!(display.starts_with("Regex error:"));
+    }
+
+    #[test]
+    fn error_from_glob_pattern_error() {
+        // Test that GlobPattern variant displays correctly.
+        // We test the From implementation by verifying the variant's display.
+        let glob_err = ::glob::Pattern::new("[invalid").unwrap_err();
+        let err: error::ToolError = glob_err.into();
+        let display = err.to_string();
+        assert!(display.starts_with("Glob pattern error:"));
+    }
 
     // ── Property tests ──────────────────────────────────────────────────
 
