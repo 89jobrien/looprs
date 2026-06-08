@@ -11,7 +11,7 @@ pub mod context;
 pub mod errors;
 pub mod events;
 pub mod file_refs;
-mod fs_mode;
+pub mod fs_mode;
 pub mod hooks;
 pub mod jj;
 pub mod kan;
