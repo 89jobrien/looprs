@@ -58,3 +58,4 @@ third_party/**/target/
 .ctx/HANDOFF.hj.hj.state.yaml
 .ctx/.initialized
 # handoff-end
+.worktrees/

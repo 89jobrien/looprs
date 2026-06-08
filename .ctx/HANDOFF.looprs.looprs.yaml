@@ -1,69 +1,7 @@
 project: looprs
 id: looprs
-updated: 2026-06-04
-items:
-  - id: HX-003
-    doob_uuid: null
-    name: null
-    priority: P2
-    status: done
-    title: "Phase 4: Wire Agent through ports"
-    description: |
-      Refactor Agent::run_turn to use injected port traits (UserOutput, SessionStore) instead
-      of direct ui::*, SessionLogger, dirs::home_dir() calls. Agent should depend only on
-      looprs-core types and port traits. Add NullOutput test double.
-    files:
-      - src/agent.rs
-      - src/adapters/ui_output.rs
-      - crates/looprs-core/src/adapters/null_output.rs
-    completed: 2026-05-07
-    extra: []
-    depends_on:
-      - HX-002
-  - id: HX-005
-    doob_uuid: null
-    name: null
-    priority: P1
-    status: done
-    title: Deduplicate SessionEvent from src/session_log.rs
-    description: |
-      src/session_log.rs defines SessionEvent independently. Now that
-      looprs-core::ports::session_store defines the same type, replace the root definition
-      with a re-export from looprs-core.
-    files:
-      - src/session_log.rs
-      - crates/looprs-core/src/ports/session_store.rs
-    completed: 2026-05-06
-    extra: []
-  - id: HX-006
-    doob_uuid: null
-    name: null
-    priority: P1
-    status: done
-    title: Extract LLMProvider trait to looprs-core::ports
-    description: |
-      Move the LLMProvider trait from src/providers/mod.rs into
-      crates/looprs-core/src/ports/inference_provider.rs. First-class port alongside
-      MessageBroker, PluginExecutor, SessionStore, UserOutput.
-    files:
-      - src/providers/mod.rs
-      - crates/looprs-core/src/ports/inference_provider.rs
-    completed: 2026-05-07
-    extra: []
-  - id: HX-007
-    doob_uuid: null
-    name: null
-    priority: P2
-    status: done
-    title: "DRY provider factory: extract resolve_model helper"
-    description: |
-      create_provider_by_name in src/providers/mod.rs had 5 near-identical match arms each
-      resolving the model the same way. Extracted resolve_model(overrides, config, provider)
-      helper.
-    files:
-      - src/providers/mod.rs
-    completed: 2026-05-06
-    extra: []
+updated: 2026-06-07
+items: []
 log:
   - date: 20260429:160832
     summary: |
@@ -79,6 +17,13 @@ log:
       global pre-commit hook.
     commits: []
     session: 1
+  - date: 2026-06-07
+    summary: |
+      Pruned 4 completed HANDOFF items to log. HX-003: Wire Agent through
+      ports (done 2026-05-07). HX-005: Deduplicate SessionEvent (done
+      2026-05-06). HX-006: Extract LLMProvider to looprs-core (done
+      2026-05-07). HX-007: DRY provider factory (done 2026-05-06).
+    commits: []
   - date: 2026-05-08
     summary: |
       Removed looprs-gui binary (freya-based GUI, unused). Restructured as proper virtual
