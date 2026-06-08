@@ -35,7 +35,7 @@ impl Default for MockConfig {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MockCliProcess {
     state: Arc<Mutex<ProcessState>>,
     pid: Arc<Mutex<Option<u32>>>,
