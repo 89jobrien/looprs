@@ -70,6 +70,7 @@ impl Agent {
             provider,
             RuntimeSettings::default(),
             FileRefPolicy::default(),
+            None,
         )
     }
 
@@ -77,27 +78,9 @@ impl Agent {
         provider: Box<dyn LLMProvider>,
         runtime: RuntimeSettings,
         file_ref_policy: FileRefPolicy,
+        session_logger: Option<Box<dyn SessionStore>>,
     ) -> Result<Self, AgentError> {
-        use crate::adapters::{FsSessionStore, UiOutput};
-        let session_logger: Option<Box<dyn SessionStore>> = {
-            let primary = dirs::home_dir().map(|h| h.join(".looprs").join("sessions"));
-            primary
-                .and_then(|d| FsSessionStore::new(d).ok())
-                .map(|s| Box::new(s) as Box<dyn SessionStore>)
-                .or_else(|| {
-                    match FsSessionStore::new(std::env::temp_dir().join("looprs-sessions")) {
-                        Ok(logger) => Some(Box::new(logger) as Box<dyn SessionStore>),
-                        Err(e) => {
-                            log::warn!("failed to initialize fallback session logger: {e}");
-                            None
-                        }
-                    }
-                })
-                .or_else(|| {
-                    log::warn!("session logging disabled — could not create logger");
-                    None
-                })
-        };
+        use crate::adapters::UiOutput;
         Ok(Self {
             provider,
             messages: Vec::new(),
@@ -1084,6 +1067,39 @@ actions:
             },
         };
 
+        agent.log_inference(&response);
+
+        let logged = events.lock().unwrap();
+        assert_eq!(logged.len(), 1);
+        assert_eq!(logged[0], "inference");
+    }
+
+    #[test]
+    fn agent_accepts_injected_session_store() {
+        let provider = MockProvider::simple_text("test");
+        let (store, events) = MockSessionStore::new();
+
+        let mut agent = Agent::new_with_runtime(
+            Box::new(provider),
+            RuntimeSettings::default(),
+            FileRefPolicy::default(),
+            Some(Box::new(store)),
+        )
+        .unwrap()
+        .with_output(Box::new(NullOutput));
+
+        agent.add_user_message("hello");
+        // Directly call log_inference to verify the injected store works
+        let response = InferenceResponse {
+            content: vec![ContentBlock::Text {
+                text: "hi".to_string(),
+            }],
+            stop_reason: "end_turn".to_string(),
+            usage: Usage {
+                input_tokens: 1,
+                output_tokens: 1,
+            },
+        };
         agent.log_inference(&response);
 
         let logged = events.lock().unwrap();

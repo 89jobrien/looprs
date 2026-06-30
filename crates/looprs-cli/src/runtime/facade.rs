@@ -33,7 +33,13 @@ pub async fn bootstrap_runtime(
         max_tokens_override,
         fs_mode: app_config.agents.fs_mode,
     };
-    let agent = Agent::new_with_runtime(provider, runtime, app_config.file_ref_policy())?;
+    let session_logger = looprs::adapters::default_session_store();
+    let agent = Agent::new_with_runtime(
+        provider,
+        runtime,
+        app_config.file_ref_policy(),
+        session_logger,
+    )?;
 
     Ok(BootstrappedRuntime {
         app_config,
