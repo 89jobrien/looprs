@@ -39,6 +39,7 @@ pub async fn bootstrap_runtime(
         runtime,
         app_config.file_ref_policy(),
         session_logger,
+        Box::new(looprs::adapters::UiOutput),
     )?;
 
     Ok(BootstrappedRuntime {
