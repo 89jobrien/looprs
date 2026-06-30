@@ -205,8 +205,6 @@ impl LLMProvider for OpenAIProvider {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_is_reasoning_model() {
         assert!(crate::providers::is_reasoning_model("o1-preview"));
