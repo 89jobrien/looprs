@@ -9,8 +9,8 @@ use crate::hooks::{ApprovalCallback, HookExecutor, HookRegistry, PromptCallback}
 use crate::models_config::ModelsConfig;
 use crate::observation_manager::ObservationManager;
 use crate::ports::{SessionStore, UserOutput};
-use crate::providers::InferenceRequest;
 use crate::providers::LLMProvider;
+use crate::providers::{InferenceRequest, InferenceResponse};
 use crate::rules::RuleRegistry;
 use crate::session_log::SessionEvent;
 use crate::system_monitor::SystemMonitor;
@@ -275,6 +275,27 @@ impl Agent {
         system_prompt
     }
 
+    fn log_inference(&mut self, response: &InferenceResponse) {
+        if let Some(ref mut logger) = self.session_logger {
+            let content = response
+                .content
+                .iter()
+                .filter_map(|b| {
+                    if let ContentBlock::Text { text } = b {
+                        Some(text.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            let _ = logger.log(SessionEvent::Inference {
+                content,
+                provider: self.provider.name().to_string(),
+            });
+        }
+    }
+
     pub async fn run_turn(&mut self) -> Result<(), AgentError> {
         let delegated_agent = self.pending_metadata.get("orchestration.agent").cloned();
         if let Some(agent_name) = delegated_agent.clone() {
@@ -361,24 +382,7 @@ impl Agent {
                     .map_err(|e| AgentError::Inference(e.to_string()))?
             };
 
-            if let Some(ref mut logger) = self.session_logger {
-                let content = response
-                    .content
-                    .iter()
-                    .filter_map(|b| {
-                        if let ContentBlock::Text { text } = b {
-                            Some(text.as_str())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n\n");
-                let _ = logger.log(SessionEvent::Inference {
-                    content,
-                    provider: self.provider.name().to_string(),
-                });
-            }
+            self.log_inference(&response);
 
             #[cfg(not(test))]
             if let Err(e) =
@@ -1021,5 +1025,69 @@ actions:
         let prompt = agent.build_system_prompt(&ctx);
         assert!(prompt.contains("[truncated"));
         assert!(prompt.len() < 5000 + 500);
+    }
+
+    struct MockSessionStore {
+        events: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    impl MockSessionStore {
+        fn new() -> (Self, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+            let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            (
+                Self {
+                    events: events.clone(),
+                },
+                events,
+            )
+        }
+    }
+
+    impl SessionStore for MockSessionStore {
+        fn log(&mut self, event: SessionEvent) -> Result<(), anyhow::Error> {
+            let tag = match &event {
+                SessionEvent::UserMessage { .. } => "user_message",
+                SessionEvent::Inference { .. } => "inference",
+                SessionEvent::ToolUse { .. } => "tool_use",
+                SessionEvent::ToolResult { .. } => "tool_result",
+                SessionEvent::SessionEnd => "session_end",
+            };
+            self.events.lock().unwrap().push(tag.to_string());
+            Ok(())
+        }
+
+        fn path(&self) -> Option<&std::path::Path> {
+            None
+        }
+
+        fn session_id(&self) -> &str {
+            "mock-session"
+        }
+    }
+
+    #[test]
+    fn log_inference_records_session_event() {
+        let provider = MockProvider::simple_text("test");
+        let mut agent = agent_for_test(provider);
+
+        let (store, events) = MockSessionStore::new();
+        agent.session_logger = Some(Box::new(store));
+
+        let response = InferenceResponse {
+            content: vec![ContentBlock::Text {
+                text: "hello from LLM".to_string(),
+            }],
+            stop_reason: "end_turn".to_string(),
+            usage: Usage {
+                input_tokens: 5,
+                output_tokens: 10,
+            },
+        };
+
+        agent.log_inference(&response);
+
+        let logged = events.lock().unwrap();
+        assert_eq!(logged.len(), 1);
+        assert_eq!(logged[0], "inference");
     }
 }
