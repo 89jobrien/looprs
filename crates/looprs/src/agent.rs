@@ -51,10 +51,10 @@ pub struct Agent {
     provider: Box<dyn LLMProvider>,
     messages: Vec<Message>,
     tool_ctx: ToolContext,
-    pub events: EventManager,
-    pub observations: ObservationManager,
-    pub hooks: HookRegistry,
-    pub rules: RuleRegistry,
+    pub(crate) events: EventManager,
+    pub(crate) observations: ObservationManager,
+    pub(crate) hooks: HookRegistry,
+    pub(crate) rules: RuleRegistry,
     runtime: RuntimeSettings,
     file_ref_policy: FileRefPolicy,
     pending_metadata: HashMap<String, String>,
@@ -111,6 +111,15 @@ impl Agent {
     pub fn with_hooks(mut self, hooks: HookRegistry) -> Self {
         self.hooks = hooks;
         self
+    }
+
+    pub fn with_rules(mut self, rules: RuleRegistry) -> Self {
+        self.rules = rules;
+        self
+    }
+
+    pub fn fire_event(&self, event: Event, context: &EventContext) {
+        self.events.fire(event, context);
     }
 
     pub fn set_provider(&mut self, provider: Box<dyn LLMProvider>) {
@@ -1146,5 +1155,34 @@ actions:
         // Agent was constructed with our custom output - verify it compiled
         // and the output is wired (infos vec is shared, not the default UiOutput)
         assert!(infos.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn with_rules_builder() {
+        let provider = MockProvider::simple_text("test");
+        let mut rules = RuleRegistry::new();
+        rules.register(crate::rules::Rule {
+            id: "test".to_string(),
+            title: "Test".to_string(),
+            content: "rule content".to_string(),
+            categories: vec![],
+            source: std::path::PathBuf::from("test"),
+        });
+
+        let agent = agent_for_test(provider).with_rules(rules);
+
+        let ctx = EventContext::new();
+        let prompt = agent.build_system_prompt(&ctx);
+        assert!(prompt.contains("rule content"));
+    }
+
+    #[test]
+    fn fire_event_delegates_to_event_manager() {
+        let provider = MockProvider::simple_text("test");
+        let agent = agent_for_test(provider);
+
+        // Should not panic — verifies the method exists and works
+        let ctx = EventContext::new();
+        agent.fire_event(Event::SessionStart, &ctx);
     }
 }

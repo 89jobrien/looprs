@@ -155,7 +155,7 @@ async fn main() -> Result<()> {
     if rules.count() > 0 {
         println!("📋 Loaded {} project rule(s)", rules.count());
     }
-    agent.rules = rules;
+    agent = agent.with_rules(rules);
 
     let user_agents_dir = dirs::home_dir()
         .unwrap_or_default()
@@ -295,7 +295,7 @@ async fn run_interactive(
     // Fire SessionStart event (this will also execute hooks with approval gates)
     let session_context_str = context.format_for_prompt().unwrap_or_default();
     let event_ctx = EventContext::new().with_session_context(session_context_str);
-    agent.events.fire(Event::SessionStart, &event_ctx);
+    agent.fire_event(Event::SessionStart, &event_ctx);
 
     // Create approval callback for interactive prompts
     let approval_callback: ApprovalCallback = Box::new(console_approval_prompt);
@@ -501,7 +501,7 @@ async fn run_interactive(
 
     // Fire SessionEnd event and save observations
     let event_ctx = EventContext::new();
-    agent.events.fire(Event::SessionEnd, &event_ctx);
+    agent.fire_event(Event::SessionEnd, &event_ctx);
     let _ = agent.execute_hooks_for_event(&Event::SessionEnd, &event_ctx);
 
     Ok(())
