@@ -244,6 +244,37 @@ impl Agent {
         enriched_context
     }
 
+    fn build_system_prompt(&self, enriched_ctx: &EventContext) -> String {
+        let mut system_prompt = format!(
+            "You are a concise coding assistant. Current working directory: {}",
+            self.tool_ctx.working_dir.display()
+        );
+
+        let rules_section = self.rules.format_for_prompt();
+        if !rules_section.is_empty() {
+            system_prompt.push_str(&rules_section);
+        }
+
+        if !enriched_ctx.metadata.is_empty() {
+            const MAX_INJECTION_SIZE: usize = 2000;
+            system_prompt.push_str("\n\n## Additional Context from Hooks:");
+            for (key, value) in &enriched_ctx.metadata {
+                let truncated_value = if value.len() > MAX_INJECTION_SIZE {
+                    format!(
+                        "{}... [truncated {} bytes]",
+                        &value[..MAX_INJECTION_SIZE],
+                        value.len() - MAX_INJECTION_SIZE
+                    )
+                } else {
+                    value.clone()
+                };
+                system_prompt.push_str(&format!("\n### {key}\n{truncated_value}"));
+            }
+        }
+
+        system_prompt
+    }
+
     pub async fn run_turn(&mut self) -> Result<(), AgentError> {
         let delegated_agent = self.pending_metadata.get("orchestration.agent").cloned();
         if let Some(agent_name) = delegated_agent.clone() {
@@ -296,36 +327,7 @@ impl Agent {
             enriched_ctx.metadata.insert(key, value);
         }
 
-        // Build system prompt with base instructions + hook-injected context + rules
-        let mut system_prompt = format!(
-            "You are a concise coding assistant. Current working directory: {}",
-            self.tool_ctx.working_dir.display()
-        );
-
-        // Add project rules and guidelines
-        let rules_section = self.rules.format_for_prompt();
-        if !rules_section.is_empty() {
-            system_prompt.push_str(&rules_section);
-        }
-
-        // Add any context injected by hooks
-        if !enriched_ctx.metadata.is_empty() {
-            system_prompt.push_str("\n\n## Additional Context from Hooks:");
-            for (key, value) in &enriched_ctx.metadata {
-                // Truncate large values to prevent prompt bloat (max 2000 chars per injection)
-                const MAX_INJECTION_SIZE: usize = 2000;
-                let truncated_value = if value.len() > MAX_INJECTION_SIZE {
-                    format!(
-                        "{}... [truncated {} bytes]",
-                        &value[..MAX_INJECTION_SIZE],
-                        value.len() - MAX_INJECTION_SIZE
-                    )
-                } else {
-                    value.clone()
-                };
-                system_prompt.push_str(&format!("\n### {key}\n{truncated_value}"));
-            }
-        }
+        let system_prompt = self.build_system_prompt(&enriched_ctx);
 
         let mut tool_call_counts: std::collections::HashMap<String, usize> =
             std::collections::HashMap::new();
@@ -965,5 +967,59 @@ actions:
     #[test]
     fn execute_hooks_supports_prompt_callbacks() {
         let _ = Agent::execute_hooks_for_event_with_callbacks;
+    }
+
+    #[test]
+    fn build_system_prompt_includes_working_dir() {
+        let provider = MockProvider::simple_text("test");
+        let agent = agent_for_test(provider);
+        let ctx = EventContext::new();
+
+        let prompt = agent.build_system_prompt(&ctx);
+        assert!(prompt.contains("Current working directory:"));
+    }
+
+    #[test]
+    fn build_system_prompt_includes_rules() {
+        let provider = MockProvider::simple_text("test");
+        let mut agent = agent_for_test(provider);
+        let mut rules = RuleRegistry::new();
+        rules.register(crate::rules::Rule {
+            id: "test-rule".to_string(),
+            title: "Test Rule".to_string(),
+            content: "Always use snake_case".to_string(),
+            categories: vec![],
+            source: std::path::PathBuf::from("test"),
+        });
+        agent.rules = rules;
+
+        let ctx = EventContext::new();
+        let prompt = agent.build_system_prompt(&ctx);
+        assert!(prompt.contains("Always use snake_case"));
+    }
+
+    #[test]
+    fn build_system_prompt_includes_hook_context() {
+        let provider = MockProvider::simple_text("test");
+        let agent = agent_for_test(provider);
+        let mut ctx = EventContext::new();
+        ctx.metadata
+            .insert("git_status".to_string(), "clean".to_string());
+
+        let prompt = agent.build_system_prompt(&ctx);
+        assert!(prompt.contains("git_status"));
+        assert!(prompt.contains("clean"));
+    }
+
+    #[test]
+    fn build_system_prompt_truncates_large_hook_values() {
+        let provider = MockProvider::simple_text("test");
+        let agent = agent_for_test(provider);
+        let mut ctx = EventContext::new();
+        ctx.metadata.insert("big".to_string(), "x".repeat(5000));
+
+        let prompt = agent.build_system_prompt(&ctx);
+        assert!(prompt.contains("[truncated"));
+        assert!(prompt.len() < 5000 + 500);
     }
 }
