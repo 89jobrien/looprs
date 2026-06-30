@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
     // Load hooks from both user (~/.looprs/hooks/) and repo (.looprs/hooks/) directories
     // Repo hooks override user hooks with same name (unless --no-hooks)
     if !cli_args.no_hooks {
-        let user_hooks_dir = env::home_dir()
+        let user_hooks_dir = dirs::home_dir()
             .unwrap_or_default()
             .join(".looprs")
             .join("hooks");
@@ -99,7 +99,7 @@ async fn main() -> Result<()> {
     }
 
     // Load custom commands from both user and repo directories
-    let user_commands_dir = env::home_dir()
+    let user_commands_dir = dirs::home_dir()
         .unwrap_or_default()
         .join(".looprs")
         .join("commands");
@@ -130,7 +130,7 @@ async fn main() -> Result<()> {
     }
 
     // Load skills from both user and repo directories
-    let user_skills_dir = env::home_dir()
+    let user_skills_dir = dirs::home_dir()
         .unwrap_or_default()
         .join(".looprs")
         .join("skills");
@@ -157,7 +157,7 @@ async fn main() -> Result<()> {
     }
     agent.rules = rules;
 
-    let user_agents_dir = env::home_dir()
+    let user_agents_dir = dirs::home_dir()
         .unwrap_or_default()
         .join(".looprs")
         .join("agents");
