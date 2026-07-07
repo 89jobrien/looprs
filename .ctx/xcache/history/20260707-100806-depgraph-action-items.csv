@@ -1,0 +1,2 @@
+severity,source,target,source_ring,target_ring,note
+medium,looprs,looprs-core,Adapters,Core,Skips 1 ring. Re-export or facade the needed types through <code>Domain</code>-layer crate so <code>looprs</code> only reaches one ring inward.
