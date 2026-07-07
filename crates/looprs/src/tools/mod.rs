@@ -4,6 +4,7 @@ mod edit;
 pub mod error;
 mod glob;
 mod grep;
+mod nu;
 mod read;
 mod write;
 
@@ -189,16 +190,18 @@ pub enum Tool {
     Edit,
     Glob,
     Grep,
+    Nu,
     Bash,
 }
 
 impl Tool {
-    const ALL: [Tool; 6] = [
+    const ALL: [Tool; 7] = [
         Tool::Read,
         Tool::Write,
         Tool::Edit,
         Tool::Glob,
         Tool::Grep,
+        Tool::Nu,
         Tool::Bash,
     ];
 
@@ -210,6 +213,7 @@ impl Tool {
             Tool::Edit => "edit",
             Tool::Glob => "glob",
             Tool::Grep => "grep",
+            Tool::Nu => "nu",
             Tool::Bash => "bash",
         }
     }
@@ -221,6 +225,7 @@ impl Tool {
             "edit" => Some(Tool::Edit),
             "glob" => Some(Tool::Glob),
             "grep" => Some(Tool::Grep),
+            "nu" | "nushell" => Some(Tool::Nu),
             "bash" => Some(Tool::Bash),
             _ => None,
         }
@@ -317,6 +322,20 @@ impl Tool {
                     "required": ["pat"]
                 }),
             },
+            Tool::Nu => ToolDefinition {
+                name: "nu".into(),
+                description: "Execute a Nushell command. Returns stdout and stderr.".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "cmd": {
+                            "type": "string",
+                            "description": "Nushell command to execute"
+                        }
+                    },
+                    "required": ["cmd"]
+                }),
+            },
             Tool::Grep => ToolDefinition {
                 name: "grep".into(),
                 description: "Search files for regex pattern. Returns up to 50 matches.".into(),
@@ -338,13 +357,13 @@ impl Tool {
             },
             Tool::Bash => ToolDefinition {
                 name: "bash".into(),
-                description: "Execute shell command. Returns stdout and stderr.".into(),
+                description: "Execute a Bash command. Returns stdout and stderr.".into(),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
                         "cmd": {
                             "type": "string",
-                            "description": "Shell command to execute"
+                            "description": "Bash command to execute"
                         }
                     },
                     "required": ["cmd"]
@@ -360,6 +379,7 @@ impl Tool {
             Tool::Edit => edit::tool_edit(args, ctx),
             Tool::Glob => glob::tool_glob(args, ctx),
             Tool::Grep => grep::tool_grep(args, ctx),
+            Tool::Nu => nu::tool_nu(args),
             Tool::Bash => bash::tool_bash(args),
         }
     }
@@ -393,7 +413,7 @@ fn enforce_fs_mode(tool: Tool, args: &Value, ctx: &ToolContext) -> Result<(), To
     match mode {
         FsMode::Write => Ok(()),
         FsMode::Read => match tool {
-            Tool::Write | Tool::Edit | Tool::Bash => Err(ToolError::ModeDenied {
+            Tool::Write | Tool::Edit | Tool::Nu | Tool::Bash => Err(ToolError::ModeDenied {
                 tool: tool.name().to_string(),
                 mode: mode.as_str().to_string(),
                 reason: "file writes are disabled".to_string(),
@@ -401,10 +421,10 @@ fn enforce_fs_mode(tool: Tool, args: &Value, ctx: &ToolContext) -> Result<(), To
             _ => Ok(()),
         },
         FsMode::Update => match tool {
-            Tool::Bash => Err(ToolError::ModeDenied {
+            Tool::Nu | Tool::Bash => Err(ToolError::ModeDenied {
                 tool: tool.name().to_string(),
                 mode: mode.as_str().to_string(),
-                reason: "bash is disabled (it can create/modify files)".to_string(),
+                reason: "shell commands are disabled (they can create/modify files)".to_string(),
             }),
             Tool::Edit => Ok(()),
             Tool::Write => {
@@ -638,7 +658,7 @@ mod tests {
     }
 
     #[test]
-    fn read_mode_blocks_write_edit_and_bash() {
+    fn read_mode_blocks_write_edit_and_shells() {
         let dir = tempfile::tempdir().unwrap();
         let ctx = ToolContext::from_working_dir(dir.path().to_path_buf(), FsMode::Read);
 
@@ -653,8 +673,26 @@ mod tests {
         assert!(matches!(err, ToolError::ModeDenied { .. }));
 
         let args = serde_json::json!({"cmd": "echo hi"});
+        let err = execute_tool("nu", &args, &ctx).unwrap_err();
+        assert!(matches!(err, ToolError::ModeDenied { .. }));
+
+        let args = serde_json::json!({"cmd": "echo hi"});
         let err = execute_tool("bash", &args, &ctx).unwrap_err();
         assert!(matches!(err, ToolError::ModeDenied { .. }));
+    }
+
+    #[test]
+    fn exposes_nushell_and_bash_tools() {
+        assert_eq!(Tool::from_name("nu"), Some(Tool::Nu));
+        assert_eq!(Tool::from_name("nushell"), Some(Tool::Nu));
+        assert_eq!(Tool::from_name("bash"), Some(Tool::Bash));
+
+        let names = get_tool_definitions()
+            .into_iter()
+            .map(|definition| definition.name)
+            .collect::<Vec<_>>();
+        assert!(names.contains(&"nu".to_string()));
+        assert!(names.contains(&"bash".to_string()));
     }
 
     #[test]

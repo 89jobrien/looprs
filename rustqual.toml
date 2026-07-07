@@ -7,7 +7,7 @@
 # ── Function Classification ──────────────────────────────────────────────
 
 ignore_functions = ["main", "test_*"]
-exclude_files = ["mockstation/**"]
+exclude_files = []
 strict_closures = false
 strict_iterator_chains = false
 allow_recursion = false

@@ -29,6 +29,7 @@ pub mod sanitize;
 pub mod scorer;
 pub mod seed;
 pub mod session_log;
+pub mod shell;
 pub mod skills;
 pub mod state;
 pub mod system_monitor;

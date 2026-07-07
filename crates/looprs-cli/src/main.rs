@@ -66,7 +66,17 @@ async fn main() -> Result<()> {
 
     ui::init_logging();
 
-    let bootstrap = runtime::bootstrap_runtime(cli_args.model.clone().map(ModelId::new)).await?;
+    let bootstrap = match runtime::bootstrap_runtime(cli_args.model.clone().map(ModelId::new)).await
+    {
+        Ok(bootstrap) => bootstrap,
+        Err(err) => {
+            if let Some(report) = runtime::provider_bootstrap_report(&err) {
+                eprintln!("{report:?}");
+                std::process::exit(1);
+            }
+            return Err(err);
+        }
+    };
     let app_config = bootstrap.app_config;
     let provider_name = bootstrap.provider_name;
     let model = bootstrap.model;
@@ -900,7 +910,6 @@ async fn execute_command(
     agent_registry: &AgentRegistry,
 ) -> Result<()> {
     use looprs::CommandAction;
-    use std::process::Command as ProcessCommand;
 
     match &cmd.action {
         CommandAction::Prompt { template, .. } => {
@@ -920,7 +929,7 @@ async fn execute_command(
             inject_output,
         } => {
             ui::running_command(command);
-            let output = ProcessCommand::new("sh").arg("-c").arg(command).output()?;
+            let output = looprs::shell::run_nu_command(command)?;
 
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);

@@ -47,6 +47,7 @@ Persistent config: `.looprs/provider.json`. All env options: `.env.example`.
 | `/edit` | Replace text in files |
 | `/glob` | Find files by name pattern (faster with `fd`) |
 | `/grep` | Search file contents (faster with `rg`) |
+| `/nu` | Execute a Nushell command |
 | `/bash` | Execute shell commands |
 
 Optional speedups (auto-detected, falls back to pure Rust):
@@ -92,7 +93,7 @@ action:
   inject_output: true
 ```
 
-Action types: `prompt` (send to LLM), `shell` (run command), `message` (print to console).
+Action types: `prompt` (send to LLM), `shell` (run command with Nushell), `message` (print to console).
 
 Built-in repo commands: `/help`, `/refactor`, `/test`, `/lint`.
 
@@ -128,7 +129,7 @@ actions:
 
 Events: `SessionStart`, `UserPromptSubmit`, `InferenceComplete`, `PreToolUse`, `PostToolUse`, `OnError`, `OnWarning`, `SessionEnd`.
 
-Action types: `command` (shell, optional `inject_as` and `requires_approval`), `message`, `conditional`.
+Action types: `command` (Nushell command, optional `inject_as` and `requires_approval`), `message`, `conditional`.
 
 ## Desktop UI
 

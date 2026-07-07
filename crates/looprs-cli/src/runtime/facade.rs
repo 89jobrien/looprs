@@ -4,6 +4,9 @@ use looprs::ProviderConfig;
 use looprs::RuntimeSettings;
 use looprs::app_config::AppConfig;
 use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
+use miette::miette;
+
+const MISSING_LOCAL_MODEL: &str = "No local model configured";
 
 pub struct BootstrappedRuntime {
     pub app_config: AppConfig,
@@ -49,6 +52,51 @@ pub async fn bootstrap_runtime(
         model,
         agent,
     })
+}
+
+pub fn provider_bootstrap_report(error: &anyhow::Error) -> Option<miette::Report> {
+    let provider_error = error.downcast_ref::<looprs::ProviderError>()?;
+
+    match provider_error {
+        looprs::ProviderError::Config(message) if message.contains(MISSING_LOCAL_MODEL) => {
+            Some(miette!(
+                code = "looprs::provider::missing_local_model",
+                help = "Configure an Ollama model before starting looprs:\n  - Set OLLAMA_MODEL=llama3.2:latest or MODEL=llama3.2:latest\n  - Pass --model llama3.2:latest for one run\n  - Add { \"provider\": \"local\", \"local\": { \"model\": \"llama3.2:latest\" } } to .looprs/provider.json\n\nRun `ollama list` to see installed local models.",
+                "No local model configured for Ollama"
+            ))
+        }
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_local_model_report_explains_model_options() {
+        let err = anyhow::Error::new(looprs::ProviderError::Config(
+            "No local model configured. Set MODEL or OLLAMA_MODEL, or configure .looprs/provider.json"
+                .to_string(),
+        ));
+
+        let report = provider_bootstrap_report(&err).expect("missing local model report");
+        let rendered = format!("{report:?}");
+
+        assert!(rendered.contains("No local model configured for Ollama"));
+        assert!(rendered.contains("OLLAMA_MODEL"));
+        assert!(rendered.contains("--model"));
+        assert!(rendered.contains(".looprs/provider.json"));
+    }
+
+    #[test]
+    fn unrelated_provider_error_does_not_get_special_report() {
+        let err = anyhow::Error::new(looprs::ProviderError::MissingApiKey(
+            "anthropic".to_string(),
+        ));
+
+        assert!(provider_bootstrap_report(&err).is_none());
+    }
 }
 
 #[cfg(test)]

@@ -3,7 +3,6 @@ use crate::app_config::AppConfig;
 use crate::events::EventContext;
 use crate::state::AppState;
 use std::collections::HashMap;
-use std::process::Command;
 
 pub struct HookExecutor;
 
@@ -208,14 +207,7 @@ impl HookExecutor {
     /// Run a shell command and capture output
     // qual:allow(iosp) reason: "I/O boundary — spawns shell process"
     fn run_command(command_str: &str) -> anyhow::Result<String> {
-        let output = if cfg!(windows) {
-            Command::new("cmd").arg("/C").arg(command_str).output()?
-        } else {
-            Command::new("/bin/sh")
-                .arg("-c")
-                .arg(command_str)
-                .output()?
-        };
+        let output = crate::shell::run_nu_command(command_str)?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
 
@@ -340,9 +332,9 @@ mod tests {
 
     #[test]
     fn test_run_command_with_pipes() {
-        let output = HookExecutor::run_command("echo -e 'a\\nb\\nc' | wc -l").unwrap();
+        let output = HookExecutor::run_command("[a b c] | length").unwrap();
         let lines: i32 = output.trim().parse().unwrap_or(0);
-        assert!(lines > 0);
+        assert_eq!(lines, 3);
     }
 
     #[test]
