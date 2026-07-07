@@ -1,0 +1,4 @@
+#!/bin/sh
+# Delegate to taskit pre-commit checks.
+# Install: git config core.hooksPath .githooks
+exec cargo xtask pre-commit

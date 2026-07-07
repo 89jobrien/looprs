@@ -3,6 +3,7 @@ members = [
     "crates/looprs-core",
     "crates/looprs",
     "crates/looprs-cli",
+    "xtask",
 ]
 resolver = "2"
 exclude = ["fuzz"]

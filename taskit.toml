@@ -1,0 +1,93 @@
+[workspace]
+crates = [
+  { dir = "crates/looprs-core", pkg = "looprs-core" },
+  { dir = "crates/looprs", pkg = "looprs" },
+  { dir = "crates/looprs-cli", pkg = "looprs-cli" },
+]
+# offline_skip = "test(/.*network.*/)"
+
+
+[[workspace.propagation]]
+source = "looprs"
+dependents = ["looprs-cli"]
+
+[[workspace.propagation]]
+source = "looprs-core"
+dependents = ["looprs", "looprs-cli"]
+
+# Protocol drift detection: track SHA-256 hashes of contract surfaces.
+# Run `taskit check-protocol-drift --update` to regenerate the lockfile.
+[protocol]
+lockfile = "taskit-protocol.lock"
+
+[[protocol.surfaces]]
+name = "looprs-core-api"
+path = "crates/looprs-core/src/api.rs"
+
+[[protocol.surfaces]]
+name = "looprs-core-types"
+path = "crates/looprs-core/src/types.rs"
+
+[[protocol.surfaces]]
+name = "looprs-api"
+path = "crates/looprs/src/api.rs"
+
+[[protocol.surfaces]]
+name = "looprs-pipeline-types"
+path = "crates/looprs/src/pipeline/types.rs"
+
+[[protocol.surfaces]]
+name = "looprs-types"
+path = "crates/looprs/src/types.rs"
+
+# Coverage enforcement: run `taskit coverage` to check.
+#
+# [coverage]
+# crate_name = "my-crate"
+# threshold = 80.0
+
+[ci]
+# cruxfile = "Cruxfile"
+
+[[ci.steps]]
+name = "self-check"
+cmd = "self-check"
+gate = true
+
+[[ci.steps]]
+name = "fmt --check"
+cmd = "fmt --check"
+gate = false
+
+[[ci.steps]]
+name = "lint"
+cmd = "lint"
+gate = false
+
+[[ci.steps]]
+name = "compile-tests"
+cmd = "compile-tests"
+gate = false
+
+[[ci.steps]]
+name = "test"
+cmd = "test"
+gate = false
+
+[[ci.steps]]
+name = "check-deps"
+cmd = "check-deps"
+gate = false
+
+[[ci.steps]]
+name = "check-protocol-drift"
+cmd = "check-protocol-drift"
+gate = false
+
+# Git flow: main (stable) -> staging (work) -> release (publish) -> main
+# These are the defaults; uncomment to customize branch names.
+#
+# [flow]
+# main = "main"
+# staging = "staging"
+# release = "release"

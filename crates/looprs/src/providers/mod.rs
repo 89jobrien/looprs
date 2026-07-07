@@ -222,3 +222,57 @@ async fn create_provider_by_name(
         other => Err(ProviderError::Config(format!("Unknown provider: {other}"))),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::Message;
+    use looprs_core::types::{ToolId, ToolName};
+
+    #[test]
+    fn convert_to_openai_messages_text_only() {
+        let msg = Message::user("hello");
+        let result = convert_to_openai_messages(&msg);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0]["role"], "user");
+        assert_eq!(result[0]["content"], "hello");
+    }
+
+    #[test]
+    fn convert_to_openai_messages_tool_result() {
+        let msg = Message::tool_results(vec![ContentBlock::ToolResult {
+            tool_use_id: ToolId::new("call_1"),
+            content: "output".into(),
+        }]);
+        let result = convert_to_openai_messages(&msg);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0]["role"], "tool");
+        assert_eq!(result[0]["tool_call_id"], "call_1");
+    }
+
+    #[test]
+    fn convert_to_openai_messages_with_tool_use() {
+        let msg = Message::assistant(vec![ContentBlock::ToolUse {
+            id: ToolId::new("call_2"),
+            name: ToolName::new("read"),
+            input: json!({"path": "foo.rs"}),
+        }]);
+        let result = convert_to_openai_messages(&msg);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0]["tool_calls"][0]["function"]["name"], "read");
+    }
+
+    #[test]
+    fn is_reasoning_model_detects_o1_o3() {
+        assert!(is_reasoning_model("o1-preview"));
+        assert!(is_reasoning_model("o3-mini"));
+        assert!(!is_reasoning_model("gpt-4o"));
+    }
+
+    #[test]
+    fn supports_temperature_excludes_reasoning_and_gpt5() {
+        assert!(supports_temperature("gpt-4o"));
+        assert!(!supports_temperature("o1-preview"));
+        assert!(!supports_temperature("gpt-5-mini"));
+    }
+}

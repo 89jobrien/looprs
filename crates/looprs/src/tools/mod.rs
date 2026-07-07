@@ -129,7 +129,28 @@ impl<'a> ToolArgs<'a> {
             })
     }
 
+    fn get_optional<T>(
+        &self,
+        key: &str,
+        extract: fn(&Value) -> Option<T>,
+        expected: &'static str,
+    ) -> Result<Option<T>, ToolError> {
+        let map = self.object()?;
+        match map.get(key) {
+            None | Some(Value::Null) => Ok(None),
+            Some(value) => {
+                extract(value)
+                    .map(Some)
+                    .ok_or_else(|| ToolError::InvalidParameterType {
+                        key: key.to_string(),
+                        expected,
+                    })
+            }
+        }
+    }
+
     pub fn get_str_optional(&self, key: &str) -> Result<Option<&str>, ToolError> {
+        // Can't use get_optional due to lifetime constraints on as_str()
         let map = self.object()?;
         match map.get(key) {
             None | Some(Value::Null) => Ok(None),
@@ -157,19 +178,7 @@ impl<'a> ToolArgs<'a> {
     }
 
     pub fn get_u64(&self, key: &str) -> Result<Option<u64>, ToolError> {
-        let map = self.object()?;
-        match map.get(key) {
-            None | Some(Value::Null) => Ok(None),
-            Some(value) => {
-                value
-                    .as_u64()
-                    .map(Some)
-                    .ok_or_else(|| ToolError::InvalidParameterType {
-                        key: key.to_string(),
-                        expected: "u64",
-                    })
-            }
-        }
+        self.get_optional(key, Value::as_u64, "u64")
     }
 }
 
@@ -468,7 +477,7 @@ mod tests {
     }
 
     #[test]
-    fn error_invalid_parameter_type_display() {
+    fn tool_error_invalid_parameter_type_display() {
         let err = error::ToolError::InvalidParameterType {
             key: "max_size".to_string(),
             expected: "u32",
@@ -486,7 +495,7 @@ mod tests {
     }
 
     #[test]
-    fn error_mode_denied_display() {
+    fn tool_error_mode_denied_display() {
         let err = error::ToolError::ModeDenied {
             tool: "system".to_string(),
             mode: "sandbox".to_string(),
@@ -530,7 +539,7 @@ mod tests {
     }
 
     #[test]
-    fn error_from_regex_error() {
+    fn tool_error_from_regex_error() {
         let regex_err = regex::Error::Syntax("invalid regex".to_string());
         let err: error::ToolError = regex_err.into();
 

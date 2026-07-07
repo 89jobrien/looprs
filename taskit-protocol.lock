@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "algorithm": "sha256-normalized-core-contract-v1",
+  "surfaces": [
+    {
+      "name": "looprs-core-api",
+      "path": "crates/looprs-core/src/api.rs",
+      "hash": "93b068818f23dc6737b29de92b746923e8b7e1abf62321708de460d984f5ce33"
+    },
+    {
+      "name": "looprs-core-types",
+      "path": "crates/looprs-core/src/types.rs",
+      "hash": "ee0212fa0fb72c74b4f4b385427f6e7901309bb477221ac8ace03510ab5a5182"
+    },
+    {
+      "name": "looprs-api",
+      "path": "crates/looprs/src/api.rs",
+      "hash": "c579e18adb3bb78a7657299eec7a1ba08735c44f9e985b6e141638e4bbd5ec57"
+    },
+    {
+      "name": "looprs-pipeline-types",
+      "path": "crates/looprs/src/pipeline/types.rs",
+      "hash": "10f58128d695bb533661b7ae9290f08be60942caad41610dc93bb12e5d1ba6e6"
+    },
+    {
+      "name": "looprs-types",
+      "path": "crates/looprs/src/types.rs",
+      "hash": "8bd179bbc9e4705ea06908490c7263f3d9ab43cdec339a3b249c51d3d6e388b8"
+    }
+  ]
+}
