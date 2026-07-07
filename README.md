@@ -9,7 +9,7 @@ git clone https://github.com/89jobrien/looprs.git
 cd looprs
 cargo build --release
 ./target/release/looprs
-# or: cargo install --path .
+# or: cargo install --path crates/looprs-cli
 ```
 
 ## Configure
@@ -154,32 +154,30 @@ cargo test --all-targets -- --ignored
 
 ## Architecture
 
-### Core Modules
+### Workspace
 
-- `src/bin/looprs/` — CLI entry point (`main.rs`, `cli.rs`, `repl.rs`, `args.rs`)
-- `src/agent.rs` — Core orchestrator (messages, tools, events, hooks, observations)
-- `src/app_config.rs` — Centralized configuration
-- `src/providers/` — LLM backends: Anthropic, OpenAI, local (Ollama), SDK variants
-- `src/tools/` — Built-in tools (read, write, edit, glob, grep, bash)
-- `src/events.rs` + `src/hooks/` — Event system and hook execution
-- `src/commands.rs` + `.looprs/commands/` — Command registry
-- `src/skills/` — Skill loader and parser
-- `src/context.rs` — SessionContext (repo state collected at startup)
-- `src/pipeline/` — Context compaction and logging pipeline
-- `src/plugins/` — Plugin registry and runner
+The repository is a Cargo workspace:
+
+- `crates/looprs-core/` — core API, types, ports, events, and lightweight adapters
+- `crates/looprs/` — agent runtime, providers, tools, hooks, skills, plugins, configuration, and observability
+- `crates/looprs-cli/` — `looprs` binary, CLI argument parsing, REPL, and runtime facade
+- `xtask/` — local automation shim that delegates to `taskit`
+- `tests/` — workspace integration tests
+- `fuzz/` — fuzz targets, excluded from the default workspace
 
 See [`docs/ownership-model.md`](./docs/ownership-model.md) for canonical ownership boundaries.
 
 ## Dev
 
 ```bash
-make build      # build release binary
-make test       # run tests
-make lint       # run clippy
-make install    # install locally
+cargo build --workspace
+cargo nextest run --workspace
+cargo nextest run -p looprs-cli --bin looprs
+cargo clippy --all-targets --all-features -- -D warnings
+cargo xtask pre-push
 ```
 
-Patch versions increment automatically on push via pre-push hook (bumps `Cargo.toml`, updates `CHANGELOG.md`).
+The `Makefile` is still available for common shortcuts such as `make build`, `make lint`, and `make all`. Use `cargo xtask pre-push` before pushing; the installed `.githooks/pre-push` delegates to the same command and includes the `looprs-cli` binary test suite that library-only shortcuts do not cover.
 
 ## License
 
