@@ -1,8 +1,6 @@
 //! SystemMonitor — collects real-time CPU, memory, and process metrics.
 //!
-//! Cannibalized from `looprs-desktop/src/services/system_monitor.rs`.
-//! No GUI or async-executor dependencies — `collect_metrics` is async only
-//! because sysinfo refresh is cheap and callers may be in async contexts.
+//! Kept free of GUI and async-executor dependencies.
 
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};

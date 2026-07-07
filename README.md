@@ -61,8 +61,8 @@ cargo install ripgrep fd-find
 Reference files in prompts with `@filename` syntax — contents are injected into the conversation.
 
 ```
-Refactor @src/main.rs for better error handling
-Compare @file1.rs and @file2.rs
+Refactor @crates/looprs-cli/src/main.rs for better error handling
+Compare @crates/looprs/src/agent.rs and @crates/looprs/src/api.rs
 ```
 
 ## Extensibility
@@ -131,30 +131,6 @@ Events: `SessionStart`, `UserPromptSubmit`, `InferenceComplete`, `PreToolUse`, `
 
 Action types: `command` (Nushell command, optional `inject_as` and `requires_approval`), `message`, `conditional`.
 
-## Desktop UI
-
-The desktop UI lives in `crates/looprs-desktop`. Built with Freya.
-
-```bash
-cargo run -p looprs-desktop
-# or with mise:
-mise run ui
-```
-
-### Generative UI (BAML)
-
-The desktop includes a live Generative UI screen backed by a BAML client:
-
-- Schema: `crates/looprs-desktop-baml-client/baml_src/generative_ui.baml`
-- Generators: `crates/looprs-desktop-baml-client/baml_src/generators.baml`
-
-To regenerate the client after editing `.baml` files:
-
-```bash
-baml-cli generate --from crates/looprs-desktop-baml-client/baml_src
-```
-
-Requires `OPENAI_API_KEY`.
 
 ## Observability
 
@@ -166,7 +142,7 @@ looprs writes structured JSONL traces and events:
 Redirect to an external path:
 
 ```bash
-export LOOPRS_OBSERVABILITY_DIR="/Volumes/YourSSD/looprs-observability"
+export LOOPRS_OBSERVABILITY_DIR="$HOME/.local/share/looprs/observability"
 ```
 
 Live LLM tests are gated by:
@@ -191,8 +167,6 @@ cargo test --all-targets -- --ignored
 - `src/context.rs` — SessionContext (repo state collected at startup)
 - `src/pipeline/` — Context compaction and logging pipeline
 - `src/plugins/` — Plugin registry and runner
-- `crates/looprs-desktop/` — Freya-based desktop UI
-- `crates/looprs-desktop-baml-client/` — Generated BAML client for generative UI
 
 See [`docs/ownership-model.md`](./docs/ownership-model.md) for canonical ownership boundaries.
 

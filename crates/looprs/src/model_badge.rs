@@ -1,7 +1,5 @@
 //! ModelBadge — reads a YAML modelcard and surfaces model id, training
 //! status, and mean reward score.
-//!
-//! Cannibalized from `looprs-desktop/src/services/model_badge.rs`.
 
 use std::collections::BTreeMap;
 use std::path::Path;

@@ -1,4 +1,4 @@
-# rustqual.toml — Tailored configuration for your project
+# rustqual.toml — Tailored configuration for looprs
 # Generated from analysis of 112 file(s), 840 function(s).
 #
 # Thresholds are set to your current maximums + 20% headroom.

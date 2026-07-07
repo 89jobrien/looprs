@@ -16,8 +16,6 @@ lint:
 test:
 	cargo test --lib
 
-ui:
-	cargo run -p looprs-desktop
 
 all: check lint test
 
@@ -30,25 +28,10 @@ test-coverage:
 	cargo llvm-cov nextest --html
 	@echo "Coverage report: target/llvm-cov/html/index.html"
 
-# Run only desktop UI tests
-test-ui:
-	cargo nextest run -p looprs-desktop --test ui
-
-# Run only database tests
-test-db:
-	cargo nextest run -p looprs-desktop sqlite_store
-
-# Run only service layer tests
-test-services:
-	cargo nextest run -p looprs-desktop --lib generative_ui mockstation
 
 # Run property tests
 test-property:
 	cargo nextest run property
-
-# Run integration tests
-test-integration:
-	cargo nextest run -p looprs-desktop --test desktop_flow
 
 # Run benchmarks
 bench:
