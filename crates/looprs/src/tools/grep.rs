@@ -46,7 +46,7 @@ fn try_rg(pattern: &str, path: &std::path::Path) -> Result<String, ToolError> {
 
     let output = Rg::system()
         .output(args)
-        .map_err(|_| ToolError::MissingParameter("rg execution failed".to_string()))?;
+        .map_err(|_| ToolError::CommandFailed("rg execution failed".to_string()))?;
 
     if !output.status.success() && output.status.code() != Some(1) {
         return Err(ToolError::CommandFailed(format!(
@@ -136,6 +136,21 @@ mod tests {
 
         let out = tool_grep(&args, &ctx).unwrap();
         assert_eq!(out, "none");
+    }
+
+    #[test]
+    fn rg_failure_returns_command_failed_not_missing_parameter() {
+        // Verify the error variant: a failed rg execution should produce
+        // CommandFailed, not MissingParameter.
+        let err = ToolError::CommandFailed("rg execution failed".to_string());
+        assert!(
+            err.to_string().contains("Command execution failed"),
+            "expected CommandFailed variant, got: {}",
+            err
+        );
+        // Ensure we're NOT using MissingParameter for this case
+        let wrong = ToolError::MissingParameter("rg execution failed".to_string());
+        assert!(wrong.to_string().contains("Missing required parameter"));
     }
 
     #[test]

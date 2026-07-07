@@ -1,112 +1,112 @@
 project: looprs
 id: looprs
-updated: 2026-06-07
+updated: 2026-07-07
 items: []
 log:
-  - date: 20260429:160832
-    summary: |
-      Hexagonal refactor Phases 2-4: extracted looprs-cli crate (binary, REPL, runtime);
-      split ports.rs into ports/ directory with SessionStore and UserOutput ports; moved
-      adapters to looprs-core; re-exported types/api/events/observation from looprs-core.
-    commits: []
-    session: 2
-  - date: 20260429:132540
-    summary: |
-      Hexagonal refactor Phase 1: extracted looprs-core crate with domain types, ports, and
-      newtype_id!/domain_event! macros. Added ChannelBroker, RetryProvider adapters. Fixed
-      global pre-commit hook.
-    commits: []
-    session: 1
-  - date: 2026-06-07
-    summary: |
-      Pruned 4 completed HANDOFF items to log. HX-003: Wire Agent through
-      ports (done 2026-05-07). HX-005: Deduplicate SessionEvent (done
-      2026-05-06). HX-006: Extract LLMProvider to looprs-core (done
-      2026-05-07). HX-007: DRY provider factory (done 2026-05-06).
-    commits: []
-  - date: 2026-05-08
-    summary: |
-      Removed looprs-gui binary (freya-based GUI, unused). Restructured as proper virtual
-      workspace: root Cargo.toml is now workspace-only with [workspace.package]; looprs
-      library crate moved from root src/ into crates/looprs/; looprs-cli dep path updated
-      to ../looprs; looprs-core dev-dep duplicate removed. Bumped to v0.3.1.
-    commits: []
-    session: 4
-  - date: 2026-05-08
-    summary: session closed
-    commits: []
-  - date: 2026-05-08
-    summary: session closed
-    commits: []
-  - date: 2026-05-08
-    summary: session closed
-    commits: []
-  - date: 2026-05-08
-    summary: session closed
-    commits: []
-  - date: 2026-05-08
-    summary: session closed
-    commits: []
-  - date: 2026-05-08
-    summary: session closed
-    commits: []
-  - date: 2026-05-08
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: session closed
-    commits: []
-  - date: 2026-05-07
-    summary: |
-      Completed hexagonal refactor: HX-003 (Agent wired through UserOutput port — UiOutput
-      and NullOutput adapters added, crate::ui removed from agent.rs), HX-006 (LLMProvider
-      unified with InferenceProvider from looprs-core), HX-005 and HX-007 confirmed done.
-      Three PRs merged: #12 (plugin executor port), #13 (unify LLMProvider), #14 (agent
-      port wiring).
-    commits: []
-    session: 3
+- date: 20260429:160832
+  summary: |
+    Hexagonal refactor Phases 2-4: extracted looprs-cli crate (binary, REPL, runtime);
+    split ports.rs into ports/ directory with SessionStore and UserOutput ports; moved
+    adapters to looprs-core; re-exported types/api/events/observation from looprs-core.
+  commits: []
+  session: 2
+- date: 20260429:132540
+  summary: |
+    Hexagonal refactor Phase 1: extracted looprs-core crate with domain types, ports, and
+    newtype_id!/domain_event! macros. Added ChannelBroker, RetryProvider adapters. Fixed
+    global pre-commit hook.
+  commits: []
+  session: 1
+- date: 2026-06-07
+  summary: |
+    Pruned 4 completed HANDOFF items to log. HX-003: Wire Agent through
+    ports (done 2026-05-07). HX-005: Deduplicate SessionEvent (done
+    2026-05-06). HX-006: Extract LLMProvider to looprs-core (done
+    2026-05-07). HX-007: DRY provider factory (done 2026-05-06).
+  commits: []
+- date: 2026-05-08
+  summary: |
+    Removed looprs-gui binary (freya-based GUI, unused). Restructured as proper virtual
+    workspace: root Cargo.toml is now workspace-only with [workspace.package]; looprs
+    library crate moved from root src/ into crates/looprs/; looprs-cli dep path updated
+    to ../looprs; looprs-core dev-dep duplicate removed. Bumped to v0.3.1.
+  commits: []
+  session: 4
+- date: 2026-05-08
+  summary: session closed
+  commits: []
+- date: 2026-05-08
+  summary: session closed
+  commits: []
+- date: 2026-05-08
+  summary: session closed
+  commits: []
+- date: 2026-05-08
+  summary: session closed
+  commits: []
+- date: 2026-05-08
+  summary: session closed
+  commits: []
+- date: 2026-05-08
+  summary: session closed
+  commits: []
+- date: 2026-05-08
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: session closed
+  commits: []
+- date: 2026-05-07
+  summary: |
+    Completed hexagonal refactor: HX-003 (Agent wired through UserOutput port — UiOutput
+    and NullOutput adapters added, crate::ui removed from agent.rs), HX-006 (LLMProvider
+    unified with InferenceProvider from looprs-core), HX-005 and HX-007 confirmed done.
+    Three PRs merged: #12 (plugin executor port), #13 (unify LLMProvider), #14 (agent
+    port wiring).
+  commits: []
+  session: 3

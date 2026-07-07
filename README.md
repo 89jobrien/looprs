@@ -9,7 +9,7 @@ git clone https://github.com/89jobrien/looprs.git
 cd looprs
 cargo build --release
 ./target/release/looprs
-# or: cargo install --path .
+# or: cargo install --path crates/looprs-cli
 ```
 
 ## Configure
@@ -47,6 +47,7 @@ Persistent config: `.looprs/provider.json`. All env options: `.env.example`.
 | `/edit` | Replace text in files |
 | `/glob` | Find files by name pattern (faster with `fd`) |
 | `/grep` | Search file contents (faster with `rg`) |
+| `/nu` | Execute a Nushell command |
 | `/bash` | Execute shell commands |
 
 Optional speedups (auto-detected, falls back to pure Rust):
@@ -60,8 +61,8 @@ cargo install ripgrep fd-find
 Reference files in prompts with `@filename` syntax — contents are injected into the conversation.
 
 ```
-Refactor @src/main.rs for better error handling
-Compare @file1.rs and @file2.rs
+Refactor @crates/looprs-cli/src/main.rs for better error handling
+Compare @crates/looprs/src/agent.rs and @crates/looprs/src/api.rs
 ```
 
 ## Extensibility
@@ -92,7 +93,7 @@ action:
   inject_output: true
 ```
 
-Action types: `prompt` (send to LLM), `shell` (run command), `message` (print to console).
+Action types: `prompt` (send to LLM), `shell` (run command with Nushell), `message` (print to console).
 
 Built-in repo commands: `/help`, `/refactor`, `/test`, `/lint`.
 
@@ -128,32 +129,8 @@ actions:
 
 Events: `SessionStart`, `UserPromptSubmit`, `InferenceComplete`, `PreToolUse`, `PostToolUse`, `OnError`, `OnWarning`, `SessionEnd`.
 
-Action types: `command` (shell, optional `inject_as` and `requires_approval`), `message`, `conditional`.
+Action types: `command` (Nushell command, optional `inject_as` and `requires_approval`), `message`, `conditional`.
 
-## Desktop UI
-
-The desktop UI lives in `crates/looprs-desktop`. Built with Freya.
-
-```bash
-cargo run -p looprs-desktop
-# or with mise:
-mise run ui
-```
-
-### Generative UI (BAML)
-
-The desktop includes a live Generative UI screen backed by a BAML client:
-
-- Schema: `crates/looprs-desktop-baml-client/baml_src/generative_ui.baml`
-- Generators: `crates/looprs-desktop-baml-client/baml_src/generators.baml`
-
-To regenerate the client after editing `.baml` files:
-
-```bash
-baml-cli generate --from crates/looprs-desktop-baml-client/baml_src
-```
-
-Requires `OPENAI_API_KEY`.
 
 ## Observability
 
@@ -165,7 +142,7 @@ looprs writes structured JSONL traces and events:
 Redirect to an external path:
 
 ```bash
-export LOOPRS_OBSERVABILITY_DIR="/Volumes/YourSSD/looprs-observability"
+export LOOPRS_OBSERVABILITY_DIR="$HOME/.local/share/looprs/observability"
 ```
 
 Live LLM tests are gated by:
@@ -177,34 +154,30 @@ cargo test --all-targets -- --ignored
 
 ## Architecture
 
-### Core Modules
+### Workspace
 
-- `src/bin/looprs/` — CLI entry point (`main.rs`, `cli.rs`, `repl.rs`, `args.rs`)
-- `src/agent.rs` — Core orchestrator (messages, tools, events, hooks, observations)
-- `src/app_config.rs` — Centralized configuration
-- `src/providers/` — LLM backends: Anthropic, OpenAI, local (Ollama), SDK variants
-- `src/tools/` — Built-in tools (read, write, edit, glob, grep, bash)
-- `src/events.rs` + `src/hooks/` — Event system and hook execution
-- `src/commands.rs` + `.looprs/commands/` — Command registry
-- `src/skills/` — Skill loader and parser
-- `src/context.rs` — SessionContext (repo state collected at startup)
-- `src/pipeline/` — Context compaction and logging pipeline
-- `src/plugins/` — Plugin registry and runner
-- `crates/looprs-desktop/` — Freya-based desktop UI
-- `crates/looprs-desktop-baml-client/` — Generated BAML client for generative UI
+The repository is a Cargo workspace:
+
+- `crates/looprs-core/` — core API, types, ports, events, and lightweight adapters
+- `crates/looprs/` — agent runtime, providers, tools, hooks, skills, plugins, configuration, and observability
+- `crates/looprs-cli/` — `looprs` binary, CLI argument parsing, REPL, and runtime facade
+- `xtask/` — local automation shim that delegates to `taskit`
+- `tests/` — workspace integration tests
+- `fuzz/` — fuzz targets, excluded from the default workspace
 
 See [`docs/ownership-model.md`](./docs/ownership-model.md) for canonical ownership boundaries.
 
 ## Dev
 
 ```bash
-make build      # build release binary
-make test       # run tests
-make lint       # run clippy
-make install    # install locally
+cargo build --workspace
+cargo nextest run --workspace
+cargo nextest run -p looprs-cli --bin looprs
+cargo clippy --all-targets --all-features -- -D warnings
+cargo xtask pre-push
 ```
 
-Patch versions increment automatically on push via pre-push hook (bumps `Cargo.toml`, updates `CHANGELOG.md`).
+The `Makefile` is still available for common shortcuts such as `make build`, `make lint`, and `make all`. Use `cargo xtask pre-push` before pushing; the installed `.githooks/pre-push` delegates to the same command and includes the `looprs-cli` binary test suite that library-only shortcuts do not cover.
 
 ## License
 

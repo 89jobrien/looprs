@@ -1,7 +1,5 @@
 //! ModelBadge — reads a YAML modelcard and surfaces model id, training
 //! status, and mean reward score.
-//!
-//! Cannibalized from `looprs-desktop/src/services/model_badge.rs`.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -140,7 +138,7 @@ mod tests {
                 window.iter().sum::<f32>() / window.len() as f32
             };
             prop_assert!(mean.is_finite(), "mean reward was not finite: {}", mean);
-            prop_assert!(mean >= 0.0 && mean <= 1.0, "mean out of range: {}", mean);
+            prop_assert!((0.0..=1.0).contains(&mean), "mean out of range: {}", mean);
         }
 
         #[test]

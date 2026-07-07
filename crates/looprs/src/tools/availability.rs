@@ -14,33 +14,13 @@ pub fn is_fd_available() -> bool {
     Fd::system().probe_success(vec![OsString::from("--version")])
 }
 
-#[allow(dead_code)]
-trait BoolHelper {
-    fn is_bool(&self) -> bool;
-}
-
-impl BoolHelper for bool {
-    fn is_bool(&self) -> bool {
-        true
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn availability_check_returns_bool() {
-        // These tests verify the functions don't panic
-        // Actual availability depends on system configuration
+    fn availability_checks_do_not_panic() {
         let _rg = is_rg_available();
         let _fd = is_fd_available();
-    }
-
-    #[test]
-    fn availability_checks_are_safe() {
-        // Ensure these don't crash even with missing binaries
-        assert!(is_rg_available().is_bool() || !is_rg_available().is_bool());
-        assert!(is_fd_available().is_bool() || !is_fd_available().is_bool());
     }
 }

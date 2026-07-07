@@ -66,7 +66,17 @@ async fn main() -> Result<()> {
 
     ui::init_logging();
 
-    let bootstrap = runtime::bootstrap_runtime(cli_args.model.clone().map(ModelId::new)).await?;
+    let bootstrap = match runtime::bootstrap_runtime(cli_args.model.clone().map(ModelId::new)).await
+    {
+        Ok(bootstrap) => bootstrap,
+        Err(err) => {
+            if let Some(report) = runtime::provider_bootstrap_report(&err) {
+                eprintln!("{report:?}");
+                std::process::exit(1);
+            }
+            return Err(err);
+        }
+    };
     let app_config = bootstrap.app_config;
     let provider_name = bootstrap.provider_name;
     let model = bootstrap.model;
@@ -76,7 +86,7 @@ async fn main() -> Result<()> {
     // Load hooks from both user (~/.looprs/hooks/) and repo (.looprs/hooks/) directories
     // Repo hooks override user hooks with same name (unless --no-hooks)
     if !cli_args.no_hooks {
-        let user_hooks_dir = env::home_dir()
+        let user_hooks_dir = dirs::home_dir()
             .unwrap_or_default()
             .join(".looprs")
             .join("hooks");
@@ -99,7 +109,7 @@ async fn main() -> Result<()> {
     }
 
     // Load custom commands from both user and repo directories
-    let user_commands_dir = env::home_dir()
+    let user_commands_dir = dirs::home_dir()
         .unwrap_or_default()
         .join(".looprs")
         .join("commands");
@@ -130,7 +140,7 @@ async fn main() -> Result<()> {
     }
 
     // Load skills from both user and repo directories
-    let user_skills_dir = env::home_dir()
+    let user_skills_dir = dirs::home_dir()
         .unwrap_or_default()
         .join(".looprs")
         .join("skills");
@@ -155,9 +165,9 @@ async fn main() -> Result<()> {
     if rules.count() > 0 {
         println!("📋 Loaded {} project rule(s)", rules.count());
     }
-    agent.rules = rules;
+    agent = agent.with_rules(rules);
 
-    let user_agents_dir = env::home_dir()
+    let user_agents_dir = dirs::home_dir()
         .unwrap_or_default()
         .join(".looprs")
         .join("agents");
@@ -295,7 +305,7 @@ async fn run_interactive(
     // Fire SessionStart event (this will also execute hooks with approval gates)
     let session_context_str = context.format_for_prompt().unwrap_or_default();
     let event_ctx = EventContext::new().with_session_context(session_context_str);
-    agent.events.fire(Event::SessionStart, &event_ctx);
+    agent.fire_event(Event::SessionStart, &event_ctx);
 
     // Create approval callback for interactive prompts
     let approval_callback: ApprovalCallback = Box::new(console_approval_prompt);
@@ -501,7 +511,7 @@ async fn run_interactive(
 
     // Fire SessionEnd event and save observations
     let event_ctx = EventContext::new();
-    agent.events.fire(Event::SessionEnd, &event_ctx);
+    agent.fire_event(Event::SessionEnd, &event_ctx);
     let _ = agent.execute_hooks_for_event(&Event::SessionEnd, &event_ctx);
 
     Ok(())
@@ -900,7 +910,6 @@ async fn execute_command(
     agent_registry: &AgentRegistry,
 ) -> Result<()> {
     use looprs::CommandAction;
-    use std::process::Command as ProcessCommand;
 
     match &cmd.action {
         CommandAction::Prompt { template, .. } => {
@@ -920,7 +929,7 @@ async fn execute_command(
             inject_output,
         } => {
             ui::running_command(command);
-            let output = ProcessCommand::new("sh").arg("-c").arg(command).output()?;
+            let output = looprs::shell::run_nu_command(command)?;
 
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);

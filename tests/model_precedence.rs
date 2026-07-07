@@ -76,106 +76,85 @@ fn write_provider_json(dir: &TempDir, json: &str) {
     std::fs::write(looprs_dir.join("provider.json"), json).unwrap();
 }
 
-#[tokio::test]
-async fn provider_json_model_used_when_no_env_or_override() {
+const OPENAI_PROVIDER_JSON: &str = r#"{
+  "provider": "openai",
+  "openai": { "model": "gpt-5-mini" }
+}"#;
+
+/// Set up a test scenario: env vars, optional provider.json, optional overrides,
+/// then assert provider name and model.
+async fn assert_model_precedence(
+    env_vars: &[(&str, &str)],
+    provider_json: Option<&str>,
+    overrides: ProviderOverrides,
+    expected_provider: &str,
+    expected_model: &str,
+) {
     let _guard = EnvDirGuard::new();
     // SAFETY: env mutation is guarded by TEST_LOCK.
     unsafe {
-        std::env::set_var("OPENAI_API_KEY", "test");
+        for (k, v) in env_vars {
+            std::env::set_var(k, v);
+        }
     }
 
     let tmp = TempDir::new().unwrap();
-    write_provider_json(
-        &tmp,
-        r#"{
-  "provider": "openai",
-  "openai": { "model": "gpt-5-mini" }
-}"#,
-    );
-
+    if let Some(json) = provider_json {
+        write_provider_json(&tmp, json);
+    }
     std::env::set_current_dir(tmp.path()).unwrap();
 
-    let provider = create_provider_with_overrides(ProviderOverrides::default())
-        .await
-        .unwrap();
+    let provider = create_provider_with_overrides(overrides).await.unwrap();
+    assert_eq!(provider.name(), expected_provider);
+    assert_eq!(provider.model().as_str(), expected_model);
+}
 
-    assert_eq!(provider.name(), "openai");
-    assert_eq!(provider.model().as_str(), "gpt-5-mini");
+#[tokio::test]
+async fn provider_json_model_used_when_no_env_or_override() {
+    assert_model_precedence(
+        &[("OPENAI_API_KEY", "test")],
+        Some(OPENAI_PROVIDER_JSON),
+        ProviderOverrides::default(),
+        "openai",
+        "gpt-5-mini",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn env_model_overrides_provider_json() {
-    let _guard = EnvDirGuard::new();
-    // SAFETY: env mutation is guarded by TEST_LOCK.
-    unsafe {
-        std::env::set_var("OPENAI_API_KEY", "test");
-        std::env::set_var("MODEL", "gpt-4o-mini");
-    }
-
-    let tmp = TempDir::new().unwrap();
-    write_provider_json(
-        &tmp,
-        r#"{
-  "provider": "openai",
-  "openai": { "model": "gpt-5-mini" }
-}"#,
-    );
-    std::env::set_current_dir(tmp.path()).unwrap();
-
-    let provider = create_provider_with_overrides(ProviderOverrides::default())
-        .await
-        .unwrap();
-
-    assert_eq!(provider.name(), "openai");
-    assert_eq!(provider.model().as_str(), "gpt-4o-mini");
+    assert_model_precedence(
+        &[("OPENAI_API_KEY", "test"), ("MODEL", "gpt-4o-mini")],
+        Some(OPENAI_PROVIDER_JSON),
+        ProviderOverrides::default(),
+        "openai",
+        "gpt-4o-mini",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn overrides_model_overrides_env_and_provider_json() {
-    let _guard = EnvDirGuard::new();
-    // SAFETY: env mutation is guarded by TEST_LOCK.
-    unsafe {
-        std::env::set_var("OPENAI_API_KEY", "test");
-        std::env::set_var("MODEL", "gpt-4o-mini");
-    }
-
-    let tmp = TempDir::new().unwrap();
-    write_provider_json(
-        &tmp,
-        r#"{
-  "provider": "openai",
-  "openai": { "model": "gpt-5-mini" }
-}"#,
-    );
-    std::env::set_current_dir(tmp.path()).unwrap();
-
-    let provider = create_provider_with_overrides(ProviderOverrides {
-        model: Some(ModelId::new("gpt-5-mini-override")),
-    })
-    .await
-    .unwrap();
-
-    assert_eq!(provider.name(), "openai");
-    assert_eq!(provider.model().as_str(), "gpt-5-mini-override");
+    assert_model_precedence(
+        &[("OPENAI_API_KEY", "test"), ("MODEL", "gpt-4o-mini")],
+        Some(OPENAI_PROVIDER_JSON),
+        ProviderOverrides {
+            model: Some(ModelId::new("gpt-5-mini-override")),
+        },
+        "openai",
+        "gpt-5-mini-override",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn openai_default_model_is_gpt_5_mini() {
-    let _guard = EnvDirGuard::new();
-    // SAFETY: env mutation is guarded by TEST_LOCK.
-    unsafe {
-        std::env::set_var("OPENAI_API_KEY", "test");
-        std::env::set_var("PROVIDER", "openai");
-    }
-
-    // No provider.json and no MODEL env should fall back to provider default.
-    let tmp = TempDir::new().unwrap();
-    std::env::set_current_dir(tmp.path()).unwrap();
-
-    let provider = create_provider_with_overrides(ProviderOverrides::default())
-        .await
-        .unwrap();
-
-    assert_eq!(provider.name(), "openai");
-    assert_eq!(provider.model().as_str(), "gpt-5-mini");
+    assert_model_precedence(
+        &[("OPENAI_API_KEY", "test"), ("PROVIDER", "openai")],
+        None,
+        ProviderOverrides::default(),
+        "openai",
+        "gpt-5-mini",
+    )
+    .await;
 }

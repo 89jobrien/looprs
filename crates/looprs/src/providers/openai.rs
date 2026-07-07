@@ -205,7 +205,6 @@ impl LLMProvider for OpenAIProvider {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn test_is_reasoning_model() {

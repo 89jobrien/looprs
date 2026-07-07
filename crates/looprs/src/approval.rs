@@ -101,15 +101,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_console_prompt_exists() {
-        // This test just verifies the function compiles and exists
-        // Real testing would require mocking stdin
-        let _fn = console_approval_prompt;
+    fn console_approval_prompt_is_callable() {
+        let f = console_approval_prompt as fn(&str) -> bool;
+        assert!(std::mem::size_of_val(&f) > 0);
     }
 
     #[test]
-    fn prompt_functions_exist() {
-        let _p = console_prompt;
-        let _s = console_secret_prompt;
+    fn console_prompt_and_console_secret_prompt_are_callable() {
+        let p = console_prompt as fn(&str) -> Option<String>;
+        let s = console_secret_prompt as fn(&str) -> Option<String>;
+        assert!(std::mem::size_of_val(&p) > 0);
+        assert!(std::mem::size_of_val(&s) > 0);
     }
 }

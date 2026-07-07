@@ -111,7 +111,7 @@ mod tests {
     }
 
     #[test]
-    fn content_block_serialization_roundtrip() {
+    fn content_block_serde_roundtrip() {
         let block = ContentBlock::Text {
             text: "Hello".to_string(),
         };

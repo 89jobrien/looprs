@@ -8,6 +8,11 @@ thoughts/
 docs/
 
 .env
+.pytest_cache/
+.ruff_cache/
+.venv/
+.taskit-cache/
+.xtask-cache/
 .looprs/provider.json
 .looprs/state.json
 .looprs/traces/
@@ -44,7 +49,6 @@ target/llvm-cov/
 fuzz/corpus/
 fuzz/artifacts/
 
-#mockstation/
 
 # vendored crates
 third_party/**/target/

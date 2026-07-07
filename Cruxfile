@@ -1,0 +1,18 @@
+# Cruxfile for looprs
+name: looprs-ci
+steps:
+  - name: self-check
+    run: taskit self-check
+    gate: true
+  - name: fmt --check
+    run: taskit fmt --check
+  - name: lint
+    run: taskit lint
+  - name: compile-tests
+    run: taskit compile-tests
+  - name: test
+    run: taskit test
+  - name: check-deps
+    run: taskit check-deps
+  - name: check-protocol-drift
+    run: taskit check-protocol-drift

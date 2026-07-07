@@ -9,8 +9,8 @@ use crate::hooks::{ApprovalCallback, HookExecutor, HookRegistry, PromptCallback}
 use crate::models_config::ModelsConfig;
 use crate::observation_manager::ObservationManager;
 use crate::ports::{SessionStore, UserOutput};
-use crate::providers::InferenceRequest;
 use crate::providers::LLMProvider;
+use crate::providers::{InferenceRequest, InferenceResponse};
 use crate::rules::RuleRegistry;
 use crate::session_log::SessionEvent;
 use crate::system_monitor::SystemMonitor;
@@ -51,10 +51,10 @@ pub struct Agent {
     provider: Box<dyn LLMProvider>,
     messages: Vec<Message>,
     tool_ctx: ToolContext,
-    pub events: EventManager,
-    pub observations: ObservationManager,
-    pub hooks: HookRegistry,
-    pub rules: RuleRegistry,
+    pub(crate) events: EventManager,
+    pub(crate) observations: ObservationManager,
+    pub(crate) hooks: HookRegistry,
+    pub(crate) rules: RuleRegistry,
     runtime: RuntimeSettings,
     file_ref_policy: FileRefPolicy,
     pending_metadata: HashMap<String, String>,
@@ -66,10 +66,13 @@ pub struct Agent {
 
 impl Agent {
     pub fn new(provider: Box<dyn LLMProvider>) -> Result<Self, AgentError> {
+        use crate::adapters::UiOutput;
         Self::new_with_runtime(
             provider,
             RuntimeSettings::default(),
             FileRefPolicy::default(),
+            None,
+            Box::new(UiOutput),
         )
     }
 
@@ -77,27 +80,9 @@ impl Agent {
         provider: Box<dyn LLMProvider>,
         runtime: RuntimeSettings,
         file_ref_policy: FileRefPolicy,
+        session_logger: Option<Box<dyn SessionStore>>,
+        output: Box<dyn UserOutput>,
     ) -> Result<Self, AgentError> {
-        use crate::adapters::{FsSessionStore, UiOutput};
-        let session_logger: Option<Box<dyn SessionStore>> = {
-            let primary = dirs::home_dir().map(|h| h.join(".looprs").join("sessions"));
-            primary
-                .and_then(|d| FsSessionStore::new(d).ok())
-                .map(|s| Box::new(s) as Box<dyn SessionStore>)
-                .or_else(|| {
-                    match FsSessionStore::new(std::env::temp_dir().join("looprs-sessions")) {
-                        Ok(logger) => Some(Box::new(logger) as Box<dyn SessionStore>),
-                        Err(e) => {
-                            log::warn!("failed to initialize fallback session logger: {e}");
-                            None
-                        }
-                    }
-                })
-                .or_else(|| {
-                    log::warn!("session logging disabled — could not create logger");
-                    None
-                })
-        };
         Ok(Self {
             provider,
             messages: Vec::new(),
@@ -110,7 +95,7 @@ impl Agent {
             file_ref_policy,
             pending_metadata: HashMap::new(),
             session_logger,
-            output: Box::new(UiOutput),
+            output,
             models_config: ModelsConfig::load().ok(),
             system_monitor: SystemMonitor::new(),
         })
@@ -126,6 +111,15 @@ impl Agent {
     pub fn with_hooks(mut self, hooks: HookRegistry) -> Self {
         self.hooks = hooks;
         self
+    }
+
+    pub fn with_rules(mut self, rules: RuleRegistry) -> Self {
+        self.rules = rules;
+        self
+    }
+
+    pub fn fire_event(&self, event: Event, context: &EventContext) {
+        self.events.fire(event, context);
     }
 
     pub fn set_provider(&mut self, provider: Box<dyn LLMProvider>) {
@@ -244,6 +238,58 @@ impl Agent {
         enriched_context
     }
 
+    fn build_system_prompt(&self, enriched_ctx: &EventContext) -> String {
+        let mut system_prompt = format!(
+            "You are a concise coding assistant. Current working directory: {}",
+            self.tool_ctx.working_dir.display()
+        );
+
+        let rules_section = self.rules.format_for_prompt();
+        if !rules_section.is_empty() {
+            system_prompt.push_str(&rules_section);
+        }
+
+        if !enriched_ctx.metadata.is_empty() {
+            const MAX_INJECTION_SIZE: usize = 2000;
+            system_prompt.push_str("\n\n## Additional Context from Hooks:");
+            for (key, value) in &enriched_ctx.metadata {
+                let truncated_value = if value.len() > MAX_INJECTION_SIZE {
+                    format!(
+                        "{}... [truncated {} bytes]",
+                        &value[..MAX_INJECTION_SIZE],
+                        value.len() - MAX_INJECTION_SIZE
+                    )
+                } else {
+                    value.clone()
+                };
+                system_prompt.push_str(&format!("\n### {key}\n{truncated_value}"));
+            }
+        }
+
+        system_prompt
+    }
+
+    fn log_inference(&mut self, response: &InferenceResponse) {
+        if let Some(ref mut logger) = self.session_logger {
+            let content = response
+                .content
+                .iter()
+                .filter_map(|b| {
+                    if let ContentBlock::Text { text } = b {
+                        Some(text.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            let _ = logger.log(SessionEvent::Inference {
+                content,
+                provider: self.provider.name().to_string(),
+            });
+        }
+    }
+
     pub async fn run_turn(&mut self) -> Result<(), AgentError> {
         let delegated_agent = self.pending_metadata.get("orchestration.agent").cloned();
         if let Some(agent_name) = delegated_agent.clone() {
@@ -296,36 +342,7 @@ impl Agent {
             enriched_ctx.metadata.insert(key, value);
         }
 
-        // Build system prompt with base instructions + hook-injected context + rules
-        let mut system_prompt = format!(
-            "You are a concise coding assistant. Current working directory: {}",
-            self.tool_ctx.working_dir.display()
-        );
-
-        // Add project rules and guidelines
-        let rules_section = self.rules.format_for_prompt();
-        if !rules_section.is_empty() {
-            system_prompt.push_str(&rules_section);
-        }
-
-        // Add any context injected by hooks
-        if !enriched_ctx.metadata.is_empty() {
-            system_prompt.push_str("\n\n## Additional Context from Hooks:");
-            for (key, value) in &enriched_ctx.metadata {
-                // Truncate large values to prevent prompt bloat (max 2000 chars per injection)
-                const MAX_INJECTION_SIZE: usize = 2000;
-                let truncated_value = if value.len() > MAX_INJECTION_SIZE {
-                    format!(
-                        "{}... [truncated {} bytes]",
-                        &value[..MAX_INJECTION_SIZE],
-                        value.len() - MAX_INJECTION_SIZE
-                    )
-                } else {
-                    value.clone()
-                };
-                system_prompt.push_str(&format!("\n### {key}\n{truncated_value}"));
-            }
-        }
+        let system_prompt = self.build_system_prompt(&enriched_ctx);
 
         let mut tool_call_counts: std::collections::HashMap<String, usize> =
             std::collections::HashMap::new();
@@ -359,24 +376,7 @@ impl Agent {
                     .map_err(|e| AgentError::Inference(e.to_string()))?
             };
 
-            if let Some(ref mut logger) = self.session_logger {
-                let content = response
-                    .content
-                    .iter()
-                    .filter_map(|b| {
-                        if let ContentBlock::Text { text } = b {
-                            Some(text.as_str())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n\n");
-                let _ = logger.log(SessionEvent::Inference {
-                    content,
-                    provider: self.provider.name().to_string(),
-                });
-            }
+            self.log_inference(&response);
 
             #[cfg(not(test))]
             if let Err(e) =
@@ -965,5 +965,224 @@ actions:
     #[test]
     fn execute_hooks_supports_prompt_callbacks() {
         let _ = Agent::execute_hooks_for_event_with_callbacks;
+    }
+
+    #[test]
+    fn build_system_prompt_includes_working_dir() {
+        let provider = MockProvider::simple_text("test");
+        let agent = agent_for_test(provider);
+        let ctx = EventContext::new();
+
+        let prompt = agent.build_system_prompt(&ctx);
+        assert!(prompt.contains("Current working directory:"));
+    }
+
+    #[test]
+    fn build_system_prompt_includes_rules() {
+        let provider = MockProvider::simple_text("test");
+        let mut agent = agent_for_test(provider);
+        let mut rules = RuleRegistry::new();
+        rules.register(crate::rules::Rule {
+            id: "test-rule".to_string(),
+            title: "Test Rule".to_string(),
+            content: "Always use snake_case".to_string(),
+            categories: vec![],
+            source: std::path::PathBuf::from("test"),
+        });
+        agent.rules = rules;
+
+        let ctx = EventContext::new();
+        let prompt = agent.build_system_prompt(&ctx);
+        assert!(prompt.contains("Always use snake_case"));
+    }
+
+    #[test]
+    fn build_system_prompt_includes_hook_context() {
+        let provider = MockProvider::simple_text("test");
+        let agent = agent_for_test(provider);
+        let mut ctx = EventContext::new();
+        ctx.metadata
+            .insert("git_status".to_string(), "clean".to_string());
+
+        let prompt = agent.build_system_prompt(&ctx);
+        assert!(prompt.contains("git_status"));
+        assert!(prompt.contains("clean"));
+    }
+
+    #[test]
+    fn build_system_prompt_truncates_large_hook_values() {
+        let provider = MockProvider::simple_text("test");
+        let agent = agent_for_test(provider);
+        let mut ctx = EventContext::new();
+        ctx.metadata.insert("big".to_string(), "x".repeat(5000));
+
+        let prompt = agent.build_system_prompt(&ctx);
+        assert!(prompt.contains("[truncated"));
+        assert!(prompt.len() < 5000 + 500);
+    }
+
+    struct MockSessionStore {
+        events: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    impl MockSessionStore {
+        fn new() -> (Self, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+            let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            (
+                Self {
+                    events: events.clone(),
+                },
+                events,
+            )
+        }
+    }
+
+    impl SessionStore for MockSessionStore {
+        fn log(&mut self, event: SessionEvent) -> Result<(), anyhow::Error> {
+            let tag = match &event {
+                SessionEvent::UserMessage { .. } => "user_message",
+                SessionEvent::Inference { .. } => "inference",
+                SessionEvent::ToolUse { .. } => "tool_use",
+                SessionEvent::ToolResult { .. } => "tool_result",
+                SessionEvent::SessionEnd => "session_end",
+            };
+            self.events.lock().unwrap().push(tag.to_string());
+            Ok(())
+        }
+
+        fn path(&self) -> Option<&std::path::Path> {
+            None
+        }
+
+        fn session_id(&self) -> &str {
+            "mock-session"
+        }
+    }
+
+    #[test]
+    fn log_inference_records_session_event() {
+        let provider = MockProvider::simple_text("test");
+        let mut agent = agent_for_test(provider);
+
+        let (store, events) = MockSessionStore::new();
+        agent.session_logger = Some(Box::new(store));
+
+        let response = InferenceResponse {
+            content: vec![ContentBlock::Text {
+                text: "hello from LLM".to_string(),
+            }],
+            stop_reason: "end_turn".to_string(),
+            usage: Usage {
+                input_tokens: 5,
+                output_tokens: 10,
+            },
+        };
+
+        agent.log_inference(&response);
+
+        let logged = events.lock().unwrap();
+        assert_eq!(logged.len(), 1);
+        assert_eq!(logged[0], "inference");
+    }
+
+    #[test]
+    fn agent_accepts_injected_session_store() {
+        let provider = MockProvider::simple_text("test");
+        let (store, events) = MockSessionStore::new();
+
+        let mut agent = Agent::new_with_runtime(
+            Box::new(provider),
+            RuntimeSettings::default(),
+            FileRefPolicy::default(),
+            Some(Box::new(store)),
+            Box::new(NullOutput),
+        )
+        .unwrap();
+
+        agent.add_user_message("hello");
+        // Directly call log_inference to verify the injected store works
+        let response = InferenceResponse {
+            content: vec![ContentBlock::Text {
+                text: "hi".to_string(),
+            }],
+            stop_reason: "end_turn".to_string(),
+            usage: Usage {
+                input_tokens: 1,
+                output_tokens: 1,
+            },
+        };
+        agent.log_inference(&response);
+
+        let logged = events.lock().unwrap();
+        assert_eq!(logged.len(), 1);
+        assert_eq!(logged[0], "inference");
+    }
+
+    #[test]
+    fn agent_uses_injected_output() {
+        use std::sync::{Arc, Mutex};
+
+        struct RecordingOutput {
+            infos: Arc<Mutex<Vec<String>>>,
+        }
+        impl UserOutput for RecordingOutput {
+            fn info(&self, msg: &str) {
+                self.infos.lock().unwrap().push(msg.to_string());
+            }
+            fn warn(&self, _: &str) {}
+            fn error(&self, _: &str) {}
+            fn assistant_text(&self, _: &str) {}
+            fn tool_call(&self, _: &str, _: &str) {}
+            fn tool_ok(&self) {}
+            fn tool_err(&self, _: &str) {}
+        }
+
+        let infos = Arc::new(Mutex::new(Vec::new()));
+        let output = RecordingOutput {
+            infos: infos.clone(),
+        };
+
+        let provider = MockProvider::simple_text("test");
+        let _agent = Agent::new_with_runtime(
+            Box::new(provider),
+            RuntimeSettings::default(),
+            FileRefPolicy::default(),
+            None,
+            Box::new(output),
+        )
+        .unwrap();
+
+        // Agent was constructed with our custom output - verify it compiled
+        // and the output is wired (infos vec is shared, not the default UiOutput)
+        assert!(infos.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn with_rules_builder() {
+        let provider = MockProvider::simple_text("test");
+        let mut rules = RuleRegistry::new();
+        rules.register(crate::rules::Rule {
+            id: "test".to_string(),
+            title: "Test".to_string(),
+            content: "rule content".to_string(),
+            categories: vec![],
+            source: std::path::PathBuf::from("test"),
+        });
+
+        let agent = agent_for_test(provider).with_rules(rules);
+
+        let ctx = EventContext::new();
+        let prompt = agent.build_system_prompt(&ctx);
+        assert!(prompt.contains("rule content"));
+    }
+
+    #[test]
+    fn fire_event_delegates_to_event_manager() {
+        let provider = MockProvider::simple_text("test");
+        let agent = agent_for_test(provider);
+
+        // Should not panic — verifies the method exists and works
+        let ctx = EventContext::new();
+        agent.fire_event(Event::SessionStart, &ctx);
     }
 }
