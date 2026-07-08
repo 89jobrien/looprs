@@ -7,18 +7,4 @@ description: Re-run the last user prompt against the outsource tier provider
 action:
   type: shell
   command: |
-    python3 -c "
-import tomllib, pathlib, sys
-path = pathlib.Path.home() / '.looprs' / 'models.toml'
-try:
-    with open(path, 'rb') as f:
-        cfg = tomllib.load(f)
-    tier = cfg.get('tiers', {}).get('outsource', {})
-    provider = tier.get('provider', 'unknown')
-    model = tier.get('model', 'unknown')
-    print(f'Routing to outsource provider: {provider} / {model}')
-    print('Note: this interaction will NOT be fed to magi training.')
-except Exception as e:
-    print(f'Error reading models.toml: {e}', file=sys.stderr)
-    sys.exit(1)
-"
+    python3 -c 'import tomllib,pathlib,sys; p=pathlib.Path.home()/".looprs"/"models.toml"; c=tomllib.load(open(p,"rb")); t=c.get("tiers",{}).get("outsource",{}); print("Routing to outsource provider:",t.get("provider","unknown"),"/",t.get("model","unknown")); print("Note: this interaction will NOT be fed to magi training.")'
