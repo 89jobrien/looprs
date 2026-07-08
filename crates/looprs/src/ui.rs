@@ -80,6 +80,42 @@ pub fn error_full(msg: impl AsRef<str>) {
     eprintln!("{}", sanitize::sanitize_for_console(msg.as_ref()));
 }
 
+/// Returns a compact statusline string suitable for use as a rustyline prompt.
+///
+/// Format: `provider/model | fs_mode | basename ❯ `
+pub fn statusline_prompt(
+    provider: &str,
+    model: &str,
+    fs_mode: &str,
+    cwd_basename: &str,
+    turn: usize,
+) -> String {
+    format!(
+        "{}/{} {} {} {} {} [{}] {} ",
+        provider.cyan().bold(),
+        model.cyan(),
+        "│".dimmed(),
+        fs_mode.yellow(),
+        "│".dimmed(),
+        cwd_basename.dimmed(),
+        turn.to_string().dimmed(),
+        "❯".purple().bold(),
+    )
+}
+
+/// Returns a compact context block to prepend to outgoing user messages.
+pub fn statusline_context(
+    provider: &str,
+    model: &str,
+    fs_mode: &str,
+    cwd: &str,
+    turn: usize,
+) -> String {
+    format!(
+        "<session_context provider=\"{provider}\" model=\"{model}\" fs_mode=\"{fs_mode}\" cwd=\"{cwd}\" turn=\"{turn}\" />\n"
+    )
+}
+
 pub fn header(provider: &str, model: &str, cwd: &str) {
     // provider/model/cwd are not secrets typically, but treat as untrusted strings.
     let p = sanitize::sanitize_preview_for_console(provider);

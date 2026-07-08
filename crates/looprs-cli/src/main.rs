@@ -343,8 +343,21 @@ async fn run_interactive(
 
     ui::info("Commands: /q (quit), /c (clear history), :set (settings)");
 
+    let mut turn_count: usize = 0;
+
     loop {
-        let readline = rl.readline(&format!("{} ", "❯".purple().bold()));
+        let cwd_basename = env::current_dir()
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .unwrap_or_default();
+        let prompt = ui::statusline_prompt(
+            &provider_name,
+            &model,
+            agent.fs_mode().as_str(),
+            &cwd_basename,
+            turn_count,
+        );
+        let readline = rl.readline(&prompt);
 
         match readline {
             Ok(line) => {
@@ -477,6 +490,19 @@ async fn run_interactive(
                             msg
                         };
 
+                        // Inject session state so the model has current context on every turn.
+                        let cwd_str = env::current_dir()
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_default();
+                        let ctx_prefix = ui::statusline_context(
+                            &provider_name,
+                            &model,
+                            agent.fs_mode().as_str(),
+                            &cwd_str,
+                            turn_count,
+                        );
+                        let final_message = format!("{ctx_prefix}{final_message}");
+
                         let (prepared_message, metadata, selected_agent) =
                             prepare_user_prompt(&final_message, &app_config, &agent_registry);
                         if !metadata.is_empty() {
@@ -490,6 +516,8 @@ async fn run_interactive(
 
                         if let Err(e) = agent.run_turn().await {
                             ui::error(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));
+                        } else {
+                            turn_count += 1;
                         }
                     }
                 }
