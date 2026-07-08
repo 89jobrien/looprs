@@ -67,18 +67,29 @@ Compare @crates/looprs/src/agent.rs and @crates/looprs/src/api.rs
 
 ## Extensibility
 
-The `.looprs/` directory defines agent configuration. All extension points support dual-source loading: user-level (`~/.looprs/`) and repo-level (`.looprs/`), with repo taking precedence.
+The `.looprs/` directory defines repo-local agent configuration. All extension points support dual-source loading: user-level (`~/.looprs/`) and repo-level (`.looprs/`), with repo taking precedence.
 
 ```
 .looprs/
-├── provider.json          # Provider settings
-├── config.json            # Global config
+├── provider.json          # Provider/model settings
+├── config.json            # Runtime defaults, file refs, pipeline, agents, paths
 ├── commands/              # Custom slash commands (/)
 ├── hooks/                 # Event-driven hooks (YAML)
 ├── skills/                # Skills with progressive disclosure ($)
 ├── agents/                # Agent role definitions (YAML)
 └── rules/                 # Constraints and guidelines (Markdown)
 ```
+
+`config.json` is loaded into `AppConfig` and supports:
+
+- `defaults`: runtime limits such as context tokens, temperature, and timeout.
+- `file_references`: allowed `@file` reference extensions and maximum file size.
+- `onboarding`: onboarding state, with `.looprs/state.json` taking precedence at runtime.
+- `pipeline`: optional pipeline checks, compaction settings, and log directory.
+- `agents`: delegation defaults, filesystem mode, parallelism, and orchestration strategy.
+- `paths`: repo-local directories for agents, commands, hooks, rules, and skills.
+
+Provider selection and model settings are separate. Put `provider`, provider-specific `model`, `max_tokens`, and `timeout_secs` in `.looprs/provider.json`.
 
 ### Commands
 
