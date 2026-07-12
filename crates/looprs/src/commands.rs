@@ -31,6 +31,10 @@ pub enum CommandAction {
     },
     #[serde(rename = "message")]
     Message { text: String },
+    /// Switch the active LLM provider/model in-session without restarting.
+    /// Args from the command input are parsed as "provider" or "provider/model-id".
+    #[serde(rename = "switch_provider")]
+    SwitchProvider,
 }
 
 /// Registry of custom commands

@@ -3,6 +3,7 @@ use std::time::Duration;
 
 pub mod anthropic;
 pub mod anthropic_sdk;
+pub mod baml_provider;
 pub mod local;
 pub mod openai;
 pub mod openai_sdk;
@@ -151,10 +152,43 @@ pub async fn create_provider_with_overrides(
 
     // Step 4: Try local Ollama
     if local::LocalProvider::is_available().await {
-        return create_provider_by_name("local", &config_file, overrides).await;
+        return create_provider_by_name("ollama", &config_file, overrides).await;
     }
 
     // Step 5: Error if none found
+    Err(ProviderError::NoProviderConfigured)
+}
+
+/// Create a provider using an already-loaded config (for in-session switching).
+///
+/// Skips disk I/O. Uses the supplied `config` directly. Env vars still take
+/// priority over the config's `provider` field so `PROVIDER=anthropic` wins.
+pub async fn create_provider_from_config(
+    config: &crate::config_file::ProviderConfig,
+    overrides: ProviderOverrides,
+) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    let config_file = Some(config.clone());
+
+    if let Ok(provider_name) = env::var("PROVIDER") {
+        return create_provider_by_name(&provider_name, &config_file, overrides).await;
+    }
+
+    if let Some(provider_name) = &config.provider {
+        return create_provider_by_name(provider_name, &config_file, overrides).await;
+    }
+
+    if env::var("ANTHROPIC_API_KEY").is_ok() {
+        return create_provider_by_name("anthropic", &config_file, overrides).await;
+    }
+
+    if env::var("OPENAI_API_KEY").is_ok() {
+        return create_provider_by_name("openai", &config_file, overrides).await;
+    }
+
+    if local::LocalProvider::is_available().await {
+        return create_provider_by_name("ollama", &config_file, overrides).await;
+    }
+
     Err(ProviderError::NoProviderConfigured)
 }
 
@@ -215,9 +249,15 @@ async fn create_provider_by_name(
                 key, model,
             )?))
         }
-        "local" | "ollama" => {
+        "ollama" | "local" => {
             let model = resolve_model("local", config_file, &overrides);
             Ok(Box::new(local::LocalProvider::new_with_model(model)?))
+        }
+        "baml" => {
+            let model = resolve_model("anthropic", config_file, &overrides);
+            Ok(Box::new(baml_provider::BamlProvider::for_provider(
+                "baml", model,
+            )?))
         }
         other => Err(ProviderError::Config(format!("Unknown provider: {other}"))),
     }

@@ -453,6 +453,9 @@ async fn run_interactive(
                                 &mut agent,
                                 &app_config,
                                 &agent_registry,
+                                &mut provider_config,
+                                &mut provider_name,
+                                &mut model,
                             )
                             .await
                             {
@@ -932,10 +935,13 @@ fn prepare_user_prompt(
 /// Execute a custom command
 async fn execute_command(
     cmd: &Command,
-    _input: &str,
+    input: &str,
     agent: &mut Agent,
     app_config: &AppConfig,
     agent_registry: &AgentRegistry,
+    provider_config: &mut ProviderConfig,
+    provider_name: &mut String,
+    model: &mut String,
 ) -> Result<()> {
     use looprs::CommandAction;
 
@@ -988,6 +994,70 @@ async fn execute_command(
         }
         CommandAction::Message { text } => {
             ui::info(text);
+        }
+        CommandAction::SwitchProvider => {
+            // Extract args: everything after the command name
+            let spec = input
+                .split_whitespace()
+                .skip(1)
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            if spec.is_empty() {
+                // Show current provider/model
+                ui::info(format!("provider: {provider_name}"));
+                ui::info(format!("model:    {model}"));
+                ui::info("Usage: /model <provider>[/<model-id>]");
+                ui::info("  e.g. /model ollama/llama3");
+                ui::info("  e.g. /model anthropic");
+                return Ok(());
+            }
+
+            let mut parts = spec.splitn(2, '/');
+            let new_provider = parts.next().unwrap_or("").trim().to_string();
+            let new_model_id = parts.next().map(|s| s.trim().to_string());
+
+            let valid = [
+                "anthropic",
+                "openai",
+                "ollama",
+                "local",
+                "anthropic-sdk",
+                "openai-sdk",
+                "claude-sdk",
+            ];
+            if !valid.contains(&new_provider.as_str()) {
+                ui::warn(format!(
+                    "Unknown provider {new_provider:?}. Valid: {}",
+                    valid.join(", ")
+                ));
+                return Ok(());
+            }
+
+            provider_config.provider = Some(new_provider.clone());
+            if let Some(ref m) = new_model_id {
+                let settings = provider_settings_mut(provider_config, &new_provider);
+                settings.model = Some(m.clone());
+            }
+
+            match looprs::providers::create_provider_from_config(
+                provider_config,
+                ProviderOverrides { model: None },
+            )
+            .await
+            {
+                Ok(provider) => {
+                    *provider_name = provider.name().to_string();
+                    *model = provider.model().as_str().to_string();
+                    agent.set_provider(provider);
+                    ui::info(format!("Switched to {provider_name}/{model}"));
+                }
+                Err(e) => {
+                    // Roll back config change on failure
+                    provider_config.provider = None;
+                    ui::error(format!("Failed to switch provider: {e}"));
+                }
+            }
         }
     }
 

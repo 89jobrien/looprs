@@ -1,0 +1,6 @@
+name: model
+description: "Show or switch provider/model in-session. Usage: /model [provider[/model-id]]"
+aliases:
+  - m
+action:
+  type: switch_provider

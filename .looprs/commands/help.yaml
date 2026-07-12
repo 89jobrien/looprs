@@ -5,12 +5,18 @@ aliases:
 action:
   type: message
   text: |
-    Available custom commands:
+    Custom commands:
 
-    /refactor   - Refactor code for readability
-    /test       - Run cargo tests
-    /lint       - Run clippy linter
-    /help       - Show this help
+    /model [provider[/model]]  Show or switch provider. e.g. /model openai/gpt-4o
+    /refactor                  Refactor code for readability
+    /test                      Run cargo tests (cargo test --lib)
+    /lint                      Run clippy (--all-targets -D warnings)
+    /reset-model <name>        Set default model in models.toml
+    /model-status              Show magi model version and training status
+    /score-session [n]         Score last N ollama interactions via OpenAI judge
+    /fine-tune                 Flag current session for magi RL training
+    /outsource                 Show outsource tier provider from models.toml
+    /help (/h)                 Show this help
 
     Built-in commands:
     /q, exit, quit    - Exit the session

@@ -4,6 +4,7 @@ pub mod agents;
 mod api;
 pub mod app_config;
 pub mod approval;
+pub mod baml_client;
 pub mod commands;
 mod config;
 mod config_file;

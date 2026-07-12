@@ -206,7 +206,7 @@ impl LLMProvider for LocalProvider {
     }
 
     fn name(&self) -> &str {
-        "local"
+        "ollama"
     }
 
     fn model(&self) -> &ModelId {
