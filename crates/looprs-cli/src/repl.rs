@@ -535,7 +535,7 @@ mod tests {
             query in "[a-z]{0,8}",
             candidate in "[a-z]{0,16}",
         ) {
-            if let Some(_) = fuzzy_score(&query, &candidate) {
+            if fuzzy_score(&query, &candidate).is_some() {
                 let mut pos = 0;
                 let cand: Vec<char> = candidate.chars().collect();
                 for ch in query.chars() {
