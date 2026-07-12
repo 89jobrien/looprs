@@ -399,3 +399,160 @@ fn fuzzy_score(query: &str, candidate: &str) -> Option<i32> {
     }
     Some(score)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    // ── fuzzy_score ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn fuzzy_score_exact_prefix_scores_positive() {
+        let score = fuzzy_score("ref", "refactor");
+        assert!(score.is_some());
+        assert!(score.unwrap() > 0);
+    }
+
+    #[test]
+    fn fuzzy_score_no_match_returns_none() {
+        assert!(fuzzy_score("xyz", "abc").is_none());
+    }
+
+    #[test]
+    fn fuzzy_score_consecutive_chars_beat_sparse() {
+        let consecutive = fuzzy_score("ab", "abc").unwrap();
+        let sparse = fuzzy_score("ab", "axb").unwrap();
+        assert!(
+            consecutive > sparse,
+            "consecutive ({consecutive}) should outscore sparse ({sparse})"
+        );
+    }
+
+    #[test]
+    fn fuzzy_score_empty_query_returns_some() {
+        assert!(fuzzy_score("", "anything").is_some());
+    }
+
+    // ── best_match ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn best_match_returns_closest_prefix() {
+        let items = vec![
+            "/refactor".to_string(),
+            "/test".to_string(),
+            "/lint".to_string(),
+        ];
+        let result = best_match("ref", '/', &items);
+        assert_eq!(result.map(String::as_str), Some("/refactor"));
+    }
+
+    #[test]
+    fn best_match_empty_items_returns_none() {
+        assert!(best_match("ref", '/', &[]).is_none());
+    }
+
+    #[test]
+    fn best_match_empty_query_returns_first() {
+        let items = vec!["/a".to_string(), "/b".to_string()];
+        assert_eq!(best_match("", '/', &items).map(String::as_str), Some("/a"));
+    }
+
+    // ── completion_hint ──────────────────────────────────────────────────────
+
+    #[test]
+    fn completion_hint_empty_line_returns_none() {
+        let items = vec!["/refactor".to_string()];
+        assert!(completion_hint("", 0, '/', &items).is_none());
+    }
+
+    #[test]
+    fn completion_hint_returns_suffix() {
+        let items = vec!["/refactor".to_string()];
+        let hint = completion_hint("/ref", 4, '/', &items);
+        assert_eq!(hint.as_deref(), Some("actor"));
+    }
+
+    #[test]
+    fn completion_hint_exact_match_returns_none() {
+        let items = vec!["/refactor".to_string()];
+        assert!(completion_hint("/refactor", 9, '/', &items).is_none());
+    }
+
+    // ── ReplState ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn repl_state_starts_in_normal_mode() {
+        let state = ReplState::new();
+        assert_eq!(state.mode, ReplMode::Normal);
+        assert!(state.last_completed.is_none());
+    }
+
+    #[test]
+    fn repl_state_reset_clears_mode_and_completion() {
+        let mut state = ReplState::new();
+        state.mode = ReplMode::Slash;
+        state.last_completed = Some("/refactor".to_string());
+        state.reset();
+        assert_eq!(state.mode, ReplMode::Normal);
+        assert!(state.last_completed.is_none());
+    }
+
+    // ── handle_completion_enter ──────────────────────────────────────────────
+
+    #[test]
+    fn handle_completion_enter_inserts_suffix_on_partial_match() {
+        let items = vec!["/refactor".to_string()];
+        let mut state = ReplState::new();
+        let result = handle_completion_enter("/ref", '/', &items, &mut state);
+        assert!(result.is_some());
+        assert_eq!(state.last_completed.as_deref(), Some("/refactor"));
+    }
+
+    #[test]
+    fn handle_completion_enter_accepts_line_on_second_exact_match() {
+        let items = vec!["/refactor".to_string()];
+        let mut state = ReplState::new();
+        state.last_completed = Some("/refactor".to_string());
+        let result = handle_completion_enter("/refactor", '/', &items, &mut state);
+        assert!(matches!(result, Some(rustyline::Cmd::AcceptLine)));
+    }
+
+    #[test]
+    fn handle_completion_enter_non_prefix_returns_none() {
+        let items = vec!["/refactor".to_string()];
+        let mut state = ReplState::new();
+        assert!(handle_completion_enter("hello", '/', &items, &mut state).is_none());
+    }
+
+    // ── property tests ───────────────────────────────────────────────────────
+
+    proptest! {
+        /// If fuzzy_score returns Some, every char of query must appear in candidate
+        /// in order (subsequence invariant).
+        #[test]
+        fn prop_fuzzy_score_some_implies_subsequence(
+            query in "[a-z]{0,8}",
+            candidate in "[a-z]{0,16}",
+        ) {
+            if let Some(_) = fuzzy_score(&query, &candidate) {
+                let mut pos = 0;
+                let cand: Vec<char> = candidate.chars().collect();
+                for ch in query.chars() {
+                    let found = cand[pos..].iter().position(|&c| c == ch);
+                    prop_assert!(
+                        found.is_some(),
+                        "fuzzy_score returned Some but '{ch}' not found after pos {pos} in '{candidate}'"
+                    );
+                    pos += found.unwrap() + 1;
+                }
+            }
+        }
+
+        /// Empty query always matches any candidate.
+        #[test]
+        fn prop_fuzzy_score_empty_query_always_some(candidate in "[a-z]{0,16}") {
+            prop_assert!(fuzzy_score("", &candidate).is_some());
+        }
+    }
+}
