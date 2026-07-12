@@ -33,6 +33,9 @@ jobs:
       - name: Run CI
         run: taskit ci
 
+      - name: Security & license audit
+        run: cargo deny check
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest

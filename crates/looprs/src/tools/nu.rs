@@ -2,6 +2,9 @@ use super::ToolArgs;
 use super::error::ToolError;
 use serde_json::Value;
 
+/// Hard cap on raw bytes collected from a single tool invocation.
+const MAX_OUTPUT_BYTES: usize = 512 * 1024; // 512 KiB
+
 // qual:allow(iosp) reason: "I/O boundary — parses args, runs nushell, returns output"
 pub(super) fn tool_nu(args: &Value) -> Result<String, ToolError> {
     let args = ToolArgs::new(args);
@@ -9,11 +12,15 @@ pub(super) fn tool_nu(args: &Value) -> Result<String, ToolError> {
 
     let output = crate::shell::run_nu_command(cmd)?;
 
-    let mut result = String::from_utf8_lossy(&output.stdout).to_string();
+    let stdout = truncate_bytes(&output.stdout, MAX_OUTPUT_BYTES);
+    let mut result = String::from_utf8_lossy(stdout).to_string();
 
     if !output.stderr.is_empty() {
         result.push_str("\n--- stderr ---\n");
-        result.push_str(&String::from_utf8_lossy(&output.stderr));
+        result.push_str(&String::from_utf8_lossy(truncate_bytes(
+            &output.stderr,
+            MAX_OUTPUT_BYTES,
+        )));
     }
 
     if !output.status.success() {
@@ -28,6 +35,17 @@ pub(super) fn tool_nu(args: &Value) -> Result<String, ToolError> {
     } else {
         result
     })
+}
+
+fn truncate_bytes(data: &[u8], max: usize) -> &[u8] {
+    if data.len() <= max {
+        return data;
+    }
+    let mut end = max;
+    while end > 0 && (data[end] & 0xC0) == 0x80 {
+        end -= 1;
+    }
+    &data[..end]
 }
 
 #[cfg(test)]

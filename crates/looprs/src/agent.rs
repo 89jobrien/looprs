@@ -290,16 +290,41 @@ impl Agent {
         }
     }
 
-    // TODO: implement streaming output — both claudius and async-openai support
-    // token-by-token streaming. The UserOutput port (hex refactor Phase 1) is
-    // the right abstraction: add an `infer_streaming` variant that yields chunks
-    // and drives output.write_chunk() instead of buffering the full response.
+    // TODO(streaming): implement streaming output (idea #5).
+    // Both claudius and async-openai expose a streaming variant:
+    //   anthropic-sdk: client.messages.stream(req) → Stream<MessageStreamEvent>
+    //   async-openai:  client.chat().create_stream(req) → Stream<ChatCompletionChunk>
+    //
+    // Implementation plan:
+    //   1. Add `infer_stream` to `InferenceProvider` returning a
+    //      `Pin<Box<dyn Stream<Item = Result<String, _>> + Send>>`.
+    //   2. Implement it in each provider by mapping SDK stream events to text chunks.
+    //   3. In `run_turn_streaming`, drive the stream, calling
+    //      `self.runtime.output.write_chunk(chunk)` per token (requires hex
+    //      refactor Phase 1 so `runtime.output` holds a `Box<dyn UserOutput>`).
+    //   4. Accumulate chunks into a full `ContentBlock::Text` for tool-use parsing
+    //      and observation capture after the stream ends.
+    //
+    // Blocked by: hex refactor Phase 1 (UserOutput injection into Agent).
     pub async fn run_turn_streaming(&mut self) -> Result<(), AgentError> {
         unimplemented!(
-            "streaming inference — route provider.infer_stream() through UserOutput port"
+            "streaming inference — add infer_stream() to InferenceProvider, \
+             inject UserOutput port (Phase 1), drive write_chunk() per token"
         )
     }
 
+    // TODO(parallel-dispatch): implement parallel agent dispatch (idea #7).
+    // AgentsConfig.max_parallel is loaded but the orchestration strategy is
+    // hardcoded "sequential" here. To support parallel dispatch:
+    //   1. Collect independent sub-tasks from the current turn (tool calls with
+    //      no data dependency on each other).
+    //   2. Spawn up to `self.runtime.config.agents.max_parallel` tasks via
+    //      `tokio::task::JoinSet`, one per sub-agent.
+    //   3. Collect results and merge into a single `InferenceResponse`.
+    //   4. Guard with `agents.orchestration = "parallel"` config flag so
+    //      sequential remains the default.
+    //
+    // Blocked by: stable AgentBuilder and AgentRuntime Clone impls.
     pub async fn run_turn(&mut self) -> Result<(), AgentError> {
         let delegated_agent = self.pending_metadata.get("orchestration.agent").cloned();
         if let Some(agent_name) = delegated_agent.clone() {

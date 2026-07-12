@@ -129,6 +129,17 @@ impl Default for CommandRegistry {
     }
 }
 
+// TODO(snapshot-tests): add snapshot tests for command/hook/skill output (idea #8).
+// `cargo insta` is available. Snapshot the rendered output of each built-in command
+// (help, model-status, score-session, etc.) and each bundled agent's system_prompt
+// so config drift is caught at test time rather than at runtime.
+//
+// Pattern:
+//   use insta::assert_snapshot;
+//   assert_snapshot!("help_command_text", registry.get("help").unwrap().render());
+//
+// Run `cargo insta review` after adding new snapshots to accept the baseline.
+
 #[cfg(test)]
 mod tests {
     use super::*;

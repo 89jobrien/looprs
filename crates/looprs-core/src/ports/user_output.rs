@@ -1,8 +1,9 @@
 //! UserOutput port — abstraction over user-facing terminal/UI output.
 
 // TODO: hex refactor Phase 1 — Agent currently calls ui::* static functions
-// directly. Replace with this port. Add write_chunk(&str) for streaming (idea #2).
-// Wire the terminal adapter in looprs-cli; inject NullOutput in tests.
+// directly. Replace with this port. Wire the terminal adapter in looprs-cli;
+// inject NullOutput in tests.
+
 /// Port: emit structured output to the user.
 ///
 /// Implementations may render to a terminal, a log file, a TUI widget,
@@ -15,4 +16,13 @@ pub trait UserOutput: Send + Sync {
     fn tool_call(&self, tool_name: &str, input_preview: &str);
     fn tool_ok(&self);
     fn tool_err(&self, err_msg: &str);
+
+    /// Emit a single streaming chunk of assistant text.
+    ///
+    /// Called once per token/chunk during streaming inference. The default
+    /// implementation delegates to `assistant_text`, so existing adapters
+    /// remain valid until they opt into incremental rendering.
+    fn write_chunk(&self, chunk: &str) {
+        self.assistant_text(chunk);
+    }
 }

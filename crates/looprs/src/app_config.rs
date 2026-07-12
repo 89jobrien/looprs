@@ -15,6 +15,7 @@ pub struct AppConfig {
     pub pipeline: PipelineConfig,
     pub agents: AgentsConfig,
     pub paths: PathsConfig,
+    pub persistence: PersistenceConfig,
 }
 
 impl AppConfig {
@@ -173,6 +174,28 @@ impl Default for PipelineCompactionConfig {
             top_k: 8,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionStoreBackend {
+    /// Filesystem JSONL per session (default, no setup required).
+    Fs,
+    /// SQLite database at `~/.looprs/sessions.db`.
+    Sqlite,
+}
+
+impl Default for SessionStoreBackend {
+    fn default() -> Self {
+        Self::Fs
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct PersistenceConfig {
+    /// Which session store backend to use.
+    pub session_store: SessionStoreBackend,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

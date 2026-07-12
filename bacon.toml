@@ -3,10 +3,36 @@
 default_job = "check"
 
 [jobs.check]
-command = ["cargo", "check"]
+command = ["cargo", "check", "--workspace"]
 
 [jobs.clippy]
-command = ["cargo", "clippy"]
+command = [
+    "cargo", "clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings",
+]
 
 [jobs.test]
-command = ["cargo", "test"]
+command = ["cargo", "nextest", "run", "--workspace"]
+
+[jobs.test-doc]
+command = ["cargo", "test", "--doc", "--workspace"]
+
+[jobs.proptest]
+command = ["cargo", "nextest", "run", "--workspace", "-E", "test(prop)"]
+
+[jobs.fmt]
+command = ["cargo", "fmt", "--check", "--all"]
+
+[jobs.doc]
+command = ["cargo", "doc", "--workspace", "--no-deps"]
+
+[jobs.udeps]
+command = ["cargo", "udeps", "--workspace"]
+
+[jobs.expand]
+command = ["cargo", "expand"]
+
+[jobs.quick]
+command = ["taskit", "quick"]
+
+[jobs.ci]
+command = ["taskit", "ci"]

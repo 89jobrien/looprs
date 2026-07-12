@@ -41,6 +41,10 @@ impl HookExecutor {
         prompt_fn: Option<&PromptCallback>,
         secret_prompt_fn: Option<&PromptCallback>,
     ) -> anyhow::Result<Vec<HookResult>> {
+        let timeout_secs = AppConfig::load()
+            .ok()
+            .and_then(|c| c.defaults.timeout_seconds);
+
         let mut results = Vec::new();
         let mut local_ctx: HashMap<String, String> = HashMap::new();
 
@@ -60,6 +64,7 @@ impl HookExecutor {
                 prompt_fn,
                 secret_prompt_fn,
                 &mut local_ctx,
+                timeout_secs,
             )? {
                 results.push(HookResult {
                     hook_name: hook.name.clone(),
@@ -82,6 +87,7 @@ impl HookExecutor {
         prompt_fn: Option<&PromptCallback>,
         secret_prompt_fn: Option<&PromptCallback>,
         local_ctx: &mut HashMap<String, String>,
+        timeout_secs: Option<u64>,
     ) -> anyhow::Result<Option<(String, Option<String>)>> {
         match action {
             Action::Command {
@@ -112,7 +118,7 @@ impl HookExecutor {
                     }
                 }
 
-                let output = Self::run_command(command)?;
+                let output = Self::run_command(command, timeout_secs)?;
                 Ok(Some((output, inject_as.clone())))
             }
             Action::Message { text } => {
@@ -133,6 +139,7 @@ impl HookExecutor {
                             prompt_fn,
                             secret_prompt_fn,
                             local_ctx,
+                            timeout_secs,
                         )? {
                             last_result = Some(result);
                         }
@@ -204,10 +211,12 @@ impl HookExecutor {
         }
     }
 
-    /// Run a shell command and capture output
+    /// Run a shell command and capture output, killing the process if it
+    /// exceeds `timeout_secs` seconds.
     // qual:allow(iosp) reason: "I/O boundary — spawns shell process"
-    fn run_command(command_str: &str) -> anyhow::Result<String> {
-        let output = crate::shell::run_nu_command(command_str)?;
+    fn run_command(command_str: &str, timeout_secs: Option<u64>) -> anyhow::Result<String> {
+        let timeout = timeout_secs.map(std::time::Duration::from_secs);
+        let output = crate::shell::run_nu_command_with_timeout(command_str, timeout)?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
 
@@ -326,13 +335,13 @@ mod tests {
 
     #[test]
     fn test_run_command_success() {
-        let output = HookExecutor::run_command("echo hello").unwrap();
+        let output = HookExecutor::run_command("echo hello", None).unwrap();
         assert_eq!(output, "hello");
     }
 
     #[test]
     fn test_run_command_with_pipes() {
-        let output = HookExecutor::run_command("[a b c] | length").unwrap();
+        let output = HookExecutor::run_command("[a b c] | length", None).unwrap();
         let lines: i32 = output.trim().parse().unwrap_or(0);
         assert_eq!(lines, 3);
     }

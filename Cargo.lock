@@ -1600,6 +1600,7 @@ dependencies = [
  "libc",
  "log",
  "looprs-core",
+ "miette",
  "proptest",
  "regex",
  "reqwest 0.12.28",
