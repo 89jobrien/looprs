@@ -52,18 +52,19 @@ bd sync               # Sync with git
 
 ## Architecture Overview
 
-### CLI Application (`src/bin/looprs/`)
+### CLI Application (`crates/looprs-cli/src/`)
 
 The CLI is organized into focused modules:
 
 - **`main.rs`** - Entry point with argument parsing and initialization
 - **`cli.rs`** - CLI configuration and setup logic
 - **`repl.rs`** - Interactive REPL loop handling user input and responses
-- **`args.rs`** - Command-line argument definitions using `clap`
+- **`args.rs`** - Command-line argument definitions
+- **`runtime/`** - Session wiring and runtime facade
 
 **Design principle:** Keep the CLI layer thin - it coordinates between user input and the core library.
 
-### Core Library (`src/`)
+### Core Library (`crates/looprs/src/`)
 
 The main library components:
 
@@ -74,16 +75,19 @@ The main library components:
   - Event firing and hook invocation
   - Observation capture
 
-- **`app_config.rs`** - Centralized configuration management
-  - Application-wide settings
-  - Runtime configuration
-  - Shared state coordination
+- **`app_config.rs`** - User-owned application configuration (`.looprs/config.json`).
+  Loaded read-only; never written during normal operation.
+
+- **`state.rs`** - App-managed state (`.looprs/state.json`).
+  Written by the app for flags like `onboarding.demo_seen`.
 
 - **`providers/`** - LLM provider implementations:
   - `anthropic.rs` - Claude models (native tool support)
+  - `anthropic_sdk.rs` - Claude models via the Anthropic SDK
   - `openai.rs` - GPT models (function calling)
+  - `openai_sdk.rs` - GPT models via the OpenAI SDK
   - `local.rs` - Ollama integration (limited tool support)
-  - `mod.rs` - `LLMProvider` trait and auto-detection
+  - `mod.rs` - `LLMProvider` trait re-export and auto-detection
 
 - **`tools/`** - Built-in capabilities exposed to LLMs:
   - `bash.rs` - Shell command execution
@@ -92,20 +96,27 @@ The main library components:
   - `edit.rs` - Text replacement
   - `grep.rs` - Content search (ripgrep integration)
   - `glob.rs` - File pattern matching (fd integration)
+  - `nu.rs` - Nushell command execution
 
 - **`events.rs` + `hooks/`** - Event-driven system:
-  - 8 lifecycle events (SessionStart, SessionEnd, etc.)
+  - 10 lifecycle events (SessionStart, SessionEnd, UserPromptSubmit, InferenceComplete, PreToolUse, PostToolUse, OnError, OnWarning, DelegationStart, DelegationComplete)
+  - Event definitions live in `crates/looprs-core/src/events.rs`
   - YAML-based hook definitions in `.looprs/hooks/`
-  - Actions: command execution, context injection, conditionals
+  - Actions: `command`, `message`, `conditional`, `confirm`, `prompt`, `secret_prompt`, `set_env`, `set_config`
 
 - **`context.rs`** - Session context collection:
-  - Auto-gathers repo status (jj), open issues (bd), board state (kan)
+  - Auto-gathers repo status (jj) and board state (kan)
   - Injected into system prompts for contextual awareness
 
 - **`observation.rs` + `observation_manager.rs`** - Incremental learning:
   - Captures tool executions across sessions
-  - Stores in bd for continuity
-  - Loaded on SessionStart for agent memory
+
+### Shared Domain (`crates/looprs-core/src/`)
+
+- **`ports/`** - Port trait abstractions (`InferenceProvider`, `MessageBroker`, `SessionStore`, `ObservationStore`, `UserOutput`, `PluginExecutor`)
+- **`events.rs`** - Lifecycle event enum and `EventManager`
+- **`ai_types.rs`** - Shared AI message/content types
+- **`adapters/`** - Portable adapters (`FsSessionStore`, `ChannelBroker`, `NullOutput`, `TerminalOutput`)
 
 ### Extensibility Framework (`.looprs/`)
 
@@ -113,8 +124,9 @@ All customization happens in `.looprs/` without modifying core:
 
 ```
 .looprs/
-├── provider.json     # LLM provider settings
-├── config.json       # Global configuration
+├── provider.json     # LLM provider settings (user-owned)
+├── config.json       # Global configuration (user-owned, app never overwrites)
+├── state.json        # App-managed flags (written by app, e.g. onboarding)
 ├── hooks/            # Event-driven automation (YAML)
 ├── commands/         # Custom slash commands (/)
 ├── skills/           # Progressive disclosure capabilities ($)
@@ -135,7 +147,7 @@ All customization happens in `.looprs/` without modifying core:
 - Tool execution is synchronous but may shell out to async processes
 
 ### Testing
-- Unit tests alongside implementation in `src/`
+- Unit tests alongside implementation in `crates/looprs/src/`
 - Integration tests in `tests/`
 - Run with `make test` or `cargo test --lib`
 
@@ -148,7 +160,7 @@ All customization happens in `.looprs/` without modifying core:
 
 ### Adding a New Tool
 
-1. Create `src/tools/newtool.rs`:
+1. Create `crates/looprs/src/tools/newtool.rs`:
 ```rust
 use anyhow::Result;
 use serde_json::{json, Value};
@@ -159,17 +171,17 @@ pub fn execute(params: Value) -> Result<Value> {
 }
 ```
 
-2. Register in `src/tools/mod.rs`:
+2. Register in `crates/looprs/src/tools/mod.rs`:
 ```rust
 pub mod newtool;
 // Add to tools vector in get_tools()
 ```
 
-3. Add tests in `src/tools/newtool.rs`
+3. Add tests in `crates/looprs/src/tools/newtool.rs`
 
 ### Adding an Event
 
-1. Add variant to `Event` enum in `src/events.rs`
+1. Add variant to the `domain_event!` macro invocation in `crates/looprs-core/src/events.rs`
 2. Fire event in appropriate location:
 ```rust
 self.events.fire(Event::NewEvent, &mut event_ctx);
