@@ -1,8 +1,8 @@
 {
-  "date": "2026-06-29",
+  "date": "2026-07-12",
   "tests": {
-    "total": 331,
-    "passed": 331,
+    "total": 377,
+    "passed": 377,
     "failed": 0,
     "skipped": 0
   },
@@ -10,8 +10,8 @@
     "warnings": 0,
     "errors": 0
   },
-  "todo_fixme": 0,
-  "crates": 3,
+  "todo_fixme": 11,
+  "crates": 4,
   "versions_consistent": true,
-  "version": "0.3.1"
+  "version": "0.4.0"
 }
