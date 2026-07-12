@@ -51,6 +51,7 @@ fuzz/corpus/
 !fuzz/corpus/fuzz_parse_skill/seed_*
 !fuzz/corpus/fuzz_strip_ansi/seed_*
 fuzz/artifacts/
+fuzz/target/
 
 
 # vendored crates
