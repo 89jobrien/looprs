@@ -10,29 +10,26 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  test:
-    name: Test Suite
+  ci:
+    name: CI
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
+      - name: Install taskit
+        run: cargo install taskit
 
-      - name: Run tests
-        run: cargo nextest run --profile ci --all-features
-
-      - name: Run doctests
-        run: cargo test --doc
+      - name: Run CI
+        run: taskit ci
 
   coverage:
-    name: Code Coverage
+    name: Coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +37,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Install taskit
+        run: cargo install taskit
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
@@ -47,7 +47,7 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: Generate coverage
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+        run: taskit coverage
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v4
@@ -55,17 +55,27 @@ jobs:
           files: lcov.info
           fail_ci_if_error: false
 
-  clippy:
-    name: Clippy
+  fuzz:
+    name: Fuzz (30s)
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
+      - uses: dtolnay/rust-toolchain@nightly
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Install taskit
+        run: cargo install taskit
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Fuzz fuzz_parse_skill
+        run: taskit fuzz fuzz_parse_skill --duration 30
+        working-directory: fuzz
+
+      - name: Fuzz fuzz_strip_ansi
+        run: taskit fuzz fuzz_strip_ansi --duration 30
+        working-directory: fuzz

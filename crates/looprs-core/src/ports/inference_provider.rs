@@ -35,6 +35,11 @@ pub struct Usage {
 ///
 /// Implementations decide the backend (Anthropic, OpenAI, local Ollama, etc.).
 #[async_trait::async_trait]
+// TODO: add provider conformance test suite — a shared test matrix exercising
+// every InferenceProvider implementation: correct tool-use round-trip, retry on
+// 429, model name normalisation, timeout propagation. Wire via
+// assert_inference_provider_contract() in test_contracts.rs. Live tests already
+// opt-in via LOOPRS_RUN_LIVE_LLM_TESTS=1.
 pub trait InferenceProvider: Send + Sync {
     /// Run inference with the given request.
     async fn infer(

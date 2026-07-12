@@ -446,6 +446,10 @@ fn enforce_fs_mode(tool: Tool, args: &Value, ctx: &ToolContext) -> Result<(), To
     }
 }
 
+// TODO: route tool dispatch through PluginExecutor port (hex refactor Phase 2)
+// — agent.rs calls this free function directly, bypassing the port. Inject a
+// Box<dyn PluginExecutor> into Agent and delegate here so tool interception
+// (logging, sandboxing, mocking in tests) works without touching agent internals.
 pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
     match Tool::from_name(name) {
         Some(tool) => {
@@ -458,6 +462,65 @@ pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<Strin
 
 pub fn get_tool_definitions() -> Vec<ToolDefinition> {
     Tool::ALL.iter().map(|tool| tool.definition()).collect()
+}
+
+/// Discover tool definitions from an MCP server at `server_url` via HTTP transport.
+///
+/// Sends a JSON-RPC `tools/list` request and maps each MCP tool into a
+/// `ToolDefinition`. The caller is responsible for merging the result into
+/// `get_tool_definitions()` so the LLM sees external tools alongside builtins.
+#[allow(dead_code)]
+pub async fn mcp_tool_definitions(server_url: &str) -> anyhow::Result<Vec<ToolDefinition>> {
+    let client = reqwest::Client::new();
+
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/list",
+        "params": {}
+    });
+
+    let resp = client
+        .post(server_url)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+
+    parse_mcp_tools_response(&resp)
+}
+
+fn parse_mcp_tools_response(resp: &serde_json::Value) -> anyhow::Result<Vec<ToolDefinition>> {
+    let tools = resp
+        .pointer("/result/tools")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| anyhow::anyhow!("MCP response missing result.tools array"))?;
+
+    let defs = tools
+        .iter()
+        .filter_map(|t| {
+            let name = t.get("name")?.as_str()?.to_owned();
+            let description = t
+                .get("description")
+                .and_then(|d| d.as_str())
+                .unwrap_or("")
+                .to_owned();
+            let input_schema = t
+                .get("inputSchema")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({"type": "object", "properties": {}}));
+            Some(ToolDefinition {
+                name,
+                description,
+                input_schema,
+            })
+        })
+        .collect();
+
+    Ok(defs)
 }
 
 #[cfg(test)]
@@ -679,6 +742,47 @@ mod tests {
         let args = serde_json::json!({"cmd": "echo hi"});
         let err = execute_tool("bash", &args, &ctx).unwrap_err();
         assert!(matches!(err, ToolError::ModeDenied { .. }));
+    }
+
+    #[test]
+    fn mcp_tools_response_parses_correctly() {
+        let resp = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "tools": [
+                    {
+                        "name": "shell",
+                        "description": "Run a shell command",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": { "cmd": { "type": "string" } },
+                            "required": ["cmd"]
+                        }
+                    },
+                    {
+                        "name": "fetch",
+                        "description": "Fetch a URL"
+                    }
+                ]
+            }
+        });
+
+        let defs = parse_mcp_tools_response(&resp).unwrap();
+        assert_eq!(defs.len(), 2);
+        assert_eq!(defs[0].name, "shell");
+        assert_eq!(defs[0].description, "Run a shell command");
+        assert_eq!(defs[1].name, "fetch");
+        assert_eq!(
+            defs[1].input_schema,
+            serde_json::json!({"type": "object", "properties": {}})
+        );
+    }
+
+    #[test]
+    fn mcp_tools_response_error_on_missing_tools() {
+        let resp = serde_json::json!({"jsonrpc": "2.0", "id": 1, "result": {}});
+        assert!(parse_mcp_tools_response(&resp).is_err());
     }
 
     #[test]

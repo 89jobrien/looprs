@@ -1,47 +1,62 @@
 {
-  "agents": {
-    "context_sharing": true,
-    "max_parallel": 3,
-    "orchestration": "sequential"
-  },
-  "commands": {
-    "case_sensitive": false,
-    "max_depth": 3,
-    "prefix": "/",
-    "separator": "::"
-  },
   "defaults": {
-    "agent": "base-agent",
     "max_context_tokens": 8192,
-    "temperature": 0.7,
+    "temperature": 0.2,
     "timeout_seconds": 120
   },
-  "description": "Extensibility configuration for looprs agent",
-  "extensions": {
-    "agents_enabled": true,
-    "commands_enabled": true,
-    "hooks_enabled": true,
-    "rules_enabled": true,
-    "skills_enabled": true
-  },
   "file_references": {
-    "allowed_extensions": ["rs", "py", "ts", "js", "go", "java", "md", "txt", "json", "yaml", "toml"],
+    "allowed_extensions": [
+      "rs",
+      "toml",
+      "json",
+      "yaml",
+      "yml",
+      "md",
+      "txt",
+      "nu",
+      "sh",
+      "py",
+      "ts",
+      "tsx",
+      "js",
+      "go",
+      "java"
+    ],
     "max_size_mb": 10,
     "prefix": "@"
   },
-  "hooks": {
-    "concurrent_hooks": false,
-    "enabled": true,
-    "max_execution_time_ms": 5000
-  },
-  "logging": {
-    "level": "info",
-    "log_commands": true,
-    "log_errors": true,
-    "log_performance": true
-  },
   "onboarding": {
     "demo_seen": true
+  },
+  "pipeline": {
+    "enabled": false,
+    "log_dir": ".looprs/agent_logs/",
+    "reward_threshold": 0.0,
+    "require_tools": false,
+    "auto_revert": true,
+    "fail_fast": false,
+    "block_on_failure": false,
+    "checks": {
+      "run_build": false,
+      "run_tests": false,
+      "run_lint": false,
+      "run_typecheck": false,
+      "run_bench": false
+    },
+    "compaction": {
+      "include_diff": true,
+      "include_recent": true,
+      "include_globs": [],
+      "top_k": 8
+    }
+  },
+  "agents": {
+    "context_sharing": true,
+    "max_parallel": 3,
+    "orchestration": "sequential",
+    "delegate_by_default": true,
+    "fs_mode": "write",
+    "default_agent": null
   },
   "paths": {
     "agents": ".looprs/agents",
@@ -49,18 +64,5 @@
     "hooks": ".looprs/hooks",
     "rules": ".looprs/rules",
     "skills": ".looprs/skills"
-  },
-  "project": "looprs",
-  "rules": {
-    "enforce_on": ["code-review", "refactoring"],
-    "strict_mode": false,
-    "warn_on": ["testing", "performance"]
-  },
-  "skills": {
-    "auto_load_prerequisites": true,
-    "case_sensitive": false,
-    "prefix": "$",
-    "progressive_disclosure": true
-  },
-  "version": "1.0.0"
+  }
 }

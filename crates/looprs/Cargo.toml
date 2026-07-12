@@ -4,15 +4,18 @@ version.workspace = true
 edition.workspace = true
 description = "Concise coding assistant REPL — core library"
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
 rust-version.workspace = true
-repository = "https://github.com/89jobrien/looprs.git"
 readme = "../../README.md"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
 [dependencies]
-looprs-core = { path = "../looprs-core" }
+looprs-core = { path = "../looprs-core", version = "0.4.0" }
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
@@ -39,7 +42,7 @@ sysinfo = "0.30"
 walkdir = "2.5"
 
 [dev-dependencies]
-looprs-core = { path = "../looprs-core", features = ["test-contracts"] }
+looprs-core = { path = "../looprs-core", version = "0.4.0", features = ["test-contracts"] }
 tempfile = "3.12"
 criterion = "0.6"
 proptest = "1.4"

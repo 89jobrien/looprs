@@ -148,3 +148,16 @@ impl LLMProvider for AnthropicSdkProvider {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use looprs_core::ports::test_contracts::assert_inference_provider_contract;
+
+    #[test]
+    fn anthropic_sdk_provider_satisfies_inference_provider_contract() {
+        let p = AnthropicSdkProvider::new("test-key".to_string())
+            .expect("AnthropicSdkProvider::new must succeed in test");
+        assert_inference_provider_contract(&p);
+    }
+}

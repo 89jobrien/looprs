@@ -1,5 +1,8 @@
 //! UserOutput port — abstraction over user-facing terminal/UI output.
 
+// TODO: hex refactor Phase 1 — Agent currently calls ui::* static functions
+// directly. Replace with this port. Add write_chunk(&str) for streaming (idea #2).
+// Wire the terminal adapter in looprs-cli; inject NullOutput in tests.
 /// Port: emit structured output to the user.
 ///
 /// Implementations may render to a terminal, a log file, a TUI widget,

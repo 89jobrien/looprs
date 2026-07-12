@@ -267,4 +267,12 @@ mod tests {
             _ => panic!("expected tool use block"),
         }
     }
+
+    #[test]
+    fn openai_sdk_provider_satisfies_inference_provider_contract() {
+        use looprs_core::ports::test_contracts::assert_inference_provider_contract;
+        let p = OpenAISdkProvider::new("test-key".to_string())
+            .expect("OpenAISdkProvider::new must succeed in test");
+        assert_inference_provider_contract(&p);
+    }
 }

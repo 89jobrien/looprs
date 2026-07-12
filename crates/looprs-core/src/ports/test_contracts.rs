@@ -110,6 +110,30 @@ pub fn assert_session_store_contract(store: &mut dyn SessionStore) {
     assert_eq!(p1, p2, "path() must return consistent value");
 }
 
+// ── InferenceProvider ───────────────────────────────────────────────────
+
+/// Assert that an `InferenceProvider` implementation satisfies the structural contract.
+///
+/// Contract:
+/// 1. `name()` returns a non-empty string.
+/// 2. `model()` returns a non-empty `ModelId`.
+/// 3. `supports_tool_use()` returns without panic.
+/// 4. `validate_config()` returns without panic (result is not asserted — providers
+///    may legitimately return `Err` when env vars are absent in test context).
+pub fn assert_inference_provider_contract(provider: &dyn crate::ports::InferenceProvider) {
+    let name = provider.name();
+    assert!(!name.is_empty(), "name() must return a non-empty string");
+
+    let model = provider.model();
+    assert!(
+        !model.as_str().is_empty(),
+        "model() must return a non-empty ModelId"
+    );
+
+    let _ = provider.supports_tool_use();
+    let _ = provider.validate_config();
+}
+
 // ── UserOutput ──────────────────────────────────────────────────────────
 
 /// Assert that a `UserOutput` implementation satisfies the full contract.
