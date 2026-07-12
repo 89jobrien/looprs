@@ -69,3 +69,25 @@ jobs:
 
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+  fuzz:
+    name: Fuzz (30s)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Fuzz fuzz_parse_skill
+        run: cargo fuzz run fuzz_parse_skill -- -max_total_time=30
+        working-directory: fuzz
+
+      - name: Fuzz fuzz_strip_ansi
+        run: cargo fuzz run fuzz_strip_ansi -- -max_total_time=30
+        working-directory: fuzz
