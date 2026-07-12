@@ -176,19 +176,14 @@ impl Default for PipelineCompactionConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStoreBackend {
     /// Filesystem JSONL per session (default, no setup required).
+    #[default]
     Fs,
     /// SQLite database at `~/.looprs/sessions.db`.
     Sqlite,
-}
-
-impl Default for SessionStoreBackend {
-    fn default() -> Self {
-        Self::Fs
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
