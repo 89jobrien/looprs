@@ -47,12 +47,86 @@ impl AgentRegistry {
         }
     }
 
-    // TODO: add built-in agent definitions — registry is fully wired but
-    // .looprs/agents/ only has a README. Define at minimum: reviewer, planner,
-    // debugger. Each needs name, role, description, system_prompt, tools, and
-    // optional skills/constraints fields. Validates the delegation loop end-to-end.
+    /// Built-in agent definitions available without any `.looprs/agents/` files.
     pub fn bundled_agents() -> Vec<AgentDefinition> {
-        unimplemented!("return reviewer, planner, debugger agent definitions")
+        vec![
+            AgentDefinition {
+                name: "reviewer".to_string(),
+                role: Some("Senior Code Reviewer".to_string()),
+                description: Some(
+                    "Reviews code for correctness, safety, and style. \
+                     Flags issues without applying fixes."
+                        .to_string(),
+                ),
+                system_prompt: Some(
+                    "You are a senior code reviewer. Read code carefully and identify \
+                     bugs, logic errors, security issues, and style violations. Report \
+                     findings with file and line references. Do not apply fixes."
+                        .to_string(),
+                ),
+                tools: vec!["read".to_string(), "grep".to_string(), "glob".to_string()],
+                skills: vec![],
+                constraints: vec!["read-only".to_string()],
+                triggers: vec![
+                    "review".to_string(),
+                    "inspect".to_string(),
+                    "check code".to_string(),
+                ],
+            },
+            AgentDefinition {
+                name: "planner".to_string(),
+                role: Some("Implementation Planner".to_string()),
+                description: Some(
+                    "Produces a step-by-step implementation plan. Does not write code.".to_string(),
+                ),
+                system_prompt: Some(
+                    "You are an implementation planner. Given a task, produce a numbered, \
+                     ordered plan with: goal, affected files, ordered steps, and acceptance \
+                     criteria. Each step must be concrete and independently verifiable. \
+                     Do not write code."
+                        .to_string(),
+                ),
+                tools: vec!["read".to_string(), "grep".to_string(), "glob".to_string()],
+                skills: vec![],
+                constraints: vec!["read-only".to_string()],
+                triggers: vec![
+                    "plan".to_string(),
+                    "design".to_string(),
+                    "how should".to_string(),
+                    "how to implement".to_string(),
+                ],
+            },
+            AgentDefinition {
+                name: "debugger".to_string(),
+                role: Some("Systematic Debugger".to_string()),
+                description: Some(
+                    "Diagnoses failures by tracing root causes. \
+                     Proposes minimal, targeted fixes."
+                        .to_string(),
+                ),
+                system_prompt: Some(
+                    "You are a systematic debugger. Trace failures from symptoms to root \
+                     cause using evidence from logs, tests, and code. Propose the minimal \
+                     change that fixes the root cause without side effects. Show reasoning."
+                        .to_string(),
+                ),
+                tools: vec![
+                    "read".to_string(),
+                    "grep".to_string(),
+                    "glob".to_string(),
+                    "bash".to_string(),
+                ],
+                skills: vec![],
+                constraints: vec![],
+                triggers: vec![
+                    "debug".to_string(),
+                    "fix".to_string(),
+                    "error".to_string(),
+                    "failing".to_string(),
+                    "broken".to_string(),
+                ],
+            },
+        ]
     }
 
     pub fn register(&mut self, agent: AgentDefinition) {
@@ -230,5 +304,58 @@ triggers:
 
         let registry = AgentRegistry::load_from_directory(&tmp.path().to_path_buf()).unwrap();
         assert!(registry.get("reviewer").is_some());
+    }
+
+    #[test]
+    fn bundled_agents_returns_three_agents() {
+        let agents = AgentRegistry::bundled_agents();
+        let names: Vec<&str> = agents.iter().map(|a| a.name.as_str()).collect();
+        assert!(names.contains(&"reviewer"), "missing reviewer");
+        assert!(names.contains(&"planner"), "missing planner");
+        assert!(names.contains(&"debugger"), "missing debugger");
+    }
+
+    #[test]
+    fn bundled_agents_have_required_fields() {
+        for agent in AgentRegistry::bundled_agents() {
+            assert!(!agent.name.is_empty());
+            assert!(agent.role.is_some(), "{}: missing role", agent.name);
+            assert!(
+                agent.system_prompt.is_some(),
+                "{}: missing system_prompt",
+                agent.name
+            );
+            assert!(
+                !agent.tools.is_empty(),
+                "{}: tools must not be empty",
+                agent.name
+            );
+            assert!(
+                !agent.triggers.is_empty(),
+                "{}: triggers must not be empty",
+                agent.name
+            );
+        }
+    }
+
+    #[test]
+    fn bundled_reviewer_matches_review_prompt() {
+        let agents = AgentRegistry::bundled_agents();
+        let reviewer = agents.iter().find(|a| a.name == "reviewer").unwrap();
+        assert!(reviewer.matches_prompt("please review this PR"));
+    }
+
+    #[test]
+    fn bundled_debugger_matches_error_prompt() {
+        let agents = AgentRegistry::bundled_agents();
+        let debugger = agents.iter().find(|a| a.name == "debugger").unwrap();
+        assert!(debugger.matches_prompt("the test is failing with an error"));
+    }
+
+    #[test]
+    fn bundled_planner_matches_plan_prompt() {
+        let agents = AgentRegistry::bundled_agents();
+        let planner = agents.iter().find(|a| a.name == "planner").unwrap();
+        assert!(planner.matches_prompt("plan the refactor for this module"));
     }
 }
