@@ -25,103 +25,35 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get commit messages
-        id: commits
-        run: |
-          # Get all commits since last tag
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+      - uses: dtolnay/rust-toolchain@stable
 
-          if [ -z "$LAST_TAG" ]; then
-            # No tags yet, check from first commit
-            COMMITS=$(git log --pretty=%B)
-          else
-            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=%B)
-          fi
+      - uses: Swatinem/rust-cache@v2
 
-          echo "commits<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMITS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Install taskit
+        run: cargo install taskit
 
-          # Determine version bump
-          if echo "$COMMITS" | grep -q "^feat!:" || echo "$COMMITS" | grep -q "^[a-z]*!:"; then
-            echo "bump=major" >> $GITHUB_OUTPUT
-          elif echo "$COMMITS" | grep -q "^feat:"; then
-            echo "bump=minor" >> $GITHUB_OUTPUT
-          else
-            echo "bump=patch" >> $GITHUB_OUTPUT
-          fi
+      - name: Bump version
+        run: taskit ${{ github.event.inputs.bump }}
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Bump version in Cargo.toml
+      - name: Get new version
         id: version
-        run: |
-          BUMP_TYPE="${{ steps.commits.outputs.bump }}"
-
-          # Parse current version
-          CURRENT=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\([^"]*\)".*/\1/')
-
-          # Split version into parts
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-
-          case "$BUMP_TYPE" in
-            major)
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-            minor)
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            patch)
-              PATCH=$((PATCH + 1))
-              ;;
-          esac
-
-          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-
-          # Update Cargo.toml
-          sed -i "s/^version = .*/version = \"$NEW_VERSION\"/" Cargo.toml
-
-          echo "old_version=$CURRENT" >> $GITHUB_OUTPUT
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Update CHANGELOG
-        run: |
-          NEW_VERSION="${{ steps.version.outputs.new_version }}"
-          DATE=$(date +"%Y-%m-%d")
-
-          # Replace [Unreleased] with new version
-          sed -i "s/## \[Unreleased\]/## [$NEW_VERSION] - $DATE\n\n## [Unreleased]/" CHANGELOG.md
+        run: echo "tag=$(taskit version | head -1 | awk '{print $NF}')" >> $GITHUB_OUTPUT
 
       - name: Commit and tag
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-
-          NEW_VERSION="${{ steps.version.outputs.new_version }}"
-
-          # Check if tag already exists
-          if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
-            echo "Tag v$NEW_VERSION already exists, skipping"
+          NEW_VERSION="${{ steps.version.outputs.tag }}"
+          if git rev-parse "v${NEW_VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${NEW_VERSION} already exists, skipping"
             exit 0
           fi
-
-          git add Cargo.toml CHANGELOG.md
-          git commit -m "chore: bump version to $NEW_VERSION"
-          git tag "v$NEW_VERSION"
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore: bump version to ${NEW_VERSION}"
+          git tag "v${NEW_VERSION}"
           git push origin main --tags
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        if: success()
-        with:
-          tag_name: v${{ steps.version.outputs.new_version }}
-          name: ${{ steps.version.outputs.new_version }}
-          body: |
-            See CHANGELOG.md for details.
-
-            Bump type: ${{ steps.commits.outputs.bump }}
-            Previous version: ${{ steps.version.outputs.old_version }}
+      - name: Create GitHub release
+        run: taskit release "v${{ steps.version.outputs.tag }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
