@@ -1,6 +1,6 @@
 project: looprs
 id: looprs
-updated: 2026-07-07
+updated: 2026-07-12
 items: []
 log:
 - date: 20260429:160832
@@ -17,6 +17,12 @@ log:
     global pre-commit hook.
   commits: []
   session: 1
+- date: 2026-07-08
+  summary: |
+    Dynamic statusline prompt + per-turn context injection for agent UX improvements.
+    Fixed YAML block scalar parse error in outsource.yaml (collapsed Python config to
+    single-line). Documented looprs repo config.
+  commits: []
 - date: 2026-06-07
   summary: |
     Pruned 4 completed HANDOFF items to log. HX-003: Wire Agent through

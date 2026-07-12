@@ -46,7 +46,10 @@ target/llvm-cov/
 **/crates/**/.looprs/
 
 # Fuzz runtime output (corpus, crashes, artifacts)
+# Seed inputs in corpus/ subdirs are committed; fuzzer-generated inputs are not.
 fuzz/corpus/
+!fuzz/corpus/fuzz_parse_skill/seed_*
+!fuzz/corpus/fuzz_strip_ansi/seed_*
 fuzz/artifacts/
 
 

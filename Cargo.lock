@@ -1625,6 +1625,7 @@ dependencies = [
  "dirs",
  "looprs",
  "miette",
+ "proptest",
  "rustyline 14.0.0",
  "serde_json",
  "tempfile",
