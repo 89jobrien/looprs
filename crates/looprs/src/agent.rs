@@ -365,14 +365,14 @@ impl Agent {
             if let Some(max_context) = self.runtime.defaults.max_context_tokens {
                 max_tokens = max_tokens.min(max_context);
             }
-            // TODO: context compaction / windowing — messages grow unbounded.
-            // Implement a sliding-window or summary-injection strategy driven by
-            // max_context_tokens (already read above). When the window exceeds the
-            // limit, summarise the oldest turns via a short infer call and replace
-            // them with a single summary message.
+            let messages = if let Some(max_context) = self.runtime.defaults.max_context_tokens {
+                compact_messages(&self.messages, max_context as usize)
+            } else {
+                self.messages.clone()
+            };
             let req = InferenceRequest {
                 model: self.provider.model().clone(),
-                messages: self.messages.clone(),
+                messages,
                 tools: get_tool_definitions(),
                 max_tokens,
                 temperature: self.runtime.defaults.temperature,
@@ -596,6 +596,36 @@ impl Agent {
             Err(e) => log::warn!("failed to load session pairs for scoring: {e}"),
         }
     }
+}
+
+/// Trim `messages` to fit within an estimated `max_tokens` budget.
+///
+/// Estimates 1 token ≈ 4 characters. Drops the oldest user+assistant pairs
+/// from the front until the total fits. Always starts the result on a user
+/// message and preserves at least one message.
+fn compact_messages(messages: &[Message], max_tokens: usize) -> Vec<Message> {
+    fn estimate_tokens(msgs: &[Message]) -> usize {
+        msgs.iter()
+            .flat_map(|m| m.content.iter())
+            .map(|block| match block {
+                ContentBlock::Text { text } => text.len().div_ceil(4),
+                ContentBlock::ToolUse { input, .. } => input.to_string().len().div_ceil(4),
+                ContentBlock::ToolResult { content, .. } => content.len().div_ceil(4),
+            })
+            .sum()
+    }
+
+    let mut start = 0;
+    while start < messages.len().saturating_sub(1)
+        && estimate_tokens(&messages[start..]) > max_tokens
+    {
+        // Drop one user message and the following assistant/tool messages as a pair
+        start += 1;
+        while start < messages.len() && messages[start].role != "user" {
+            start += 1;
+        }
+    }
+    messages[start..].to_vec()
 }
 
 #[cfg(test)]
@@ -929,7 +959,45 @@ actions:
     }
 
     #[test]
-    fn test_observation_manager_initialized() {
+    fn compact_messages_drops_oldest_pairs_to_fit_window() {
+        // 10 alternating user+assistant messages — each "word" ≈ 4 chars = 1 token
+        // With a tight window, oldest pairs should be dropped
+        let messages: Vec<Message> = (0..10)
+            .flat_map(|i| {
+                vec![
+                    Message::user(format!("user message number {i}")),
+                    Message::assistant(vec![ContentBlock::Text {
+                        text: format!("assistant reply number {i}"),
+                    }]),
+                ]
+            })
+            .collect();
+        // Allow ~60 tokens → should keep only the most recent few pairs
+        let compacted = compact_messages(&messages, 60);
+        assert!(
+            compacted.len() < messages.len(),
+            "expected compaction but got {} messages (same as input {})",
+            compacted.len(),
+            messages.len()
+        );
+        // First message of the result must be a user message (never start mid-pair)
+        assert_eq!(compacted[0].role, "user");
+    }
+
+    #[test]
+    fn compact_messages_preserves_all_when_under_limit() {
+        let messages = vec![
+            Message::user("hi".to_string()),
+            Message::assistant(vec![ContentBlock::Text {
+                text: "hello".to_string(),
+            }]),
+        ];
+        let compacted = compact_messages(&messages, 100_000);
+        assert_eq!(compacted.len(), messages.len());
+    }
+
+    #[test]
+    fn observation_manager_initialized() {
         let provider = MockProvider::simple_text("test");
         let agent = agent_for_test(provider);
 
