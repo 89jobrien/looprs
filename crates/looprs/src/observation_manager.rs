@@ -13,16 +13,81 @@ pub struct ObservationManager {
 }
 
 impl ObservationManager {
-    // TODO: persistent observation layer (idea #9) — state is in-memory only and
-    // lost on exit. Add persist(&Path) -> Result<()> and load_from(session_id, &Path)
-    // backed by SQLite via the SessionStore port. Enables cross-session analytics,
-    // cost tracking, and session replay.
-    pub fn persist(&self, _path: &std::path::Path) -> anyhow::Result<()> {
-        unimplemented!("persist observations to SQLite via SessionStore port")
+    /// Persist all observations to a SQLite database at `path`.
+    pub fn persist(&self, path: &std::path::Path) -> anyhow::Result<()> {
+        let conn = rusqlite::Connection::open(path)?;
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS observations (
+                session_id TEXT NOT NULL,
+                tool_name  TEXT NOT NULL,
+                input      TEXT NOT NULL,
+                output     TEXT NOT NULL,
+                tool_use_id TEXT,
+                timestamp  INTEGER NOT NULL,
+                context    TEXT
+            )",
+        )?;
+        for obs in &self.observations {
+            conn.execute(
+                "INSERT INTO observations
+                 (session_id, tool_name, input, output, tool_use_id, timestamp, context)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![
+                    &obs.session_id,
+                    &obs.tool_name,
+                    obs.input.to_string(),
+                    &obs.output,
+                    obs.tool_use_id.as_ref().map(|id| id.as_str()),
+                    obs.timestamp as i64,
+                    obs.context.as_deref(),
+                ],
+            )?;
+        }
+        Ok(())
     }
 
-    pub fn load_from(_session_id: &str, _path: &std::path::Path) -> anyhow::Result<Self> {
-        unimplemented!("load observations from SQLite for cross-session analytics")
+    /// Load observations for `session_id` from a SQLite database at `path`.
+    pub fn load_from(session_id: &str, path: &std::path::Path) -> anyhow::Result<Self> {
+        let conn = rusqlite::Connection::open(path)?;
+        let mut stmt = conn.prepare(
+            "SELECT tool_name, input, output, tool_use_id, timestamp, context
+             FROM observations WHERE session_id = ?1 ORDER BY timestamp ASC",
+        )?;
+        let observations = stmt
+            .query_map(rusqlite::params![session_id], |row| {
+                let input_str: String = row.get(1)?;
+                let tool_use_id_str: Option<String> = row.get(3)?;
+                let timestamp: i64 = row.get(4)?;
+                Ok((
+                    row.get::<_, String>(0)?,
+                    input_str,
+                    row.get::<_, String>(2)?,
+                    tool_use_id_str,
+                    timestamp as u64,
+                    row.get::<_, Option<String>>(5)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .map(
+                |(tool_name, input_str, output, tool_use_id, timestamp, context)| {
+                    let input = serde_json::from_str(&input_str).unwrap_or(serde_json::Value::Null);
+                    crate::observation::Observation {
+                        tool_name,
+                        input,
+                        output,
+                        tool_use_id: tool_use_id.map(ToolId::new),
+                        timestamp,
+                        session_id: session_id.to_string(),
+                        context,
+                    }
+                },
+            )
+            .collect();
+        Ok(Self {
+            session_id: session_id.to_string(),
+            observations,
+        })
     }
 
     /// Create a new observation manager for this session
@@ -93,6 +158,26 @@ impl Default for ObservationManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn observation_persist_and_load_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("obs.db");
+
+        let mut mgr = ObservationManager::new();
+        mgr.capture(
+            "read".to_string(),
+            serde_json::json!({"file": "foo.rs"}),
+            "contents".to_string(),
+            None,
+        );
+        mgr.persist(&path).unwrap();
+
+        let loaded = ObservationManager::load_from(mgr.session_id(), &path).unwrap();
+        assert_eq!(loaded.count(), 1);
+        assert_eq!(loaded.observations()[0].tool_name, "read");
+        assert_eq!(loaded.session_id(), mgr.session_id());
+    }
 
     #[test]
     fn test_observation_manager_creation() {
