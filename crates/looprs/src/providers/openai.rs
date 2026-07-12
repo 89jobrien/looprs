@@ -225,4 +225,13 @@ mod tests {
         assert!(!crate::providers::supports_temperature("gpt-5-mini"));
         assert!(crate::providers::supports_temperature("gpt-4o"));
     }
+
+    #[test]
+    fn openai_provider_satisfies_inference_provider_contract() {
+        use crate::providers::openai::OpenAIProvider;
+        use looprs_core::ports::test_contracts::assert_inference_provider_contract;
+        let p = OpenAIProvider::new("test-key".to_string())
+            .expect("OpenAIProvider::new must succeed in test");
+        assert_inference_provider_contract(&p);
+    }
 }

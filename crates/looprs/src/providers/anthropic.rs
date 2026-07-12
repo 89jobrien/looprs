@@ -159,3 +159,16 @@ impl LLMProvider for AnthropicProvider {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use looprs_core::ports::test_contracts::assert_inference_provider_contract;
+
+    #[test]
+    fn anthropic_provider_satisfies_inference_provider_contract() {
+        let p = AnthropicProvider::new("test-key".to_string())
+            .expect("AnthropicProvider::new must succeed in test");
+        assert_inference_provider_contract(&p);
+    }
+}

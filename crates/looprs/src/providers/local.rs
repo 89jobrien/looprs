@@ -224,3 +224,16 @@ impl LLMProvider for LocalProvider {
         false
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use looprs_core::ports::test_contracts::assert_inference_provider_contract;
+
+    #[test]
+    fn local_provider_satisfies_inference_provider_contract() {
+        let p = LocalProvider::new_with_model(Some(ModelId::new("llama3")))
+            .expect("LocalProvider::new_with_model must succeed in test");
+        assert_inference_provider_contract(&p);
+    }
+}
