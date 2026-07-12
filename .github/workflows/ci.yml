@@ -26,7 +26,7 @@ jobs:
         run: cargo install taskit
 
       - name: Run CI
-        run: taskit ci --output github
+        run: taskit ci
 
   coverage:
     name: Coverage
@@ -47,7 +47,7 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: Generate coverage
-        run: taskit coverage --output github
+        run: taskit coverage
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v4
