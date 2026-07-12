@@ -41,10 +41,9 @@ name = "looprs-types"
 path = "crates/looprs/src/types.rs"
 
 # Coverage enforcement: run `taskit coverage` to check.
-#
-# [coverage]
-# crate_name = "my-crate"
-# threshold = 80.0
+[coverage]
+crate_name = "looprs-core"
+threshold = 80.0
 
 [ci]
 # cruxfile = "Cruxfile"

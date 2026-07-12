@@ -25,6 +25,11 @@ jobs:
       - name: Install taskit
         run: cargo install taskit
 
+      - name: Install CI tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,cargo-deny,cargo-machete
+
       - name: Run CI
         run: taskit ci
 
