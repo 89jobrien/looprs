@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 description = "Domain types, ports, and macros for looprs"
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
 rust-version.workspace = true
 
 [dependencies]

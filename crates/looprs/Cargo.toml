@@ -4,8 +4,11 @@ version.workspace = true
 edition.workspace = true
 description = "Concise coding assistant REPL — core library"
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
 rust-version.workspace = true
-repository = "https://github.com/89jobrien/looprs.git"
 readme = "../../README.md"
 
 [lints.rust]

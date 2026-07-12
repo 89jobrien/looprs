@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 description = "looprs binary: interactive REPL and scriptable entrypoint"
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
 rust-version.workspace = true
 
 [[bin]]
