@@ -1259,6 +1259,35 @@ actions:
         assert!(prompt.contains("rule content"));
     }
 
+    #[tokio::test]
+    async fn agent_runs_without_real_filesystem_or_provider() {
+        // Full run_turn through injected ports only — no real I/O, no ui:: statics
+        let provider = MockProvider::simple_text("hello from mock");
+        let (store, events) = MockSessionStore::new();
+        let mut agent = Agent::new_with_runtime(
+            Box::new(provider),
+            RuntimeSettings::default(),
+            FileRefPolicy::default(),
+            Some(Box::new(store)),
+            Box::new(NullOutput),
+        )
+        .unwrap();
+
+        agent.add_user_message("hello");
+        agent.run_turn().await.unwrap();
+
+        // Session store received events via port — no direct ui:: calls
+        let logged = events.lock().unwrap();
+        assert!(
+            logged.iter().any(|e| e == "inference"),
+            "expected inference event, got: {logged:?}"
+        );
+        assert!(
+            logged.iter().any(|e| e == "user_message"),
+            "expected user_message event, got: {logged:?}"
+        );
+    }
+
     #[test]
     fn fire_event_delegates_to_event_manager() {
         let provider = MockProvider::simple_text("test");
