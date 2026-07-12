@@ -132,6 +132,20 @@ Events: `SessionStart`, `UserPromptSubmit`, `InferenceComplete`, `PreToolUse`, `
 
 Action types: `command` (shell command, optional `inject_as` and `requires_approval`), `message`, `conditional`, `confirm`, `prompt`, `secret_prompt`, `set_env`, `set_config`.
 
+Example using `confirm` and `set_env`:
+
+```yaml
+name: set_api_key
+trigger: SessionStart
+actions:
+  - type: secret_prompt
+    prompt: "Enter API key (leave blank to skip):"
+    set_key: api_key
+  - type: set_env
+    name: MY_API_KEY
+    from_key: api_key
+```
+
 
 ## Observability
 
