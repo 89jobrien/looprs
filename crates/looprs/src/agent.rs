@@ -290,6 +290,16 @@ impl Agent {
         }
     }
 
+    // TODO: implement streaming output — both claudius and async-openai support
+    // token-by-token streaming. The UserOutput port (hex refactor Phase 1) is
+    // the right abstraction: add an `infer_streaming` variant that yields chunks
+    // and drives output.write_chunk() instead of buffering the full response.
+    pub async fn run_turn_streaming(&mut self) -> Result<(), AgentError> {
+        unimplemented!(
+            "streaming inference — route provider.infer_stream() through UserOutput port"
+        )
+    }
+
     pub async fn run_turn(&mut self) -> Result<(), AgentError> {
         let delegated_agent = self.pending_metadata.get("orchestration.agent").cloned();
         if let Some(agent_name) = delegated_agent.clone() {
@@ -355,6 +365,11 @@ impl Agent {
             if let Some(max_context) = self.runtime.defaults.max_context_tokens {
                 max_tokens = max_tokens.min(max_context);
             }
+            // TODO: context compaction / windowing — messages grow unbounded.
+            // Implement a sliding-window or summary-injection strategy driven by
+            // max_context_tokens (already read above). When the window exceeds the
+            // limit, summarise the oldest turns via a short infer call and replace
+            // them with a single summary message.
             let req = InferenceRequest {
                 model: self.provider.model().clone(),
                 messages: self.messages.clone(),

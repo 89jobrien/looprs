@@ -24,6 +24,7 @@ docs/
 .DS_Store
 *.md
 !README.md
+!IDEAS.md
 !tests/README.md
 !docs/TESTING.md
 !docs/ownership-model.md

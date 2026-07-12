@@ -47,6 +47,14 @@ impl AgentRegistry {
         }
     }
 
+    // TODO: add built-in agent definitions — registry is fully wired but
+    // .looprs/agents/ only has a README. Define at minimum: reviewer, planner,
+    // debugger. Each needs name, role, description, system_prompt, tools, and
+    // optional skills/constraints fields. Validates the delegation loop end-to-end.
+    pub fn bundled_agents() -> Vec<AgentDefinition> {
+        unimplemented!("return reviewer, planner, debugger agent definitions")
+    }
+
     pub fn register(&mut self, agent: AgentDefinition) {
         self.agents.insert(agent.name.clone(), agent);
     }

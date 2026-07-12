@@ -446,6 +446,10 @@ fn enforce_fs_mode(tool: Tool, args: &Value, ctx: &ToolContext) -> Result<(), To
     }
 }
 
+// TODO: route tool dispatch through PluginExecutor port (hex refactor Phase 2)
+// — agent.rs calls this free function directly, bypassing the port. Inject a
+// Box<dyn PluginExecutor> into Agent and delegate here so tool interception
+// (logging, sandboxing, mocking in tests) works without touching agent internals.
 pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
     match Tool::from_name(name) {
         Some(tool) => {
@@ -458,6 +462,15 @@ pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<Strin
 
 pub fn get_tool_definitions() -> Vec<ToolDefinition> {
     Tool::ALL.iter().map(|tool| tool.definition()).collect()
+}
+
+// TODO: MCP tool support (idea #10) — add an MCP client adapter implementing
+// PluginExecutor that delegates tool calls to an MCP server over stdio or HTTP.
+// Discovered tools get merged into get_tool_definitions() so the LLM sees them.
+// High leverage: looprs is already a tool-execution runtime; MCP makes it composable.
+#[allow(dead_code)]
+pub fn mcp_tool_definitions(_server_url: &str) -> Vec<ToolDefinition> {
+    unimplemented!("discover and return tool definitions from an MCP server")
 }
 
 #[cfg(test)]

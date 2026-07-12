@@ -405,6 +405,26 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
+    // TODO: add proptest invariants for fuzzy_score, best_match, completion_hint —
+    // monotonicity (longer prefix ≥ shorter), no-empty-miss (empty query always
+    // matches), and best_match idempotency. proptest is already in Cargo.toml.
+    proptest! {
+        #[test]
+        fn prop_fuzzy_score_empty_query_always_matches(candidate in "[a-z]{1,20}") {
+            unimplemented!("property: fuzzy_score(\"\", any non-empty candidate) is Some")
+        }
+
+        #[test]
+        fn prop_fuzzy_score_prefix_beats_sparse(prefix in "[a-z]{2,8}") {
+            unimplemented!("property: score(prefix, prefix+suffix) >= score(prefix, interleaved)")
+        }
+
+        #[test]
+        fn prop_best_match_returns_exact_when_present(item in "[a-z]{3,12}") {
+            unimplemented!("property: best_match(x, _, &[x, ...]) == Some(x)")
+        }
+    }
+
     // ── fuzzy_score ──────────────────────────────────────────────────────────
 
     #[test]

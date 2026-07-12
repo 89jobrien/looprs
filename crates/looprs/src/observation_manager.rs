@@ -13,6 +13,18 @@ pub struct ObservationManager {
 }
 
 impl ObservationManager {
+    // TODO: persistent observation layer (idea #9) — state is in-memory only and
+    // lost on exit. Add persist(&Path) -> Result<()> and load_from(session_id, &Path)
+    // backed by SQLite via the SessionStore port. Enables cross-session analytics,
+    // cost tracking, and session replay.
+    pub fn persist(&self, _path: &std::path::Path) -> anyhow::Result<()> {
+        unimplemented!("persist observations to SQLite via SessionStore port")
+    }
+
+    pub fn load_from(_session_id: &str, _path: &std::path::Path) -> anyhow::Result<Self> {
+        unimplemented!("load observations from SQLite for cross-session analytics")
+    }
+
     /// Create a new observation manager for this session
     pub fn new() -> Self {
         let timestamp = SystemTime::now()
