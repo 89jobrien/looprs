@@ -6,6 +6,7 @@ cargo install nu --locked
 
 # CI tools matching .github/workflows/ci.yml
 cargo install taskit --locked
+cargo install cargo-rail --locked
 cargo install cargo-nextest --locked
 cargo install cargo-deny --locked
 cargo install cargo-machete --locked

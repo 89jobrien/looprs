@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -22,16 +24,16 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install taskit
-        run: cargo install taskit
-
-      - name: Install CI tools
+      - name: Install tools
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest,cargo-deny,cargo-machete
 
+      - name: Install taskit + cargo-rail
+        run: cargo install taskit cargo-rail
+
       - name: Run CI
-        run: taskit ci
+        run: cargo rail run --workflow ci --all
 
       - name: Security & license audit
         run: cargo deny check
@@ -41,21 +43,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install taskit
-        run: cargo install taskit
-
-      - name: Install cargo-llvm-cov
+      - name: Install cargo-llvm-cov + cargo-rail
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
 
+      - name: Install taskit + cargo-rail
+        run: cargo install taskit cargo-rail
+
       - name: Generate coverage
-        run: taskit coverage
+        run: cargo rail run --workflow coverage --all
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v4
