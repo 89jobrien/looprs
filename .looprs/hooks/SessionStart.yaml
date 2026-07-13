@@ -1,8 +1,9 @@
-name: project_info
+name: session_start
 trigger: SessionStart
 actions:
-  - type: message
-    text: "Loaded from repo-level hooks"
   - type: command
     command: "git --no-pager log -1 --oneline"
     inject_as: "last_commit"
+  - type: command
+    command: "git --no-pager status --short"
+    inject_as: "git_status"
