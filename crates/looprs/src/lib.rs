@@ -13,6 +13,7 @@ pub mod errors;
 pub mod events;
 pub mod file_refs;
 pub mod fs_mode;
+pub mod git_info;
 pub mod hooks;
 pub mod jj;
 pub mod kan;

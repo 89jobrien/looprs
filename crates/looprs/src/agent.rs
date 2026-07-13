@@ -62,6 +62,8 @@ pub struct Agent {
     output: Box<dyn UserOutput>,
     models_config: Option<ModelsConfig>,
     system_monitor: SystemMonitor,
+    session_input_tokens: u32,
+    session_output_tokens: u32,
 }
 
 impl Agent {
@@ -98,6 +100,8 @@ impl Agent {
             output,
             models_config: ModelsConfig::load().ok(),
             system_monitor: SystemMonitor::new(),
+            session_input_tokens: 0,
+            session_output_tokens: 0,
         })
     }
 
@@ -177,6 +181,34 @@ impl Agent {
 
     pub fn clear_history(&mut self) {
         self.messages.clear();
+    }
+
+    pub fn provider_model_max_tokens(&self) -> u32 {
+        self.provider.model().max_tokens()
+    }
+
+    pub fn provider_model_id(&self) -> &crate::types::ModelId {
+        self.provider.model()
+    }
+
+    /// Cumulative token usage for this session (input, output).
+    pub fn session_tokens(&self) -> (u32, u32) {
+        (self.session_input_tokens, self.session_output_tokens)
+    }
+
+    /// Estimated context size in tokens (1 token ≈ 4 chars).
+    pub fn estimated_context_tokens(&self) -> u32 {
+        let chars: usize = self
+            .messages
+            .iter()
+            .flat_map(|m| m.content.iter())
+            .map(|b| match b {
+                ContentBlock::Text { text } => text.len(),
+                ContentBlock::ToolUse { input, .. } => input.to_string().len(),
+                ContentBlock::ToolResult { content, .. } => content.len(),
+            })
+            .sum();
+        (chars / 4) as u32
     }
 
     pub fn latest_assistant_text(&self) -> Option<String> {
@@ -415,6 +447,9 @@ impl Agent {
                     .await
                     .map_err(|e| AgentError::Inference(e.to_string()))?
             };
+
+            self.session_input_tokens += response.usage.input_tokens;
+            self.session_output_tokens += response.usage.output_tokens;
 
             self.log_inference(&response);
 

@@ -392,18 +392,31 @@ async fn run_interactive(
 
     let mut turn_count: usize = 0;
 
+    let claude_statusline = env::var("LOOPRS_STATUSLINE")
+        .ok()
+        .is_some_and(|v| v.eq_ignore_ascii_case("statusline"));
+
     loop {
         let cwd_basename = env::current_dir()
             .ok()
             .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
             .unwrap_or_default();
-        let prompt = ui::statusline_prompt(
-            &provider_name,
-            &model,
-            agent.fs_mode().as_str(),
-            &cwd_basename,
-            turn_count,
-        );
+        let prompt = if claude_statusline {
+            let git = looprs::git_info::collect();
+            let ctx_tokens = agent.estimated_context_tokens();
+            let ctx_max = agent.provider_model_max_tokens();
+            let (in_tok, out_tok) = agent.session_tokens();
+            let cost = agent.provider_model_id().estimate_cost(in_tok, out_tok);
+            ui::statusline_prompt_statusline(&cwd_basename, &git, &model, ctx_tokens, ctx_max, cost)
+        } else {
+            ui::statusline_prompt(
+                &provider_name,
+                &model,
+                agent.fs_mode().as_str(),
+                &cwd_basename,
+                turn_count,
+            )
+        };
         let readline = rl.readline(&prompt);
 
         match readline {
@@ -1041,9 +1054,9 @@ async fn execute_command(
 
             if *inject_output && !stdout.is_empty() {
                 let trimmed = stdout.trim();
-                ui::output_preview(trimmed);
+                let clean = looprs::ui::output_preview_colored(trimmed);
                 ui::info("Output injected into context");
-                let output_prompt = format!("Command output:\n```\n{trimmed}\n```");
+                let output_prompt = format!("Command output:\n```\n{clean}\n```");
                 let (prepared_prompt, metadata, selected_agent) =
                     prepare_user_prompt(&output_prompt, app_config, agent_registry);
                 if !metadata.is_empty() {
@@ -1055,7 +1068,7 @@ async fn execute_command(
                 agent.add_user_message(prepared_prompt);
             } else if !stdout.is_empty() {
                 let trimmed = stdout.trim();
-                ui::output_preview(trimmed);
+                looprs::ui::output_preview_colored(trimmed);
             }
         }
         CommandAction::Message { text } => {
@@ -1086,11 +1099,14 @@ async fn execute_command(
             let valid = [
                 "anthropic",
                 "openai",
+                "gemini",
+                "google",
                 "ollama",
                 "local",
                 "anthropic-sdk",
                 "openai-sdk",
                 "claude-sdk",
+                "baml",
             ];
             if !valid.contains(&new_provider.as_str()) {
                 ui::warn(format!(

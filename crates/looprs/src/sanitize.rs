@@ -115,6 +115,11 @@ pub fn sanitize_preview_for_console(input: &str) -> String {
     truncate_chars(&sanitized, preview_len())
 }
 
+/// Truncate to the preview length without stripping ANSI codes.
+pub fn truncate_preview(input: &str) -> String {
+    truncate_chars(input, preview_len())
+}
+
 fn truncate_chars(s: &str, max_chars: usize) -> String {
     if s.chars().count() <= max_chars {
         return s.to_string();

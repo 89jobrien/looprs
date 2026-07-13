@@ -4,6 +4,7 @@ use std::time::Duration;
 pub mod anthropic;
 pub mod anthropic_sdk;
 pub mod baml_provider;
+pub mod gemini;
 pub mod local;
 pub mod openai;
 pub mod openai_sdk;
@@ -147,6 +148,10 @@ pub async fn create_provider_with_overrides(
         return create_provider_by_name("openai", &config_file, overrides).await;
     }
 
+    if env::var("GEMINI_API_KEY").is_ok() || env::var("GOOGLE_API_KEY").is_ok() {
+        return create_provider_by_name("gemini", &config_file, overrides).await;
+    }
+
     // Step 4: Try local Ollama
     if local::LocalProvider::is_available().await {
         return create_provider_by_name("ollama", &config_file, overrides).await;
@@ -166,10 +171,6 @@ pub async fn create_provider_from_config(
 ) -> Result<Box<dyn LLMProvider>, ProviderError> {
     let config_file = Some(config.clone());
 
-    if let Ok(provider_name) = env::var("PROVIDER") {
-        return create_provider_by_name(&provider_name, &config_file, overrides).await;
-    }
-
     if let Some(provider_name) = &config.provider {
         return create_provider_by_name(provider_name, &config_file, overrides).await;
     }
@@ -180,6 +181,10 @@ pub async fn create_provider_from_config(
 
     if env::var("OPENAI_API_KEY").is_ok() {
         return create_provider_by_name("openai", &config_file, overrides).await;
+    }
+
+    if env::var("GEMINI_API_KEY").is_ok() || env::var("GOOGLE_API_KEY").is_ok() {
+        return create_provider_by_name("gemini", &config_file, overrides).await;
     }
 
     if local::LocalProvider::is_available().await {
@@ -243,6 +248,15 @@ async fn create_provider_by_name(
                 .map_err(|_| ProviderError::MissingApiKey("openai".to_string()))?;
             let model = resolve_model("openai", config_file, &overrides);
             Ok(Box::new(openai_sdk::OpenAISdkProvider::new_with_model(
+                key, model,
+            )?))
+        }
+        "gemini" | "google" => {
+            let key = env::var("GEMINI_API_KEY")
+                .or_else(|_| env::var("GOOGLE_API_KEY"))
+                .map_err(|_| ProviderError::MissingApiKey("gemini".to_string()))?;
+            let model = resolve_model("gemini", config_file, &overrides);
+            Ok(Box::new(gemini::GeminiProvider::new_with_model(
                 key, model,
             )?))
         }

@@ -10,7 +10,7 @@
     {
       "name": "looprs-core-types",
       "path": "crates/looprs-core/src/types.rs",
-      "hash": "ee0212fa0fb72c74b4f4b385427f6e7901309bb477221ac8ace03510ab5a5182"
+      "hash": "8af2b071e0f660c30f312b4e0e5c45b88c0025f6e03df55a4beb2736b00e0156"
     },
     {
       "name": "looprs-api",

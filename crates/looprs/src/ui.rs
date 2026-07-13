@@ -116,6 +116,148 @@ pub fn statusline_context(
     )
 }
 
+/// Two-line statusline prompt.
+///
+/// Line 1: `  dir <name> | git <branch> +<ahead> | chg <M>M <U>? | mdl <model> | ctx [████░░] N% Kt/Kt | $ N.NN`
+/// Line 2: `  ❯ `
+pub fn statusline_prompt_statusline(
+    cwd_basename: &str,
+    git: &crate::git_info::GitInfo,
+    model: &str,
+    ctx_tokens: u32,
+    ctx_max: u32,
+    session_cost: f64,
+) -> String {
+    // git segment
+    let git_seg = if let Some(ref branch) = git.branch {
+        let ahead = if git.ahead > 0 {
+            format!(" +{}", git.ahead)
+        } else {
+            String::new()
+        };
+        format!("git {branch}{ahead}")
+    } else {
+        String::new()
+    };
+
+    // changes segment
+    let chg_seg = {
+        let mut parts = Vec::new();
+        if git.modified > 0 {
+            parts.push(format!("{}M", git.modified));
+        }
+        if git.untracked > 0 {
+            parts.push(format!("{}?", git.untracked));
+        }
+        if parts.is_empty() {
+            String::new()
+        } else {
+            format!("chg {}", parts.join(" "))
+        }
+    };
+
+    // model badge — shorten e.g. "claude-sonnet-4-6" → "Sonnet 4.6"
+    let mdl_seg = format!("mdl {}", shorten_model(model));
+
+    // context bar
+    let ctx_seg = if ctx_max > 0 {
+        let pct = (ctx_tokens as f64 / ctx_max as f64).min(1.0);
+        let filled = (pct * 15.0).round() as usize;
+        let bar: String = (0..15)
+            .map(|i| if i < filled { '█' } else { '░' })
+            .collect();
+        let pct_int = (pct * 100.0).round() as u32;
+        let k_used = ctx_tokens / 1000;
+        let k_max = ctx_max / 1000;
+        format!("ctx [{bar}] {pct_int}% {k_used}K/{k_max}K")
+    } else {
+        String::new()
+    };
+
+    // cost
+    let cost_seg = if session_cost > 0.0 {
+        format!("$ {session_cost:.2}")
+    } else {
+        String::new()
+    };
+
+    // assemble non-empty segments
+    let segments: Vec<String> = [
+        Some(format!("dir {cwd_basename}")),
+        if git_seg.is_empty() {
+            None
+        } else {
+            Some(git_seg)
+        },
+        if chg_seg.is_empty() {
+            None
+        } else {
+            Some(chg_seg)
+        },
+        Some(mdl_seg),
+        if ctx_seg.is_empty() {
+            None
+        } else {
+            Some(ctx_seg)
+        },
+        if cost_seg.is_empty() {
+            None
+        } else {
+            Some(cost_seg)
+        },
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+
+    let line1 = format!("  {}", segments.join(" | "));
+    format!("{}\n  {} ", line1.dimmed(), "❯".purple().bold())
+}
+
+fn shorten_model(model: &str) -> String {
+    let m = model.to_lowercase();
+    if m.contains("claude") {
+        // "claude-sonnet-4-6" → "Sonnet 4.6", "claude-opus-4-8" → "Opus 4.8"
+        let family = if m.contains("opus") {
+            "Opus"
+        } else if m.contains("haiku") {
+            "Haiku"
+        } else if m.contains("sonnet") {
+            "Sonnet"
+        } else {
+            "Claude"
+        };
+        // extract trailing version digits e.g. "4-6" → "4.6"
+        let version = model
+            .split('-')
+            .rev()
+            .take(2)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .join(".");
+        format!("{family} {version}")
+    } else if m.starts_with("gemini") {
+        // "gemini-2.0-flash" → "Gemini 2.0 Flash"
+        model
+            .split('-')
+            .map(|s| {
+                let mut c = s.chars();
+                match c.next() {
+                    None => String::new(),
+                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else if m.starts_with("gpt") || m.starts_with("o1") || m.starts_with("o3") {
+        model.to_string()
+    } else {
+        model.to_string()
+    }
+}
+
 pub fn header(provider: &str, model: &str, cwd: &str) {
     // provider/model/cwd are not secrets typically, but treat as untrusted strings.
     let p = sanitize::sanitize_preview_for_console(provider);
@@ -195,6 +337,14 @@ pub fn running_command(command: &str) {
 pub fn output_preview(text: &str) {
     let safe = sanitize::sanitize_preview_for_console(text);
     println!("{safe}");
+}
+
+/// Print raw output preserving ANSI color codes, then return a sanitized
+/// (ANSI-stripped) copy for LLM context injection.
+pub fn output_preview_colored(text: &str) -> String {
+    let truncated = sanitize::truncate_preview(text);
+    println!("{truncated}");
+    sanitize::strip_ansi(&truncated)
 }
 
 pub fn goodbye() {

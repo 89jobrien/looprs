@@ -2,5 +2,5 @@ name: diff
 description: Show unstaged and staged changes
 action:
   type: shell
-  command: git --no-pager diff HEAD
+  command: git --no-pager -c color.ui=always diff HEAD
   inject_output: true
