@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-12
+
+### Added
+
+- BAML inference backend: `BamlProvider` adapter wraps Anthropic, OpenAI, and
+  Ollama behind the existing `InferenceProvider` port. BAML handles retry/fallback
+  transparently; the agent loop is unaware of BAML internals.
+- `baml_src/` BAML sources: `Chat` function, client definitions for all three
+  providers, exponential retry policy, and `DefaultClient` fallback chain.
+- `/model [provider[/model-id]]` REPL command: show or switch provider in-session
+  without restarting. Implemented as native `CommandAction::SwitchProvider`.
+- `.env.nu` loading at startup: walks up from `cwd` to fs root, sources the first
+  `.env.nu` found via `nu --no-config-file`, injects string-typed vars not already
+  set in the process environment.
+- `just install` command: builds and installs the `looprs` binary to `~/.cargo/bin`.
+- `bundled_agents`: reviewer, planner, debugger agent definitions.
+- MCP tool definitions via JSON-RPC `tools/list`.
+- `ObservationManager` persist/load via SQLite.
+- Context compaction via sliding window in `run_turn`.
+- Agent integration test: verifies full run through ports with no real I/O.
+- Miette diagnostics on all error types.
+- IDEAS 1–5 implemented; stubs 6–10 added.
+
+### Changed
+
+- Local provider canonical name: `"local"` → `"ollama"` (old name still accepted).
+- `/help` REPL command updated to list all 9 available commands.
+- `execute_command` arguments grouped into `SessionState` struct (fixes
+  `clippy::too_many_arguments`).
+- Removed `dotenvy` dependency; replaced with nushell-native env loading.
+
+### Fixed
+
+- `SessionStoreBackend`: derive `Default`.
+- `create_provider_from_config` now skips disk I/O for in-session provider
+  switching, fixing a bug where `/model ollama/llama3.2` reported the wrong
+  active provider.
+
 ## [0.1.11] - 2026-02-09
 
 ## [0.1.10] - 2026-02-09
