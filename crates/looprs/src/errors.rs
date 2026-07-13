@@ -73,7 +73,11 @@ pub enum AgentError {
         )
     )]
     Timeout,
-    // TODO(pipeline-activation): add PipelineFailure variant here once pipeline
-    // checks are wired into run_turn(). Should carry a Vec<String> of failed
-    // check names and a structured miette SourceSpan pointing at the offending output.
+
+    #[error("Pipeline checks failed: {0}")]
+    #[diagnostic(
+        code(looprs::agent::pipeline_failure),
+        help("Fix the listed check failures, then re-run. Set pipeline.enabled = false in .looprs/config.json to disable checks.")
+    )]
+    PipelineFailure(String),
 }

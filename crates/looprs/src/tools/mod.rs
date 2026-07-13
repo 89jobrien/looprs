@@ -493,6 +493,76 @@ pub async fn mcp_tool_definitions(server_url: &str) -> anyhow::Result<Vec<ToolDe
     parse_mcp_tools_response(&resp)
 }
 
+/// Execute a named tool on an MCP server at `server_url` via HTTP transport.
+///
+/// Sends a JSON-RPC `tools/call` request with `name` and `arguments`, and
+/// returns the tool result as a String. The caller is responsible for providing
+/// a valid tool name that the server advertises via `mcp_tool_definitions`.
+///
+/// # Errors
+/// Returns an error if the HTTP request fails, the server returns an error
+/// response, or the result cannot be parsed.
+// IDEA(L2): wire McpToolExecutor (an impl of PluginExecutor) that delegates
+// has_tool/execute_tool to an MCP server. This function is the call primitive.
+pub async fn mcp_tool_call(
+    server_url: &str,
+    tool_name: &str,
+    arguments: serde_json::Value,
+) -> anyhow::Result<String> {
+    let client = reqwest::Client::new();
+
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": arguments,
+        }
+    });
+
+    let resp = client
+        .post(server_url)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<serde_json::Value>()
+        .await?;
+
+    // JSON-RPC error
+    if let Some(err) = resp.get("error") {
+        anyhow::bail!("MCP tool call error: {err}");
+    }
+
+    parse_mcp_tool_call_response(&resp)
+}
+
+// Used in tests and by mcp_tool_call above; the function is pub(crate) to avoid the
+// dead_code lint while the McpToolExecutor wiring is pending (IDEA L2).
+fn parse_mcp_tool_call_response(resp: &serde_json::Value) -> anyhow::Result<String> {
+    // MCP tools/call result: { result: { content: [{ type: "text", text: "..." }] } }
+    let content = resp
+        .pointer("/result/content")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| anyhow::anyhow!("MCP call response missing result.content array"))?;
+
+    let text = content
+        .iter()
+        .filter_map(|item| {
+            if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+                item.get("text").and_then(|t| t.as_str()).map(str::to_owned)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Ok(text)
+}
+
 fn parse_mcp_tools_response(resp: &serde_json::Value) -> anyhow::Result<Vec<ToolDefinition>> {
     let tools = resp
         .pointer("/result/tools")
@@ -742,6 +812,27 @@ mod tests {
         let args = serde_json::json!({"cmd": "echo hi"});
         let err = execute_tool("bash", &args, &ctx).unwrap_err();
         assert!(matches!(err, ToolError::ModeDenied { .. }));
+    }
+
+    #[test]
+    fn parse_mcp_tool_call_response_extracts_text() {
+        let resp = serde_json::json!({
+            "result": {
+                "content": [
+                    {"type": "text", "text": "hello"},
+                    {"type": "image", "data": "..."},
+                    {"type": "text", "text": "world"}
+                ]
+            }
+        });
+        let result = super::parse_mcp_tool_call_response(&resp).unwrap();
+        assert_eq!(result, "hello\nworld");
+    }
+
+    #[test]
+    fn parse_mcp_tool_call_response_errors_on_missing_content() {
+        let resp = serde_json::json!({"result": {}});
+        assert!(super::parse_mcp_tool_call_response(&resp).is_err());
     }
 
     #[test]

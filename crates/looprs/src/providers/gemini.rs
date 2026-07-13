@@ -189,4 +189,18 @@ mod tests {
             .expect("GeminiProvider::new must succeed in test");
         assert_inference_provider_contract(&p);
     }
+
+    #[tokio::test]
+    #[ignore = "live: set LOOPRS_RUN_LIVE_LLM_TESTS=1"]
+    async fn live_contract() {
+        if std::env::var("LOOPRS_RUN_LIVE_LLM_TESTS").is_err() {
+            return;
+        }
+        let key = match std::env::var("GEMINI_API_KEY") {
+            Ok(k) => k,
+            Err(_) => return,
+        };
+        let p = GeminiProvider::new(key).expect("GeminiProvider::new must succeed");
+        looprs_core::ports::test_contracts::assert_inference_provider_live_contract(&p).await;
+    }
 }

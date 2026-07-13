@@ -1,0 +1,52 @@
+name: looprs-testing
+description: |
+  Testing patterns for looprs — mock providers, contract tests, proptest
+  invariants, and session store test doubles.
+triggers:
+  - mock provider
+  - proptest
+  - contract test
+  - NullOutput
+  - RecordingOutput
+  - test double
+  - unit test
+  - cargo nextest
+  - assert_inference_provider_contract
+  - assert_user_output_contract
+content: |
+  # looprs Testing Patterns
+
+  ## Running Tests
+  ```
+  cargo nextest run --workspace          # all tests
+  cargo nextest run -p looprs-core       # core only
+  LOOPRS_RUN_LIVE_LLM_TESTS=1 cargo nextest run  # include live LLM tests
+  ```
+
+  ## Mock Provider
+  Agent tests use an inline `MockProvider` that returns scripted responses:
+  ```rust
+  // in agent.rs test module
+  struct MockProvider { response: InferenceResponse }
+  // construct with Agent::new_test_agent(MockProvider { ... })
+  ```
+
+  ## Output Adapters for Tests
+  - `NullOutput` — no-op, suppresses all terminal output
+  - `RecordingOutput` — captures calls for assertion (defined inline in agent.rs tests)
+
+  ## Port Conformance Tests (looprs-core)
+  - `assert_user_output_contract(impl)` — smoke-tests all UserOutput methods
+  - `assert_inference_provider_contract(impl)` — checks name/model/supports_tool_use
+  - `assert_inference_provider_live_contract(impl, rt)` — full round-trip (live, gated)
+  - `assert_session_store_contract(impl)` — log/replay contract
+  - `assert_message_broker_contract(impl)` — publish/subscribe contract
+
+  ## Proptest Usage
+  proptest is in dev-deps. Use `proptest!` macro in `#[cfg(test)]` modules.
+  Active invariants in repl.rs: empty-query-always-matches,
+  prefix-beats-sparse, exact-match-idempotency.
+
+  ## Test Fixtures
+  - `tempfile::TempDir` for isolated file system tests
+  - `Agent::new_with_runtime()` for injecting all ports (provider, output, session_logger)

@@ -236,4 +236,15 @@ mod tests {
             .expect("LocalProvider::new_with_model must succeed in test");
         assert_inference_provider_contract(&p);
     }
+
+    #[tokio::test]
+    #[ignore = "live: set LOOPRS_RUN_LIVE_LLM_TESTS=1"]
+    async fn live_contract() {
+        if std::env::var("LOOPRS_RUN_LIVE_LLM_TESTS").is_err() {
+            return;
+        }
+        let p = LocalProvider::new_with_model(Some(ModelId::new("llama3")))
+            .expect("LocalProvider::new_with_model must succeed");
+        looprs_core::ports::test_contracts::assert_inference_provider_live_contract(&p).await;
+    }
 }

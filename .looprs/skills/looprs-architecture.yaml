@@ -1,0 +1,54 @@
+name: looprs-architecture
+description: |
+  Looprs codebase orientation — hexagonal architecture, crate ownership,
+  port/adapter seams, and registry extension patterns.
+triggers:
+  - hexagonal
+  - hex refactor
+  - port trait
+  - agent loop
+  - registry
+  - looprs-core
+  - InferenceProvider
+  - UserOutput
+  - PluginExecutor
+  - SessionStore
+  - extension point
+content: |
+  # looprs Architecture
+
+  ## Crate Ownership
+  - `looprs-core` — port traits (InferenceProvider, UserOutput, SessionStore,
+    PluginExecutor, MessageBroker) and domain types. No runtime deps.
+  - `looprs` — agent runtime, providers, tools, hooks, skills, pipeline.
+    Imports looprs-core traits and provides adapters.
+  - `looprs-cli` — binary, REPL, CLI arg parsing. Wires adapters into Agent.
+
+  ## Hexagonal Seams (Phase status)
+  - Phase 1 (UserOutput): DONE — Agent holds `Box<dyn UserOutput>`.
+    UiOutput wraps ui::*, NullOutput for tests.
+  - Phase 2 (ToolExecutor): TODO — execute_tool() is still a free function.
+    Port: PluginExecutor. Adapter: PluginsAdapter.
+  - Phase 3 (SessionStore): DONE — Agent holds `Option<Box<dyn SessionStore>>`.
+  - Phase 4 (AgentServices): TODO — depends on phases 1-3.
+
+  ## Extension System (.looprs/ + ~/.looprs/)
+  Repo dir overrides user dir on name collision.
+  | Dir         | Type      | Loaded by          |
+  |-------------|-----------|--------------------|
+  | commands/   | YAML      | CommandRegistry    |
+  | hooks/      | YAML      | HookRegistry       |
+  | skills/     | YAML/MD   | SkillRegistry      |
+  | agents/     | YAML      | AgentRegistry      |
+  | rules/      | Markdown  | RuleRegistry       |
+
+  ## Hook Events (all defined, SessionStart + PostToolUse + UserPromptSubmit active)
+  SessionStart, UserPromptSubmit, InferenceComplete, PreToolUse, PostToolUse,
+  OnError, OnWarning, SessionEnd, DelegationStart, DelegationComplete.
+
+  ## Key Files
+  - crates/looprs/src/agent.rs — Agent struct and run_turn() loop
+  - crates/looprs/src/providers/mod.rs — provider factory, auto-detection
+  - crates/looprs/src/pipeline/mod.rs — PipelineRunner (M1)
+  - crates/looprs-core/src/ports/ — all port trait definitions
+  - crates/looprs/src/adapters/ — UiOutput, PluginsAdapter, RetryProvider

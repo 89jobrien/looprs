@@ -115,3 +115,25 @@ impl InferenceProvider for BamlProvider {
         false
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use looprs_core::ports::test_contracts::assert_inference_provider_contract;
+
+    #[test]
+    fn baml_provider_satisfies_inference_provider_contract() {
+        let p = BamlProvider::new("DefaultClient", ModelId::new("claude-3-5-haiku-20241022"));
+        assert_inference_provider_contract(&p);
+    }
+
+    #[tokio::test]
+    #[ignore = "live: set LOOPRS_RUN_LIVE_LLM_TESTS=1"]
+    async fn live_contract() {
+        if std::env::var("LOOPRS_RUN_LIVE_LLM_TESTS").is_err() {
+            return;
+        }
+        let p = BamlProvider::new("Anthropic", ModelId::new("claude-3-5-haiku-20241022"));
+        looprs_core::ports::test_contracts::assert_inference_provider_live_contract(&p).await;
+    }
+}

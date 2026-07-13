@@ -171,4 +171,18 @@ mod tests {
             .expect("AnthropicProvider::new must succeed in test");
         assert_inference_provider_contract(&p);
     }
+
+    #[tokio::test]
+    #[ignore = "live: set LOOPRS_RUN_LIVE_LLM_TESTS=1"]
+    async fn live_contract() {
+        if std::env::var("LOOPRS_RUN_LIVE_LLM_TESTS").is_err() {
+            return;
+        }
+        let key = match std::env::var("ANTHROPIC_API_KEY") {
+            Ok(k) => k,
+            Err(_) => return,
+        };
+        let p = AnthropicProvider::new(key).expect("AnthropicProvider::new must succeed");
+        looprs_core::ports::test_contracts::assert_inference_provider_live_contract(&p).await;
+    }
 }

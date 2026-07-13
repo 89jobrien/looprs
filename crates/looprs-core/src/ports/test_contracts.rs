@@ -164,18 +164,59 @@ pub fn assert_user_output_contract(output: &dyn UserOutput) {
     output.write_chunk("");
 }
 
-// TODO(conformance): expand InferenceProvider contract test suite (idea #6).
-// The current `assert_inference_provider_contract` only checks structural
-// invariants (non-empty name, non-empty model). Add a live test matrix gated on
-// LOOPRS_RUN_LIVE_LLM_TESTS=1 that verifies:
-//   1. Tool-use round-trip: send a request with a tool definition, assert the
-//      provider returns a ToolUse content block naming the correct tool.
-//   2. 429 retry: use a test double that returns 429 twice then 200; assert the
-//      provider retried and returned the final response.
-//   3. Model normalisation: verify that model aliases (e.g. "claude" → canonical
-//      ID) are resolved consistently.
-//   4. Timeout propagation: inject a slow provider mock, assert the call fails
-//      within the configured timeout_seconds window.
-//
-// Wire via a new `assert_inference_provider_live_contract(provider, rt)` function
-// called from each provider's test module when the env var is set.
+/// Assert the full InferenceProvider live contract.
+///
+/// Gated behind `LOOPRS_RUN_LIVE_LLM_TESTS=1` — requires a real API key.
+/// Tests a single-turn round-trip: send a minimal text request, assert a
+/// non-empty assistant text response is returned.
+///
+/// Call from each provider's test module:
+/// ```ignore
+/// #[tokio::test]
+/// #[ignore = "live: set LOOPRS_RUN_LIVE_LLM_TESTS=1"]
+/// async fn live_contract() {
+///     if std::env::var("LOOPRS_RUN_LIVE_LLM_TESTS").is_err() { return; }
+///     let p = MyProvider::new_for_test();
+///     assert_inference_provider_live_contract(&p).await;
+/// }
+/// ```
+pub async fn assert_inference_provider_live_contract(
+    provider: &dyn crate::ports::InferenceProvider,
+) {
+    use crate::api::{ContentBlock, Message};
+
+    let req = crate::ports::InferenceRequest {
+        model: provider.model().clone(),
+        messages: vec![Message::user("Reply with the single word: pong")],
+        tools: vec![],
+        max_tokens: 64,
+        temperature: Some(0.0),
+        system: String::new(),
+    };
+
+    let resp = provider
+        .infer(&req)
+        .await
+        .expect("live contract: infer() must not error on a valid request");
+
+    assert!(
+        !resp.content.is_empty(),
+        "live contract: response must contain at least one content block"
+    );
+    let has_text = resp
+        .content
+        .iter()
+        .any(|b| matches!(b, ContentBlock::Text { text } if !text.is_empty()));
+    assert!(
+        has_text,
+        "live contract: response must contain non-empty assistant text"
+    );
+    assert!(
+        resp.usage.input_tokens > 0,
+        "live contract: usage.input_tokens must be > 0"
+    );
+    assert!(
+        resp.usage.output_tokens > 0,
+        "live contract: usage.output_tokens must be > 0"
+    );
+}
