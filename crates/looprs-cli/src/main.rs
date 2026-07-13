@@ -26,15 +26,15 @@ use args::CliArgs;
 use cli::{CliCommand, parse_input};
 use repl::{MatchSets, ReplHelper, bind_repl_keys};
 
-/// Load the nearest `.env` file by walking up from `cwd` to the fs root.
-/// Already-set env vars are never overwritten (dotenvy default behaviour).
-/// Silently does nothing if no `.env` is found.
-fn load_dotenv() {
+/// Walk up from `cwd` looking for `.env.nu`; source it via `nu` and inject
+/// any vars it sets that aren't already in the process environment.
+/// Silently no-ops if `nu` is absent or no `.env.nu` is found.
+fn load_nu_env() {
     let mut dir = std::env::current_dir().unwrap_or_default();
     loop {
-        let candidate = dir.join(".env");
+        let candidate = dir.join(".env.nu");
         if candidate.is_file() {
-            let _ = dotenvy::from_path(candidate);
+            apply_nu_env(&candidate);
             return;
         }
         if !dir.pop() {
@@ -43,9 +43,37 @@ fn load_dotenv() {
     }
 }
 
+fn apply_nu_env(path: &std::path::Path) {
+    let script = format!("source '{}'; $env | to json", path.display());
+    let Ok(output) = std::process::Command::new("nu")
+        .args(["--no-config-file", "-c", &script])
+        .output()
+    else {
+        return;
+    };
+    if !output.status.success() {
+        return;
+    }
+    let Ok(text) = std::str::from_utf8(&output.stdout) else {
+        return;
+    };
+    let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(text) else {
+        return;
+    };
+    for (key, val) in map {
+        if std::env::var(&key).is_err()
+            && let Some(s) = val.as_str()
+        {
+            // SAFETY: single-threaded at this point in startup; no other
+            // threads are reading the environment yet.
+            unsafe { std::env::set_var(&key, s) };
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    load_dotenv();
+    load_nu_env();
     let args: Vec<String> = env::args().collect();
     if matches!(args.get(1).map(String::as_str), Some("seed")) {
         let dir_str = args.get(2).map(String::as_str).unwrap_or(".looprs");
