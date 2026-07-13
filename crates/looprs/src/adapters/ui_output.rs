@@ -40,3 +40,15 @@ impl UserOutput for UiOutput {
         ui::tool_err(err_msg);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // IDEA(L1): conformance test — proves UiOutput satisfies the UserOutput contract.
+    // Mirrors the test in terminal_output.rs and null_output.rs.
+    #[test]
+    fn conformance() {
+        looprs_core::ports::test_contracts::assert_user_output_contract(&UiOutput);
+    }
+}

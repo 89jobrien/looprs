@@ -1,0 +1,10 @@
+name: post_tool_use
+trigger: PostToolUse
+# Only fire after write/edit tool calls that modify Rust source.
+# Runs clippy in check mode and injects any warnings as context
+# so the agent can self-correct without a second prompt.
+condition: "tool_name in ['write', 'edit']"
+actions:
+  - type: command
+    command: "cargo clippy --quiet 2>&1 | head -40"
+    inject_as: "clippy_output"

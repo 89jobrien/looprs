@@ -1,0 +1,11 @@
+name: user_prompt_submit
+trigger: UserPromptSubmit
+# Inject lightweight repo context before each LLM call.
+# Keeps the model oriented without requiring a manual /git command.
+actions:
+  - type: command
+    command: "git --no-pager branch --show-current 2>/dev/null"
+    inject_as: "current_branch"
+  - type: command
+    command: "git --no-pager diff --stat HEAD 2>/dev/null | tail -5"
+    inject_as: "working_tree_diff"

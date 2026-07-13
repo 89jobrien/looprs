@@ -405,22 +405,53 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
-    // TODO: add proptest invariants for fuzzy_score, best_match, completion_hint —
-    // monotonicity (longer prefix ≥ shorter), no-empty-miss (empty query always
-    // matches), and best_match idempotency. proptest is already in Cargo.toml.
-    // Stubs below track the three invariants; replace body with proptest! block.
+    // IDEA(Q2): proptest invariants for the three fuzzy-match functions.
 
-    #[test]
-    #[ignore = "stub: implement with proptest! — empty query always matches any candidate"]
-    fn prop_fuzzy_score_empty_query_always_matches() {}
+    proptest! {
+        #[test]
+        fn prop_fuzzy_score_empty_query_always_matches(candidate in "[a-z]{1,20}") {
+            // Empty query matches every candidate (vacuous match).
+            prop_assert!(fuzzy_score("", &candidate).is_some());
+        }
 
-    #[test]
-    #[ignore = "stub: implement with proptest! — prefix score beats sparse interleaved match"]
-    fn prop_fuzzy_score_prefix_beats_sparse() {}
+        #[test]
+        fn prop_fuzzy_score_prefix_beats_sparse(
+            prefix in "[a-z]{2,6}",
+            suffix in "[a-z]{1,6}",
+        ) {
+            // A query that matches as a contiguous prefix should score at
+            // least as high as the same query matched sparsely (prefix chars
+            // interleaved with extra chars in between).
+            let candidate_prefix = format!("{prefix}{suffix}");
+            // Build a sparse candidate: insert 'z' between each prefix char.
+            let sparse: String = prefix.chars().flat_map(|c| [c, 'z']).collect();
+            let sparse_candidate = format!("{sparse}{suffix}");
+            if let (Some(s_prefix), Some(s_sparse)) =
+                (fuzzy_score(&prefix, &candidate_prefix), fuzzy_score(&prefix, &sparse_candidate))
+            {
+                prop_assert!(
+                    s_prefix >= s_sparse,
+                    "prefix score {s_prefix} should be ≥ sparse score {s_sparse}"
+                );
+            }
+        }
 
-    #[test]
-    #[ignore = "stub: implement with proptest! — best_match(x, _, &[x, ...]) == Some(x)"]
-    fn prop_best_match_returns_exact_when_present() {}
+        #[test]
+        fn prop_best_match_returns_exact_when_present(
+            name in "[a-z]{3,10}",
+            extra in "[a-z]{3,10}",
+        ) {
+            prop_assume!(name != extra);
+            let items = vec![
+                format!("/{name}"),
+                format!("/{extra}"),
+            ];
+            // Querying for an exact item name should return that item.
+            let result = best_match(&name, '/', &items);
+            prop_assert!(result.is_some());
+            prop_assert_eq!(result.unwrap(), &format!("/{name}"));
+        }
+    }
 
     // ── fuzzy_score ──────────────────────────────────────────────────────────
 

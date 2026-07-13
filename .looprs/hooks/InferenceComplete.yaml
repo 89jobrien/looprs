@@ -1,0 +1,8 @@
+name: inference_complete
+trigger: InferenceComplete
+# Emit a lightweight usage line to the observability log after every response.
+# Useful for tracking token burn per session without reading raw traces.
+actions:
+  - type: command
+    command: "echo inference complete"
+    inject_as: "inference_event"

@@ -22,10 +22,6 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      # IDEA(Q3): add MSRV verification step here.
-      # rust-version = "1.88" is declared in Cargo.toml but never checked in CI.
-      # Add: dtolnay/rust-toolchain@1.88 + cargo check --workspace
-
       - uses: Swatinem/rust-cache@v2
 
       - name: Install tools
@@ -49,6 +45,20 @@ jobs:
 
       - name: Security & license audit
         run: cargo deny check
+
+  # IDEA(Q3) implemented: verifies rust-version = "1.88" declared in Cargo.toml
+  msrv:
+    name: MSRV (1.88)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.88
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check MSRV
+        run: cargo check --workspace
 
   coverage:
     name: Coverage
