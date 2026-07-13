@@ -621,8 +621,7 @@ impl Agent {
                 && app_cfg.pipeline.enabled
             {
                 let snapshot = self.messages.clone();
-                let report =
-                    crate::pipeline::PipelineRunner::run_checks(&app_cfg.pipeline.checks);
+                let report = crate::pipeline::PipelineRunner::run_checks(&app_cfg.pipeline.checks);
                 let failures: Vec<String> = report
                     .steps
                     .iter()
