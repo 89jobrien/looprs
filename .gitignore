@@ -8,6 +8,8 @@ thoughts/
 docs/
 
 .env
+.env.nu
+.envrc
 .pytest_cache/
 .ruff_cache/
 .venv/

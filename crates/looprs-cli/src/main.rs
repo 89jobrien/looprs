@@ -44,7 +44,11 @@ fn load_nu_env() {
 }
 
 fn apply_nu_env(path: &std::path::Path) {
-    let script = format!("source '{}'; $env | to json", path.display());
+    // Emit string-typed env vars as KEY=VALUE lines — avoids JSON control-char issues.
+    let script = format!(
+        "source '{}'; $env | items {{|k,v| if ($v | describe) == 'string' {{ $\"($k)=($v)\" }} }} | compact | str join (char newline)",
+        path.display()
+    );
     let Ok(output) = std::process::Command::new("nu")
         .args(["--no-config-file", "-c", &script])
         .output()
@@ -57,16 +61,13 @@ fn apply_nu_env(path: &std::path::Path) {
     let Ok(text) = std::str::from_utf8(&output.stdout) else {
         return;
     };
-    let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(text) else {
-        return;
-    };
-    for (key, val) in map {
-        if std::env::var(&key).is_err()
-            && let Some(s) = val.as_str()
+    for line in text.lines() {
+        if let Some((key, val)) = line.split_once('=')
+            && std::env::var(key).is_err()
         {
             // SAFETY: single-threaded at this point in startup; no other
             // threads are reading the environment yet.
-            unsafe { std::env::set_var(&key, s) };
+            unsafe { std::env::set_var(key, val) };
         }
     }
 }
