@@ -251,8 +251,6 @@ fn shorten_model(model: &str) -> String {
             })
             .collect::<Vec<_>>()
             .join(" ")
-    } else if m.starts_with("gpt") || m.starts_with("o1") || m.starts_with("o3") {
-        model.to_string()
     } else {
         model.to_string()
     }
