@@ -14,7 +14,7 @@ use crate::providers::{InferenceRequest, InferenceResponse};
 use crate::rules::RuleRegistry;
 use crate::session_log::SessionEvent;
 use crate::system_monitor::SystemMonitor;
-use crate::tools::{ToolContext, execute_tool, get_tool_definitions};
+use crate::tools::{DefaultToolExecutor, ToolContext, ToolExecutor, get_tool_definitions};
 use std::collections::HashMap;
 use tokio::time::{Duration, timeout};
 
@@ -60,6 +60,7 @@ pub struct Agent {
     pending_metadata: HashMap<String, String>,
     session_logger: Option<Box<dyn SessionStore>>,
     output: Box<dyn UserOutput>,
+    tool_executor: Box<dyn ToolExecutor>,
     models_config: Option<ModelsConfig>,
     system_monitor: SystemMonitor,
     session_input_tokens: u32,
@@ -98,6 +99,7 @@ impl Agent {
             pending_metadata: HashMap::new(),
             session_logger,
             output,
+            tool_executor: Box::new(DefaultToolExecutor),
             models_config: ModelsConfig::load().ok(),
             system_monitor: SystemMonitor::new(),
             session_input_tokens: 0,
@@ -109,6 +111,13 @@ impl Agent {
     /// alternative frontends (GUI, JSON stream, etc.).
     pub fn with_output(mut self, output: Box<dyn UserOutput>) -> Self {
         self.output = output;
+        self
+    }
+
+    /// Replace the tool executor. Inject a stub in tests to avoid real
+    /// filesystem or subprocess side effects.
+    pub fn with_tool_executor(mut self, executor: Box<dyn ToolExecutor>) -> Self {
+        self.tool_executor = executor;
         self
     }
 
@@ -560,7 +569,9 @@ impl Agent {
                     .await;
                 }
 
-                let result = execute_tool(name.as_str(), input, &self.tool_ctx);
+                let result = self
+                    .tool_executor
+                    .execute(name.as_str(), input, &self.tool_ctx);
                 let tool_is_error = result.is_err();
 
                 let raw_content = match result {
@@ -1403,5 +1414,20 @@ actions:
         // Should not panic — verifies the method exists and works
         let ctx = EventContext::new();
         agent.fire_event(Event::SessionStart, &ctx);
+    }
+
+    #[test]
+    fn with_tool_executor_replaces_default() {
+        use crate::tools::executor::StubToolExecutor;
+
+        let provider = MockProvider::simple_text("test");
+        let agent =
+            agent_for_test(provider).with_tool_executor(Box::new(StubToolExecutor::default()));
+
+        // Verify the field was swapped — a second call with the same stub type
+        // should also compile and not panic.
+        let _ = agent.with_tool_executor(Box::new(StubToolExecutor {
+            response: "custom".to_string(),
+        }));
     }
 }

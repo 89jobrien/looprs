@@ -2,11 +2,14 @@ mod availability;
 mod bash;
 mod edit;
 pub mod error;
+pub mod executor;
 mod glob;
 mod grep;
 mod nu;
 mod read;
 mod write;
+
+pub use executor::{DefaultToolExecutor, ToolExecutor};
 
 use serde_json::{Value, json};
 use std::env;
