@@ -74,4 +74,84 @@ impl PipelineRunner {
             success: ok,
         }
     }
+
+    #[cfg(test)]
+    fn run_step_cmd(name: &str, program: &str, args: &[&str]) -> StepResult {
+        let ok = Command::new(program)
+            .args(args)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        StepResult {
+            step: name.to_string(),
+            success: ok,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn all_disabled() -> PipelineChecksConfig {
+        PipelineChecksConfig {
+            run_build: false,
+            run_tests: false,
+            run_lint: false,
+            run_typecheck: false,
+            run_bench: false,
+        }
+    }
+
+    #[test]
+    fn no_steps_when_all_disabled() {
+        let report = PipelineRunner::run_checks(&all_disabled());
+        assert!(
+            report.steps.is_empty(),
+            "expected empty steps, got {:?}",
+            report.steps
+        );
+    }
+
+    #[test]
+    fn typecheck_step_name_and_success() {
+        let cfg = PipelineChecksConfig {
+            run_typecheck: true,
+            ..all_disabled()
+        };
+        let report = PipelineRunner::run_checks(&cfg);
+        assert_eq!(report.steps.len(), 1);
+        assert_eq!(report.steps[0].step, "typecheck");
+        assert!(
+            report.steps[0].success,
+            "cargo check should pass on clean workspace"
+        );
+    }
+
+    #[test]
+    fn step_order_matches_config() {
+        let cfg = PipelineChecksConfig {
+            run_build: true,
+            run_typecheck: true,
+            ..all_disabled()
+        };
+        let report = PipelineRunner::run_checks(&cfg);
+        assert_eq!(report.steps.len(), 2);
+        assert_eq!(report.steps[0].step, "build");
+        assert_eq!(report.steps[1].step, "typecheck");
+    }
+
+    #[test]
+    fn step_failure_recorded() {
+        let result = PipelineRunner::run_step_cmd("probe", "false", &[]);
+        assert_eq!(result.step, "probe");
+        assert!(!result.success, "`false` must produce a failed step");
+    }
+
+    #[test]
+    fn report_tools_and_reward_default() {
+        let report = PipelineRunner::run_checks(&all_disabled());
+        assert!(report.tools.is_empty());
+        assert!(report.reward.is_none());
+    }
 }
