@@ -22,7 +22,7 @@ unwrap_or_default = "allow"
 new_without_default = "allow"
 
 [dependencies]
-looprs-core = { path = "../looprs-core", version = "0.4.0" }
+looprs-core = { path = "../looprs-core", version = "0.5.0" }
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
@@ -50,7 +50,7 @@ walkdir = "2.5"
 baml = "0.219.0"
 
 [dev-dependencies]
-looprs-core = { path = "../looprs-core", version = "0.4.0", features = ["test-contracts"] }
+looprs-core = { path = "../looprs-core", version = "0.5.0", features = ["test-contracts"] }
 tempfile = "3.12"
 criterion = "0.6"
 proptest = "1.4"
