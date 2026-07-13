@@ -1022,8 +1022,14 @@ async fn execute_command(
             command,
             inject_output,
         } => {
-            ui::running_command(command);
-            let output = looprs::shell::run_nu_command(command)?;
+            let args = input
+                .split_whitespace()
+                .skip(1)
+                .collect::<Vec<_>>()
+                .join(" ");
+            let command = command.replace("{args}", &args);
+            ui::running_command(&command);
+            let output = looprs::shell::run_nu_command(&command)?;
 
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);

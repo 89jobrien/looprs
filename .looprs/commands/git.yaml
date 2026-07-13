@@ -1,0 +1,8 @@
+name: git
+description: Show recent git log
+aliases:
+  - log
+action:
+  type: shell
+  command: git --no-pager log --oneline -10
+  inject_output: true

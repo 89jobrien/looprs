@@ -1,0 +1,6 @@
+name: fix
+description: Apply clippy suggestions automatically
+action:
+  type: shell
+  command: cargo clippy --fix --allow-dirty --allow-staged
+  inject_output: true

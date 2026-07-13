@@ -1,0 +1,6 @@
+name: doc
+description: Build and open cargo docs
+action:
+  type: shell
+  command: cargo doc --workspace --no-deps --open
+  inject_output: false

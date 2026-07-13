@@ -1,0 +1,6 @@
+name: check
+description: Run cargo check across the workspace
+action:
+  type: shell
+  command: cargo check --workspace
+  inject_output: true

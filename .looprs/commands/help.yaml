@@ -8,14 +8,21 @@ action:
     Custom commands:
 
     /model [provider[/model]]  Show or switch provider. e.g. /model openai/gpt-4o
-    /refactor                  Refactor code for readability
-    /test                      Run cargo tests (cargo test --lib)
-    /lint                      Run clippy (--all-targets -D warnings)
+    /check                     cargo check --workspace
+    /build                     cargo build --workspace --release
+    /test                      cargo test --lib
+    /lint                      cargo clippy --all-targets -D warnings
+    /fix                       cargo clippy --fix
+    /doc                       cargo doc --open
+    /git (/log)                git log --oneline -10
+    /diff                      git diff HEAD
+    /commit <message>          git add -A && git commit -m <message>
+    /refactor                  Refactor selected code for readability
     /reset-model <name>        Set default model in models.toml
-    /model-status              Show magi model version and training status
-    /score-session [n]         Score last N ollama interactions via OpenAI judge
-    /fine-tune                 Flag current session for magi RL training
-    /outsource                 Show outsource tier provider from models.toml
+    /model-status              Show model version and training status
+    /score-session [n]         Score last N interactions via OpenAI judge
+    /fine-tune                 Flag current session for RL training
+    /outsource                 Re-run last prompt against outsource provider
     /help (/h)                 Show this help
 
     Built-in commands:

@@ -1,0 +1,6 @@
+name: diff
+description: Show unstaged and staged changes
+action:
+  type: shell
+  command: git --no-pager diff HEAD
+  inject_output: true

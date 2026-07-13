@@ -1,0 +1,6 @@
+name: build
+description: Build the workspace in release mode
+action:
+  type: shell
+  command: cargo build --workspace --release
+  inject_output: true
