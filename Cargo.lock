@@ -1783,6 +1783,7 @@ dependencies = [
  "anyhow",
  "colored",
  "dirs",
+ "dotenvy",
  "looprs",
  "miette",
  "proptest",

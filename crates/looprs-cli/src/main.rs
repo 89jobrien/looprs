@@ -26,8 +26,26 @@ use args::CliArgs;
 use cli::{CliCommand, parse_input};
 use repl::{MatchSets, ReplHelper, bind_repl_keys};
 
+/// Load the nearest `.env` file by walking up from `cwd` to the fs root.
+/// Already-set env vars are never overwritten (dotenvy default behaviour).
+/// Silently does nothing if no `.env` is found.
+fn load_dotenv() {
+    let mut dir = std::env::current_dir().unwrap_or_default();
+    loop {
+        let candidate = dir.join(".env");
+        if candidate.is_file() {
+            let _ = dotenvy::from_path(candidate);
+            return;
+        }
+        if !dir.pop() {
+            return;
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    load_dotenv();
     let args: Vec<String> = env::args().collect();
     if matches!(args.get(1).map(String::as_str), Some("seed")) {
         let dir_str = args.get(2).map(String::as_str).unwrap_or(".looprs");
@@ -447,18 +465,24 @@ async fn run_interactive(
                         let cmd_name = parts[0];
 
                         if let Some(cmd) = command_registry.get(cmd_name) {
-                            if let Err(e) = execute_command(
+                            let mut state = SessionState {
+                                provider_config: provider_config.clone(),
+                                provider_name: provider_name.clone(),
+                                model: model.clone(),
+                            };
+                            let result = execute_command(
                                 cmd,
                                 &cmd_input,
                                 &mut agent,
                                 &app_config,
                                 &agent_registry,
-                                &mut provider_config,
-                                &mut provider_name,
-                                &mut model,
+                                &mut state,
                             )
-                            .await
-                            {
+                            .await;
+                            provider_config = state.provider_config;
+                            provider_name = state.provider_name;
+                            model = state.model;
+                            if let Err(e) = result {
                                 ui::error(format!("{} {}", "✗".red().bold(), e.to_string().red()));
                             }
                         } else {
@@ -933,16 +957,23 @@ fn prepare_user_prompt(
 }
 
 /// Execute a custom command
+struct SessionState {
+    provider_config: ProviderConfig,
+    provider_name: String,
+    model: String,
+}
+
 async fn execute_command(
     cmd: &Command,
     input: &str,
     agent: &mut Agent,
     app_config: &AppConfig,
     agent_registry: &AgentRegistry,
-    provider_config: &mut ProviderConfig,
-    provider_name: &mut String,
-    model: &mut String,
+    state: &mut SessionState,
 ) -> Result<()> {
+    let provider_config = &mut state.provider_config;
+    let provider_name = &mut state.provider_name;
+    let model = &mut state.model;
     use looprs::CommandAction;
 
     match &cmd.action {

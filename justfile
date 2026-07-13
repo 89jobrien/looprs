@@ -4,6 +4,10 @@ default:
 build:
 	cargo build --release
 
+# Build and install the looprs binary to ~/.cargo/bin
+install:
+	cargo install --path crates/looprs-cli --locked
+
 check:
 	cargo check
 

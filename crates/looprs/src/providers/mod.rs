@@ -123,9 +123,6 @@ pub(crate) fn convert_to_openai_messages(msg: &crate::api::Message) -> Vec<Value
 pub async fn create_provider_with_overrides(
     overrides: ProviderOverrides,
 ) -> Result<Box<dyn LLMProvider>, ProviderError> {
-    // Load .env file if available
-    let _ = dotenvy::dotenv();
-
     // Load config file if available
     let config_file = crate::config_file::ProviderConfig::load().ok();
 
