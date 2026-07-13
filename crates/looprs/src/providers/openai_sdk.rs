@@ -286,8 +286,7 @@ mod tests {
             Ok(k) => k,
             Err(_) => return,
         };
-        let p =
-            OpenAISdkProvider::new(key).expect("OpenAISdkProvider::new must succeed");
+        let p = OpenAISdkProvider::new(key).expect("OpenAISdkProvider::new must succeed");
         looprs_core::ports::test_contracts::assert_inference_provider_live_contract(&p).await;
     }
 }

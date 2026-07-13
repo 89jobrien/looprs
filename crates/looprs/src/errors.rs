@@ -77,7 +77,9 @@ pub enum AgentError {
     #[error("Pipeline checks failed: {0}")]
     #[diagnostic(
         code(looprs::agent::pipeline_failure),
-        help("Fix the listed check failures, then re-run. Set pipeline.enabled = false in .looprs/config.json to disable checks.")
+        help(
+            "Fix the listed check failures, then re-run. Set pipeline.enabled = false in .looprs/config.json to disable checks."
+        )
     )]
     PipelineFailure(String),
 }

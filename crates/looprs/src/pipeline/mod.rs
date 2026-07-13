@@ -21,7 +21,10 @@ impl PipelineRunner {
         let mut steps = Vec::new();
 
         if cfg.run_build {
-            steps.push(Self::run_step("build", &["build", "--workspace", "--quiet"]));
+            steps.push(Self::run_step(
+                "build",
+                &["build", "--workspace", "--quiet"],
+            ));
         }
         if cfg.run_lint {
             steps.push(Self::run_step(
@@ -47,7 +50,10 @@ impl PipelineRunner {
             });
         }
         if cfg.run_typecheck {
-            steps.push(Self::run_step("typecheck", &["check", "--workspace", "--quiet"]));
+            steps.push(Self::run_step(
+                "typecheck",
+                &["check", "--workspace", "--quiet"],
+            ));
         }
 
         PipelineReport {

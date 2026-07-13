@@ -17,7 +17,6 @@ use crate::system_monitor::SystemMonitor;
 use crate::tools::{ToolContext, execute_tool, get_tool_definitions};
 use std::collections::HashMap;
 use tokio::time::{Duration, timeout};
-use dirs;
 
 const TOOL_PREVIEW_LEN: usize = 60;
 const ON_REPEAT_THRESHOLD: usize = 3;
@@ -301,18 +300,15 @@ impl Agent {
 
         // M3: inject pipeline compaction context (diff, recent files, globs)
         #[cfg(not(test))]
+        if let Ok(app_cfg) = crate::app_config::AppConfig::load()
+            && let Ok(compacted) = crate::pipeline::context_compact::compact_context(
+                std::path::Path::new("."),
+                &app_cfg.pipeline.compaction,
+            )
+            && !compacted.text.is_empty()
         {
-            if let Ok(app_cfg) = crate::app_config::AppConfig::load() {
-                if let Ok(compacted) = crate::pipeline::context_compact::compact_context(
-                    std::path::Path::new("."),
-                    &app_cfg.pipeline.compaction,
-                ) {
-                    if !compacted.text.is_empty() {
-                        system_prompt.push_str("\n\n## Repo Context\n");
-                        system_prompt.push_str(&compacted.text);
-                    }
-                }
-            }
+            system_prompt.push_str("\n\n## Repo Context\n");
+            system_prompt.push_str(&compacted.text);
         }
 
         system_prompt
@@ -621,25 +617,25 @@ impl Agent {
             self.messages.push(Message::tool_results(tool_results));
 
             // M1: pipeline self-check after successful tool-use round-trip
-            if let Ok(app_cfg) = crate::app_config::AppConfig::load() {
-                if app_cfg.pipeline.enabled {
-                    let snapshot = self.messages.clone();
-                    let report =
-                        crate::pipeline::PipelineRunner::run_checks(&app_cfg.pipeline.checks);
-                    let failures: Vec<String> = report
-                        .steps
-                        .iter()
-                        .filter(|s| !s.success)
-                        .map(|s| s.step.clone())
-                        .collect();
-                    if !failures.is_empty() {
-                        if app_cfg.pipeline.auto_revert {
-                            self.messages = snapshot;
-                        }
-                        return Err(crate::errors::AgentError::PipelineFailure(
-                            failures.join(", "),
-                        ));
+            if let Ok(app_cfg) = crate::app_config::AppConfig::load()
+                && app_cfg.pipeline.enabled
+            {
+                let snapshot = self.messages.clone();
+                let report =
+                    crate::pipeline::PipelineRunner::run_checks(&app_cfg.pipeline.checks);
+                let failures: Vec<String> = report
+                    .steps
+                    .iter()
+                    .filter(|s| !s.success)
+                    .map(|s| s.step.clone())
+                    .collect();
+                if !failures.is_empty() {
+                    if app_cfg.pipeline.auto_revert {
+                        self.messages = snapshot;
                     }
+                    return Err(crate::errors::AgentError::PipelineFailure(
+                        failures.join(", "),
+                    ));
                 }
             }
         }

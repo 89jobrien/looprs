@@ -504,6 +504,7 @@ pub async fn mcp_tool_definitions(server_url: &str) -> anyhow::Result<Vec<ToolDe
 /// response, or the result cannot be parsed.
 // IDEA(L2): wire McpToolExecutor (an impl of PluginExecutor) that delegates
 // has_tool/execute_tool to an MCP server. This function is the call primitive.
+#[allow(dead_code)]
 pub async fn mcp_tool_call(
     server_url: &str,
     tool_name: &str,
@@ -539,8 +540,6 @@ pub async fn mcp_tool_call(
     parse_mcp_tool_call_response(&resp)
 }
 
-// Used in tests and by mcp_tool_call above; the function is pub(crate) to avoid the
-// dead_code lint while the McpToolExecutor wiring is pending (IDEA L2).
 fn parse_mcp_tool_call_response(resp: &serde_json::Value) -> anyhow::Result<String> {
     // MCP tools/call result: { result: { content: [{ type: "text", text: "..." }] } }
     let content = resp
