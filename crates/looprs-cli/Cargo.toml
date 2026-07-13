@@ -15,15 +15,15 @@ name = "looprs"
 path = "src/main.rs"
 
 [dependencies]
-looprs = { path = "../looprs", version = "0.5.0" }
-anyhow = "1.0"
-colored = "2.1"
-dirs = "5"
-miette = { version = "7", features = ["fancy"] }
+anyhow = { workspace = true } #unified
+colored = { workspace = true } #unified
+dirs = { workspace = true } #unified
+looprs = { workspace = true } #unified
+miette = { workspace = true } #unified
 rustyline = { version = "14.0", features = ["custom-bindings"] }
-tokio = { version = "1.38", features = ["macros", "rt-multi-thread"] }
-serde_json = "1.0"
+serde_json = { workspace = true } #unified
+tokio = { workspace = true, features = ["sync"] } #unified
 
 [dev-dependencies]
-tempfile = "3.12"
-proptest = "1"
+proptest = { workspace = true } #unified
+tempfile = { workspace = true } #unified

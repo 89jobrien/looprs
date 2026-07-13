@@ -32,6 +32,9 @@ jobs:
       - name: Install taskit + cargo-rail
         run: cargo install taskit cargo-rail
 
+      - name: Plan (surface visibility)
+        run: cargo rail graph --since HEAD~1 || true
+
       - name: Run CI
         run: cargo rail run --workflow ci --all
 

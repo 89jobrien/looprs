@@ -11,17 +11,17 @@ documentation.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { workspace = true } #unified
 async-trait = "0.1"
-chrono = { version = "0.4", features = ["serde"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tokio = { version = "1.38", features = ["sync"] }
-uuid = { version = "1", features = ["v4"] }
+chrono = { workspace = true } #unified
+serde = { workspace = true } #unified
+serde_json = { workspace = true } #unified
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] } #unified
+uuid = { workspace = true } #unified
 
 [features]
 test-contracts = []
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true } #unified
 

@@ -1,105 +1,109 @@
-# cargo-rail configuration
-# Documentation: https://github.com/loadingalias/cargo-rail
-
-# targets = []  # optional: set for multi-target validation; `cargo rail init` can auto-detect from *.toml and .github/workflows
+targets = []
 
 [unify]
 include_paths = true
 include_renamed = false
-
-pin_transitives = false  # enable for hakari/workspace-hack users
-transitive_host = "root"  # only used if pin_transitives = true
-
+pin_transitives = false
+transitive_host = "root"
+exclude = []
+include = []
+max_backups = 3
+msrv = true
+enforce_msrv_inheritance = false
+msrv_source = "max"
+prune_dead_features = true
+preserve_features = []
 strict_version_compat = true
 exact_pin_handling = "warn"
-major_version_conflict = "warn"  # warn = skip, bump = force highest
-
-msrv = true
-msrv_source = "max"  # deps | workspace | max
-enforce_msrv_inheritance = false  # Ensure members inherit workspace rust-version
-
+major_version_conflict = "warn"
 detect_unused = true
-compiler_diag_cache = true  # reuse rustc diagnostics across runs
-remove_unused = true  # requires detect_unused = true
-
-prune_dead_features = true
-preserve_features = []  # glob patterns to keep from pruning
+compiler_diag_cache = true
+remove_unused = true
 detect_undeclared_features = true
-fix_undeclared_features = true  # requires detect_undeclared_features = true
+fix_undeclared_features = true
 skip_undeclared_patterns = [
-  "default",
-  "std",
-  "alloc",
-  "*_backend",
-  "*_impl",
+    "default",
+    "std",
+    "alloc",
+    "*_backend",
+    "*_impl",
 ]
-
-exclude = []  # excluding one workspace member excludes its whole member cohort
-include = []  # workspace-member cohorts are auto-included
-max_backups = 3
-sort_dependencies = true  # false to preserve existing order
-
+sort_dependencies = true
 
 [release]
 tag_prefix = "v"
-tag_format = "{crate}-{prefix}{version}"  # e.g. my-crate-v1.0.0 (with tag_prefix = "v")
+tag_format = "{crate}-{prefix}{version}"
 require_clean = true
-publish_delay = 5  # seconds between publishes
-create_github_release = false
-sign_tags = false
+publish_delay = 5
+create_github_release = true
+sign_tags = true
 changelog_path = "CHANGELOG.md"
-changelog_relative_to = "crate"  # crate = per-crate, workspace = single file
+changelog_relative_to = "crate"
 skip_changelog_for = []
 require_changelog_entries = false
-require_release_notes = true  # fail if target version lacks release notes
-
+require_release_notes = true
 
 [change-detection]
-# Paths that trigger full workspace rebuild
 infrastructure = [
-  ".github/**",
-  ".devcontainer/**",
-  ".config/rail.toml",
-  "taskit.toml",
-  "taskit-protocol.lock",
-  "deny.toml",
-  "*.sh",
-  "Makefile",
-  "makefile",
-  "GNUmakefile",
-  ".pre-commit-config.yaml",
-  "cliff.toml",
-  "release.toml",
-  "release-plz.toml",
+    ".github/**",
+    ".devcontainer/**",
+    ".config/rail.toml",
+    "taskit.toml",
+    "taskit-protocol.lock",
+    "deny.toml",
+    "*.sh",
+    "Makefile",
+    "makefile",
+    "GNUmakefile",
+    ".pre-commit-config.yaml",
+    "cliff.toml",
+    "release.toml",
+    "release-plz.toml",
 ]
 conservative_unclassified_owner_fallback = true
 confidence_profile = "balanced"
-bot_pr_confidence_profile = "strict"  # optional bot PR override
+bot_pr_confidence_profile = "strict"
 
+[change-detection.custom]
 
 [run]
 default_profile = "local"
 
-[run.workflow]
-ci = "ci"
-coverage = "coverage"
-
 [run.profile.local]
-surfaces = ["build", "test"]
+surfaces = [
+    "build",
+    "test",
+]
+run_args = []
 merge_base = true
 
 [run.profile.ci]
-surfaces = ["build", "test", "docs"]
-run_args = ["--all-targets", "--all-features"]
+surfaces = [
+    "build",
+    "test",
+    "docs",
+]
+run_args = [
+    "--all-targets",
+    "--all-features",
+]
 
 [run.profile.coverage]
 surfaces = ["test"]
 run_args = ["--all-features"]
 
+[run.workflow]
+ci = "ci"
+coverage = "coverage"
 
-# Per-crate configuration: run 'cargo rail split init <crate>' to generate
-# [crates.my-crate.split]
-# remote = "git@github.com:org/my-crate.git"
-# branch = "main"
-# mode = "single"
-# paths = [{ crate = "crates/my-crate" }]
+[crates.xtask.release]
+publish = false
+
+[crates.looprs-cli.release]
+publish = true
+
+[crates.looprs.release]
+publish = true
+
+[crates.looprs-core.release]
+publish = true
