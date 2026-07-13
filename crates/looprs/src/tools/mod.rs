@@ -446,7 +446,7 @@ fn enforce_fs_mode(tool: Tool, args: &Value, ctx: &ToolContext) -> Result<(), To
     }
 }
 
-// TODO: route tool dispatch through PluginExecutor port (hex refactor Phase 2)
+// IDEA(L2) / TODO: route tool dispatch through PluginExecutor port (hex refactor Phase 2)
 // — agent.rs calls this free function directly, bypassing the port. Inject a
 // Box<dyn PluginExecutor> into Agent and delegate here so tool interception
 // (logging, sandboxing, mocking in tests) works without touching agent internals.

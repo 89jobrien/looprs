@@ -1,5 +1,9 @@
 # Hooks
 
+<!-- IDEA(Q5): add UserPromptSubmit.yaml to inject repo-specific context before
+every LLM call (branch, overdue todos, etc.). The event fires before inference
+and the executor supports inject_as context keys. -->
+
 Repo-level hooks loaded from `.looprs/hooks/*.yaml`. Repo hooks override user hooks with the same name.
 
 ## Hooks in this repo

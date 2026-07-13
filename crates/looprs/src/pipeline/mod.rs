@@ -2,7 +2,7 @@ pub mod context_compact;
 pub mod logging;
 pub mod types;
 
-// TODO(pipeline-activation): activate the self-improvement pipeline (idea #10).
+// IDEA(M1) / TODO(pipeline-activation): activate the self-improvement pipeline (idea #10).
 //
 // `PipelineConfig.enabled` is false and `PipelineChecksConfig` has all flags
 // false. Steps to activate:

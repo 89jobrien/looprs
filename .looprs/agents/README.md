@@ -1,3 +1,7 @@
+<!-- IDEA(Q4): deploy planner.yaml and reviewer.yaml here. The AgentRegistry is
+fully wired and config.json has delegate_by_default: true and max_parallel: 3,
+but .looprs/agents/ has no YAML files. Start with 2-3 role definitions. -->
+
 # Agents
 
 This repo does not currently define any agent YAML files under `.looprs/agents/` beyond this README.

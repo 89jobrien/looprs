@@ -3,6 +3,11 @@
 //! Each function asserts the semantic contract a trait promises. Call these
 //! from any adapter's `#[cfg(test)]` module to prove the impl is correct.
 
+// IDEA(M2): run assert_inference_provider_contract() against all 7 provider
+// implementations (anthropic, openai, gemini, local, anthropic-sdk, openai-sdk, baml).
+// The function skeleton exists in this file but only covers MessageBroker and SessionStore.
+// Add a parallel suite for InferenceProvider (single-turn, tool-call, multi-turn).
+
 use crate::ports::message_broker::{Message, MessageBroker};
 use crate::ports::session_store::{SessionEvent, SessionStore};
 use crate::ports::user_output::UserOutput;

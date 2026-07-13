@@ -1,5 +1,10 @@
 # Skills
 
+<!-- IDEA(M4): deploy looprs-specific skills. Two high-value targets:
+- `looprs-architecture` — triggers on "hexagonal", "port", "agent loop", "registry"
+- `looprs-testing` — triggers on "mock provider", "proptest", "contract test"
+Examples live in examples/; copy one and adapt. -->
+
 This repo contains **example** skills under `.looprs/skills/examples/`. They demonstrate the Anthropic Agent Skills layout used by looprs.
 
 ## Structure (this repo)

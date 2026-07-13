@@ -9,6 +9,12 @@ use std::process::Command;
 use std::time::UNIX_EPOCH;
 use walkdir::WalkDir;
 
+// IDEA(M3): compact_context() is implemented but never called from agent.rs.
+// config.json has a `compaction` section (top_k, include_diff, include_recent,
+// include_globs). Wire: after Agent::compact_messages() in run_turn(), check
+// config.pipeline.compaction and call compact_context() to enrich the window
+// with repo-diff context before re-injection.
+
 const MAX_FILE_BYTES: u64 = 64 * 1024;
 
 #[derive(Debug, Clone, Default)]

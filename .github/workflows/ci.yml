@@ -22,6 +22,10 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      # IDEA(Q3): add MSRV verification step here.
+      # rust-version = "1.88" is declared in Cargo.toml but never checked in CI.
+      # Add: dtolnay/rust-toolchain@1.88 + cargo check --workspace
+
       - uses: Swatinem/rust-cache@v2
 
       - name: Install tools
@@ -37,6 +41,11 @@ jobs:
 
       - name: Run CI
         run: cargo rail run --workflow ci --all
+
+      # IDEA(M5): add a named integration-test step here.
+      # tests/ has 309 LOC (cli_smoke, model_precedence, session_log, models_config)
+      # but CI runs them implicitly via --workspace. Gate them explicitly with
+      # `cargo nextest run --test-threads=1 --test '*'` so failures are visible.
 
       - name: Security & license audit
         run: cargo deny check

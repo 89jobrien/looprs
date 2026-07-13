@@ -1,6 +1,6 @@
 //! UserOutput port — abstraction over user-facing terminal/UI output.
 
-// TODO: hex refactor Phase 1 — Agent currently calls ui::* static functions
+// IDEA(L1) / TODO: hex refactor Phase 1 — Agent currently calls ui::* static functions
 // directly. Replace with this port. Wire the terminal adapter in looprs-cli;
 // inject NullOutput in tests.
 

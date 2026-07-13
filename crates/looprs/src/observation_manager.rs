@@ -13,6 +13,10 @@ pub struct ObservationManager {
 }
 
 impl ObservationManager {
+    // IDEA(L3): persist() exists but is never called automatically. Wire a
+    // SessionEnd hook or an atexit flush so observations survive across sessions.
+    // This enables cross-session reward modeling for the magi fine-tuning pipeline.
+
     /// Persist all observations to a SQLite database at `path`.
     pub fn persist(&self, path: &std::path::Path) -> anyhow::Result<()> {
         let conn = rusqlite::Connection::open(path)?;
