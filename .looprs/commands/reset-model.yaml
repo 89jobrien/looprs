@@ -2,40 +2,5 @@ name: reset-model
 description: "Revert models.toml default model. Usage: /reset-model <model-name>"
 action:
   type: shell
-  command: |
-    python3 - {args} << 'EOF'
-    import sys, os, re
-    args = sys.argv[1:]
-    if not args:
-        print("Usage: /reset-model <model-name>  e.g. /reset-model magistral-small-2506")
-        sys.exit(1)
-    target = args[0].strip()
-    if not re.match(r'^[a-zA-Z0-9._:/-]+$', target):
-        print(f"Invalid model name: {target!r}")
-        sys.exit(1)
-    cfg_path = os.path.expanduser("~/.looprs/models.toml")
-    if not os.path.exists(cfg_path):
-        print(f"models.toml not found at {cfg_path}")
-        sys.exit(1)
-    with open(cfg_path) as f:
-        content = f.read()
-    # Split on section headers, patch only the [default] section
-    sections = re.split(r'(?m)^(\[[^\]]+\])', content)
-    patched = []
-    in_default = False
-    for part in sections:
-        if part == '[default]':
-            in_default = True
-            patched.append(part)
-        elif re.match(r'^\[', part):
-            in_default = False
-            patched.append(part)
-        elif in_default:
-            patched.append(re.sub(r'(?m)^(model\s*=\s*)["\'].*?["\']', lambda m: m.group(1) + f'"{target}"', part))
-        else:
-            patched.append(part)
-    with open(cfg_path, "w") as f:
-        f.write(''.join(patched))
-    print(f"Default model reset to: {target}")
-    EOF
+  command: rust-script ~/.looprs/scripts/reset-model.rs {args}
   inject_output: true

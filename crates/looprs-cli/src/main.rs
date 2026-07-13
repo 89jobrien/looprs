@@ -1141,6 +1141,31 @@ async fn execute_command(
                 }
             }
         }
+        CommandAction::Outsource => {
+            let cfg_path = dirs::home_dir()
+                .unwrap_or_default()
+                .join(".looprs/models.toml");
+            match std::fs::read_to_string(&cfg_path) {
+                Ok(raw) => {
+                    let val: toml::Value = toml::from_str(&raw).unwrap_or(toml::Value::Table(Default::default()));
+                    let provider = val
+                        .get("tiers")
+                        .and_then(|t| t.get("outsource"))
+                        .and_then(|o| o.get("provider"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
+                    let model = val
+                        .get("tiers")
+                        .and_then(|t| t.get("outsource"))
+                        .and_then(|o| o.get("model"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
+                    ui::info(format!("Routing to outsource provider: {provider} / {model}"));
+                    ui::info("Note: this interaction will NOT be fed to magi training.");
+                }
+                Err(_) => ui::warn("models.toml not found at ~/.looprs/models.toml"),
+            }
+        }
     }
 
     Ok(())

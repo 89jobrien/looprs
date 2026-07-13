@@ -35,6 +35,9 @@ pub enum CommandAction {
     /// Args from the command input are parsed as "provider" or "provider/model-id".
     #[serde(rename = "switch_provider")]
     SwitchProvider,
+    /// Print the outsource provider/model from ~/.looprs/models.toml.
+    #[serde(rename = "outsource")]
+    Outsource,
 }
 
 /// Registry of custom commands

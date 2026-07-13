@@ -2,5 +2,5 @@ name: commit
 description: "Stage all changes and commit. Usage: /commit <message>"
 action:
   type: shell
-  command: "git add -A && git commit -m \"{args}\""
+  command: "git add -A; git commit -m \"{args}\""
   inject_output: true
