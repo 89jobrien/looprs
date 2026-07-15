@@ -4,6 +4,7 @@
 //! for backwards compatibility. Adapters that depend on looprs internals
 //! (`PluginsAdapter`, `RetryProvider`) remain in this module.
 
+pub mod mcp_executor;
 pub mod plugin_executor;
 pub mod retry_provider;
 pub mod sqlite_session_store;
@@ -14,6 +15,7 @@ pub use looprs_core::adapters::ChannelBroker;
 pub use looprs_core::adapters::FsSessionStore;
 pub use looprs_core::adapters::NullOutput;
 pub use looprs_core::adapters::TerminalOutput;
+pub use mcp_executor::McpToolExecutor;
 pub use plugin_executor::PluginsAdapter;
 pub use retry_provider::RetryProvider;
 pub use sqlite_session_store::SqliteSessionStore;
