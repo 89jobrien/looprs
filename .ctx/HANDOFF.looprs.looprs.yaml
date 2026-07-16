@@ -1,18 +1,58 @@
 project: looprs
 id: looprs
-updated: 2026-07-15
+updated: 2026-07-16
 items:
-- id: uncommitted-work
+- id: hex-phase-3
   doob_uuid: null
-  name: uncommitted-work
-  priority: P1
+  name: hex-phase-3
+  priority: P2
   status: open
-  title: Uncommitted changes (1 file)
-  description: |-
-    Working tree has uncommitted changes:
-    crates/looprs/src/agent.rs
+  title: 'Hex Phase 3: inject SessionStore construction out of Agent'
+  description: |
+    Agent constructs its own SessionStore internally. Phase 3 moves this to
+    the composition root (looprs-cli/main.rs) so the store is injected.
+    SQLite and Fs backends already exist; the factory fn default_session_store()
+    is in adapters/mod.rs. new_with_runtime() already accepts
+    Option<Box<dyn SessionStore>>, so the wiring is the main remaining gap.
+    See TODO in crates/looprs-core/src/ports/session_store.rs.
   files:
   - crates/looprs/src/agent.rs
+  - crates/looprs/src/adapters/mod.rs
+  - crates/looprs-cli/src/main.rs
+  completed: null
+  extra: []
+- id: streaming-openai
+  doob_uuid: null
+  name: streaming-openai
+  priority: P3
+  status: open
+  title: Extend real SSE streaming to openai.rs and openai_sdk.rs
+  description: |
+    AnthropicProvider has real infer_stream() via reqwest SSE.
+    OpenAIProvider and OpenAISdkProvider still use the default single-chunk
+    fallback. OpenAI SSE format: data: {"choices":[{"delta":{"content":"..."}}]}.
+    async-openai SDK exposes create_stream() on chat completions.
+  files:
+  - crates/looprs/src/providers/openai.rs
+  - crates/looprs/src/providers/openai_sdk.rs
+  completed: null
+  extra: []
+- id: parallel-dispatch
+  doob_uuid: null
+  name: parallel-dispatch
+  priority: P3
+  status: open
+  title: Parallel tool dispatch via tokio::task::JoinSet
+  description: |
+    run_turn() dispatches tool calls sequentially. When the LLM emits multiple
+    independent tool_use blocks in one response, they could be dispatched in
+    parallel. AgentsConfig.max_parallel is loaded (default 3). Guard with
+    agents.orchestration = "parallel" config flag; keep sequential as default.
+    Blocked on: stable AgentBuilder and AgentRuntime Clone impls.
+    See TODO comment in agent.rs around line 370.
+  files:
+  - crates/looprs/src/agent.rs
+  - crates/looprs/src/app_config.rs
   completed: null
   extra: []
 log:
@@ -33,6 +73,30 @@ log:
     global pre-commit hook.
   commits: []
   session: 1
+- date: 2026-07-16
+  summary: |
+    Session: pipeline activation, Hex Phase 2, McpToolExecutor, streaming.
+    Completed:
+    - Pipeline enabled (run_build+run_lint) in .looprs/config.json; 5 unit
+      tests for PipelineRunner covering empty-config, step names, ordering,
+      failure path, default report fields.
+    - Hex Phase 2: ToolExecutor port (tools/executor.rs) injected into Agent;
+      DefaultToolExecutor wraps execute_tool free fn; StubToolExecutor for
+      tests; with_tool_executor() builder; 1 test.
+    - McpToolExecutor: implements ToolExecutor over HTTP/JSON-RPC; with_fallback()
+      variant; 2 tests (fallback-on-error, error-without-fallback).
+    - Streaming: InferStream type alias + default infer_stream() on
+      InferenceProvider (wraps infer → single chunk); AnthropicProvider real
+      SSE via reqwest bytes_stream() + content_block_delta parsing;
+      Agent::run_turn_streaming() implemented; 1 test.
+    - Stale IDEA/TODO comment cleanup across 6 files.
+    - All 409 tests passing; pre-commit and pre-push gates clean.
+  commits:
+  - !Sha 97d9800
+  - !Sha 56c381b
+  - !Sha '6748888'
+  - !Sha d285876
+  - !Sha a90a5cd
 - date: 2026-07-08
   summary: |
     Dynamic statusline prompt + per-turn context injection for agent UX improvements.
@@ -54,75 +118,6 @@ log:
     to ../looprs; looprs-core dev-dep duplicate removed. Bumped to v0.3.1.
   commits: []
   session: 4
-- date: 2026-05-08
-  summary: session closed
-  commits: []
-- date: 2026-05-08
-  summary: session closed
-  commits: []
-- date: 2026-05-08
-  summary: session closed
-  commits: []
-- date: 2026-05-08
-  summary: session closed
-  commits: []
-- date: 2026-05-08
-  summary: session closed
-  commits: []
-- date: 2026-05-08
-  summary: session closed
-  commits: []
-- date: 2026-05-08
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
-- date: 2026-05-07
-  summary: session closed
-  commits: []
 - date: 2026-05-07
   summary: |
     Completed hexagonal refactor: HX-003 (Agent wired through UserOutput port — UiOutput
