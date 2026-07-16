@@ -468,6 +468,7 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
 /// Sends a JSON-RPC `tools/list` request and maps each MCP tool into a
 /// `ToolDefinition`. The caller is responsible for merging the result into
 /// `get_tool_definitions()` so the LLM sees external tools alongside builtins.
+#[allow(dead_code)]
 pub async fn mcp_tool_definitions(server_url: &str) -> anyhow::Result<Vec<ToolDefinition>> {
     let client = reqwest::Client::new();
 
@@ -557,6 +558,7 @@ fn parse_mcp_tool_call_response(resp: &serde_json::Value) -> anyhow::Result<Stri
     Ok(text)
 }
 
+#[allow(dead_code)]
 fn parse_mcp_tools_response(resp: &serde_json::Value) -> anyhow::Result<Vec<ToolDefinition>> {
     let tools = resp
         .pointer("/result/tools")

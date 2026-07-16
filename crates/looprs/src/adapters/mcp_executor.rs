@@ -36,7 +36,7 @@ impl McpToolExecutor {
 
     fn try_mcp(&self, name: &str, args: &Value) -> Result<String, anyhow::Error> {
         let rt = tokio::runtime::Handle::try_current()
-            .map(|h| Either::Handle(h))
+            .map(Either::Handle)
             .unwrap_or_else(|_| Either::Runtime(tokio::runtime::Runtime::new().unwrap()));
 
         let url = self.server_url.clone();
