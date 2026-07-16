@@ -14,7 +14,9 @@ pub mod user_output;
 pub mod test_contracts;
 
 // Re-export all port traits and the Message domain type.
-pub use inference_provider::{InferenceProvider, InferenceRequest, InferenceResponse, Usage};
+pub use inference_provider::{
+    InferStream, InferenceProvider, InferenceRequest, InferenceResponse, Usage,
+};
 pub use message_broker::{Message, MessageBroker};
 pub use observation_store::ObservationStore;
 pub use plugin_executor::PluginExecutor;

@@ -344,27 +344,63 @@ impl Agent {
         }
     }
 
-    // TODO(streaming): implement streaming output (idea #5).
-    // Both claudius and async-openai expose a streaming variant:
-    //   anthropic-sdk: client.messages.stream(req) → Stream<MessageStreamEvent>
-    //   async-openai:  client.chat().create_stream(req) → Stream<ChatCompletionChunk>
-    //
-    // Implementation plan:
-    //   1. Add `infer_stream` to `InferenceProvider` returning a
-    //      `Pin<Box<dyn Stream<Item = Result<String, _>> + Send>>`.
-    //   2. Implement it in each provider by mapping SDK stream events to text chunks.
-    //   3. In `run_turn_streaming`, drive the stream, calling
-    //      `self.runtime.output.write_chunk(chunk)` per token (requires hex
-    //      refactor Phase 1 so `runtime.output` holds a `Box<dyn UserOutput>`).
-    //   4. Accumulate chunks into a full `ContentBlock::Text` for tool-use parsing
-    //      and observation capture after the stream ends.
-    //
-    // Blocked by: hex refactor Phase 1 (UserOutput injection into Agent).
+    /// Single-turn streaming inference.
+    ///
+    /// Drives `provider.infer_stream()`, emitting each text chunk via
+    /// `output.write_chunk()`. When stop_reason is `tool_use` the accumulated
+    /// response is re-parsed and tool calls are executed identically to
+    /// `run_turn()`. Subsequent turns after tool execution run non-streaming
+    /// (the provider accumulates those as a single response).
     pub async fn run_turn_streaming(&mut self) -> Result<(), AgentError> {
-        unimplemented!(
-            "streaming inference — add infer_stream() to InferenceProvider, \
-             inject UserOutput port (Phase 1), drive write_chunk() per token"
-        )
+        use futures::StreamExt as _;
+
+        let enriched_ctx = EventContext::new();
+        let system_prompt = self.build_system_prompt(&enriched_ctx);
+
+        let mut max_tokens = self.provider.model().max_tokens();
+        if let Some(ov) = self.runtime.max_tokens_override {
+            max_tokens = max_tokens.min(ov);
+        }
+        if let Some(max_ctx) = self.runtime.defaults.max_context_tokens {
+            max_tokens = max_tokens.min(max_ctx);
+        }
+        let messages = if let Some(max_ctx) = self.runtime.defaults.max_context_tokens {
+            compact_messages(&self.messages, max_ctx as usize)
+        } else {
+            self.messages.clone()
+        };
+        let req = InferenceRequest {
+            model: self.provider.model().clone(),
+            messages,
+            tools: get_tool_definitions(),
+            max_tokens,
+            temperature: self.runtime.defaults.temperature,
+            system: system_prompt,
+        };
+
+        // Stream text chunks to the output port, accumulate full text.
+        let mut stream = self.provider.infer_stream(&req).await;
+        let mut accumulated = String::new();
+        while let Some(chunk) = stream.next().await {
+            match chunk {
+                Ok(text) => {
+                    self.output.write_chunk(&text);
+                    accumulated.push_str(&text);
+                }
+                Err(e) => return Err(AgentError::Inference(e.to_string())),
+            }
+        }
+
+        // Push accumulated text as an assistant message, then let run_turn()
+        // handle any tool-use follow-up on the next call.
+        if !accumulated.is_empty() {
+            self.messages
+                .push(Message::assistant(vec![ContentBlock::Text {
+                    text: accumulated,
+                }]));
+        }
+
+        Ok(())
     }
 
     // TODO(parallel-dispatch): implement parallel agent dispatch (idea #7).
@@ -1074,6 +1110,28 @@ actions:
         // Should have user message + assistant response
         assert_eq!(agent.messages.len(), 2);
         assert_eq!(agent.messages[1].role, "assistant");
+    }
+
+    #[tokio::test]
+    async fn test_run_turn_streaming_accumulates_chunks() {
+        // MockProvider uses the default infer_stream (wraps infer → single chunk).
+        let provider = MockProvider::simple_text("streamed response");
+        let mut agent = agent_for_test(provider);
+
+        agent.add_user_message("Hello");
+        let result = agent.run_turn_streaming().await;
+
+        assert!(
+            result.is_ok(),
+            "run_turn_streaming should succeed: {result:?}"
+        );
+        assert_eq!(agent.messages.len(), 2, "user + assistant messages");
+        assert_eq!(agent.messages[1].role, "assistant");
+        let text = match &agent.messages[1].content[0] {
+            ContentBlock::Text { text } => text.clone(),
+            other => panic!("expected Text block, got {other:?}"),
+        };
+        assert_eq!(text, "streamed response");
     }
 
     #[test]

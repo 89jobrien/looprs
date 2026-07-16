@@ -449,10 +449,6 @@ fn enforce_fs_mode(tool: Tool, args: &Value, ctx: &ToolContext) -> Result<(), To
     }
 }
 
-// IDEA(L2) / TODO: route tool dispatch through PluginExecutor port (hex refactor Phase 2)
-// — agent.rs calls this free function directly, bypassing the port. Inject a
-// Box<dyn PluginExecutor> into Agent and delegate here so tool interception
-// (logging, sandboxing, mocking in tests) works without touching agent internals.
 pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
     match Tool::from_name(name) {
         Some(tool) => {
@@ -472,7 +468,6 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
 /// Sends a JSON-RPC `tools/list` request and maps each MCP tool into a
 /// `ToolDefinition`. The caller is responsible for merging the result into
 /// `get_tool_definitions()` so the LLM sees external tools alongside builtins.
-#[allow(dead_code)]
 pub async fn mcp_tool_definitions(server_url: &str) -> anyhow::Result<Vec<ToolDefinition>> {
     let client = reqwest::Client::new();
 
@@ -505,9 +500,6 @@ pub async fn mcp_tool_definitions(server_url: &str) -> anyhow::Result<Vec<ToolDe
 /// # Errors
 /// Returns an error if the HTTP request fails, the server returns an error
 /// response, or the result cannot be parsed.
-// IDEA(L2): wire McpToolExecutor (an impl of PluginExecutor) that delegates
-// has_tool/execute_tool to an MCP server. This function is the call primitive.
-#[allow(dead_code)]
 pub async fn mcp_tool_call(
     server_url: &str,
     tool_name: &str,

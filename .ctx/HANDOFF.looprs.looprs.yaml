@@ -1,6 +1,6 @@
 project: looprs
 id: looprs
-updated: 2026-07-13
+updated: 2026-07-15
 items:
 - id: uncommitted-work
   doob_uuid: null
@@ -18,17 +18,7 @@ items:
 log:
 - date: '20260713.174514'
   summary: done=11 running=0 pending=0 blocked=0
-  commits:
-  - !Sha 450806773aed6829a6d978455fca8f281453e5e1
-  - !Sha 0802768da0ec845e0995d29718b73d115a16fb55
-  - !Sha 850c49d1c1c14bb02d9bdcd0f9cba30018c4894a
-  - !Sha e81dfeef1f41dce6243d7ae80cd958f671db1411
-  - !Sha 9afe917837fd2dc2fd20ca62d981a3b57d39276f
-  - !Sha 58cddbb715ce5986afb7e8aa4627532b4456b6e4
-  - !Sha 5eac9a6b65c35a000cec7cc532cc5ec83707e0fe
-  - !Sha d329a3c425819000acb88190388720411aee973a
-  - !Sha 010c19195c56bc5e2fc4940a379442a0e3a3cc09
-  - !Sha f5d58cce338fca8eb1e51b196cb65280551f9548
+  commits: []
 - date: 20260429:160832
   summary: |
     Hexagonal refactor Phases 2-4: extracted looprs-cli crate (binary, REPL, runtime);

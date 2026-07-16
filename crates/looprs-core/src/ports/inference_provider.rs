@@ -1,9 +1,16 @@
 //! InferenceProvider port — abstraction over LLM inference backends.
 
+use std::pin::Pin;
+
+use futures::Stream;
 use serde::{Deserialize, Serialize};
 
 use crate::api::{ContentBlock, Message, ToolDefinition};
 use crate::types::ModelId;
+
+/// A boxed async stream of text chunks from a streaming inference call.
+pub type InferStream =
+    Pin<Box<dyn Stream<Item = Result<String, Box<dyn std::error::Error + Send + Sync>>> + Send>>;
 
 /// Request structure for LLM inference.
 #[derive(Debug, Clone)]
@@ -59,5 +66,38 @@ pub trait InferenceProvider: Send + Sync {
     /// Whether this provider supports tool use (function calling).
     fn supports_tool_use(&self) -> bool {
         true
+    }
+
+    /// Whether this provider supports token-by-token streaming.
+    fn supports_streaming(&self) -> bool {
+        false
+    }
+
+    /// Stream inference results as text chunks.
+    ///
+    /// Default implementation calls `infer()` and yields the full text as a
+    /// single chunk, so all providers work without modification. Override in
+    /// providers that have native SSE/streaming APIs.
+    async fn infer_stream(&self, req: &InferenceRequest) -> InferStream {
+        use futures::stream;
+
+        match self.infer(req).await {
+            Ok(resp) => {
+                let text: String = resp
+                    .content
+                    .iter()
+                    .filter_map(|b| {
+                        if let ContentBlock::Text { text } = b {
+                            Some(text.as_str())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("");
+                Box::pin(stream::once(async move { Ok(text) }))
+            }
+            Err(e) => Box::pin(stream::once(async move { Err(e) })),
+        }
     }
 }

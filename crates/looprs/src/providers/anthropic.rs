@@ -1,7 +1,10 @@
+use futures::StreamExt as _;
+use futures::stream;
 use serde_json::{Value, json};
 
 use crate::api::ContentBlock;
 use crate::errors::ProviderError;
+use crate::ports::InferStream;
 
 use super::{InferenceRequest, InferenceResponse, LLMProvider, ProviderHttpClient, Usage};
 use crate::types::ModelId;
@@ -150,6 +153,99 @@ impl LLMProvider for AnthropicProvider {
 
     fn model(&self) -> &ModelId {
         &self.model
+    }
+
+    fn supports_streaming(&self) -> bool {
+        true
+    }
+
+    async fn infer_stream(&self, req: &InferenceRequest) -> InferStream {
+        let mut body = json!({
+            "model": req.model.as_str(),
+            "max_tokens": req.max_tokens,
+            "system": req.system,
+            "messages": req.messages,
+            "stream": true,
+            "tools": req.tools.iter().map(|t| json!({
+                "name": t.name,
+                "description": t.description,
+                "input_schema": t.input_schema,
+            })).collect::<Vec<_>>(),
+        });
+        if let Some(temp) = req.temperature {
+            body["temperature"] = json!(temp);
+        }
+
+        let result = self
+            .http
+            .client()
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", &self.key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await;
+
+        let resp = match result {
+            Ok(r) if r.status().is_success() => r,
+            Ok(r) => {
+                let status = r.status();
+                let err_text = r.text().await.unwrap_or_default();
+                return Box::pin(stream::once(async move {
+                    Err(Box::new(ProviderError::ApiError(format!(
+                        "Anthropic API Error {status}: {err_text}"
+                    )))
+                        as Box<dyn std::error::Error + Send + Sync>)
+                }));
+            }
+            Err(e) => {
+                return Box::pin(stream::once(async move {
+                    Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+                }));
+            }
+        };
+
+        // Drive the SSE byte stream, emitting text_delta chunks.
+        let byte_stream = resp.bytes_stream();
+        let text_stream = byte_stream.flat_map(|chunk_result| {
+            let lines: Vec<Result<String, Box<dyn std::error::Error + Send + Sync>>> =
+                match chunk_result {
+                    Err(e) => vec![Err(Box::new(e) as _)],
+                    Ok(bytes) => {
+                        let raw = String::from_utf8_lossy(&bytes);
+                        raw.lines()
+                            .filter_map(|line| {
+                                let data = line.strip_prefix("data: ")?;
+                                if data == "[DONE]" {
+                                    return None;
+                                }
+                                let v: Value = serde_json::from_str(data).ok()?;
+                                // content_block_delta → text_delta
+                                if v.get("type").and_then(|t| t.as_str())
+                                    == Some("content_block_delta")
+                                {
+                                    let text = v
+                                        .pointer("/delta/text")
+                                        .and_then(|t| t.as_str())
+                                        .unwrap_or("")
+                                        .to_string();
+                                    if text.is_empty() {
+                                        None
+                                    } else {
+                                        Some(Ok(text))
+                                    }
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect()
+                    }
+                };
+            stream::iter(lines)
+        });
+
+        Box::pin(text_stream)
     }
 
     fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

@@ -61,10 +61,6 @@ pub struct HookRegistry {
     repo_hooks: Vec<Hook>, // Loaded from .looprs/hooks/ (cwd)
 }
 
-// IDEA(Q1): only SessionStart.yaml is deployed; InferenceComplete and PostToolUse
-// hooks have no YAML definitions. Add .looprs/hooks/PostToolUse.yaml and
-// .looprs/hooks/InferenceComplete.yaml to exercise the full hook surface.
-
 impl HookRegistry {
     pub fn new() -> Self {
         HookRegistry {

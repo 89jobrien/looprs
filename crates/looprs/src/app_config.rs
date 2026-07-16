@@ -102,10 +102,6 @@ pub struct PipelineConfig {
     pub compaction: PipelineCompactionConfig,
 }
 
-// TODO: activate pipeline feature — define a concrete checks set (clippy,
-// nextest, coverage threshold) and flip enabled to true. PipelineChecksConfig
-// and PipelineCompactionConfig structs exist but checks list is empty. Wire
-// checks into the agent loop so failures surface as AgentError::PipelineFailure.
 impl Default for PipelineConfig {
     fn default() -> Self {
         Self {

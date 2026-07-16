@@ -23,6 +23,7 @@ new_without_default = "allow"
 
 [dependencies]
 anyhow = { workspace = true } #unified
+futures = { version = "0.3", default-features = false, features = ["alloc"] }
 async-openai = { version = "0.33.0", default-features = false, features = ["rustls", "chat-completion", "byot"] }
 async-trait = "0.1"
 baml = "0.219.0"
