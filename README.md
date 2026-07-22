@@ -42,13 +42,13 @@ Persistent config: `.looprs/provider.json`. All env options: `.env.example`.
 
 | Tool | Description |
 |------|-------------|
-| `/read` | Read files with line pagination |
-| `/write` | Create or overwrite files |
-| `/edit` | Replace text in files |
-| `/glob` | Find files by name pattern (faster with `fd`) |
-| `/grep` | Search file contents (faster with `rg`) |
-| `/nu` | Execute a Nushell command |
-| `/bash` | Execute shell commands |
+| `read` | Read files with line pagination |
+| `write` | Create or overwrite files |
+| `edit` | Replace text in files |
+| `glob` | Find files by name pattern (faster with `fd`) |
+| `grep` | Search file contents (faster with `rg`) |
+| `nu` | Execute a Nushell command |
+| `bash` | Execute shell commands |
 
 Optional speedups (auto-detected, falls back to pure Rust):
 
@@ -71,8 +71,9 @@ The `.looprs/` directory defines repo-local agent configuration. All extension p
 
 ```
 .looprs/
-├── provider.json          # Provider/model settings
-├── config.json            # Runtime defaults, file refs, pipeline, agents, paths
+├── provider.json          # Provider settings (user-owned)
+├── config.json            # Global config (user-owned, app never overwrites)
+├── state.json             # App-managed flags (e.g. onboarding; written by app)
 ├── commands/              # Custom slash commands (/)
 ├── hooks/                 # Event-driven hooks (YAML)
 ├── skills/                # Skills with progressive disclosure ($)
@@ -138,9 +139,23 @@ actions:
     approval_prompt: "Inject git status into context?"
 ```
 
-Events: `SessionStart`, `UserPromptSubmit`, `InferenceComplete`, `PreToolUse`, `PostToolUse`, `OnError`, `OnWarning`, `SessionEnd`.
+Events: `SessionStart`, `UserPromptSubmit`, `InferenceComplete`, `PreToolUse`, `PostToolUse`, `OnError`, `OnWarning`, `SessionEnd`, `DelegationStart`, `DelegationComplete`.
 
-Action types: `command` (Nushell command, optional `inject_as` and `requires_approval`), `message`, `conditional`.
+Action types: `command` (shell command, optional `inject_as` and `requires_approval`), `message`, `conditional`, `confirm`, `prompt`, `secret_prompt`, `set_env`, `set_config`.
+
+Example using `confirm` and `set_env`:
+
+```yaml
+name: set_api_key
+trigger: SessionStart
+actions:
+  - type: secret_prompt
+    prompt: "Enter API key (leave blank to skip):"
+    set_key: api_key
+  - type: set_env
+    name: MY_API_KEY
+    from_key: api_key
+```
 
 
 ## Observability

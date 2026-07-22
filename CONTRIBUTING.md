@@ -18,8 +18,9 @@ changes and what we expect in pull requests.
 
 - Rust 1.88+ is required.
 - Optional tools:
-  - `bacon` for watch mode
-  - `prek` for pre-commit hooks
+  - `bacon` for watch mode (`make setup` to install)
+  - `pre-commit` for pre-commit hooks (`.pre-commit-config.yaml` configured)
+  - `cargo xtask pre-push` — run before pushing; the installed `.githooks/pre-push` delegates to this command and includes the `looprs-cli` binary test suite
 
 See `README.md` for setup and usage details.
 
@@ -27,12 +28,12 @@ See `README.md` for setup and usage details.
 
 - Use `anyhow::Result` for fallible functions.
 - Add error context with `.context()` / `.with_context()`.
-- Keep the CLI thin; core logic belongs in `src/`.
+- Keep the CLI thin; core logic belongs in `crates/looprs/src/`.
 - Prefer small, focused modules.
 
 ## Tests
 
-- Unit tests live next to the code in `src/`.
+- Unit tests live next to the code in `crates/looprs/src/`.
 - Integration tests live in `tests/`.
 - Add tests for new behavior and bug fixes.
 
