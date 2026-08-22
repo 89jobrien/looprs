@@ -59,7 +59,7 @@ clean:
 	rm -rf target/
 
 install: build
-	$(CARGO) install --path .
+	$(CARGO) install --path crates/looprs-cli
 
 run:
 	./target/release/looprs

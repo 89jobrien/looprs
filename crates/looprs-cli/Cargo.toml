@@ -19,6 +19,7 @@ anyhow = { workspace = true } #unified
 colored = { workspace = true } #unified
 dirs = { workspace = true } #unified
 looprs = { workspace = true } #unified
+looprs-tui = { workspace = true } #unified
 miette = { workspace = true } #unified
 rustyline = { version = "14.0", features = ["custom-bindings"] }
 serde_json = { workspace = true } #unified

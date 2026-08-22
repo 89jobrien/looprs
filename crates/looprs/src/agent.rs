@@ -21,6 +21,13 @@ use tokio::time::{Duration, timeout};
 const TOOL_PREVIEW_LEN: usize = 60;
 const ON_REPEAT_THRESHOLD: usize = 3;
 
+/// A single transcript entry for UI consumption: role plus flattened text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatMessage {
+    pub role: String,
+    pub text: String,
+}
+
 const MAX_TOOL_RESULT_CHARS_IN_CONTEXT: usize = 16_000;
 
 fn truncate_tool_result_for_context(content: &str) -> String {
@@ -240,6 +247,28 @@ impl Agent {
 
     pub fn working_dir(&self) -> &std::path::Path {
         &self.tool_ctx.working_dir
+    }
+
+    /// Full conversation history as plain (role, text) pairs, in order, for
+    /// UI consumption. Non-text content blocks (tool use/results) are
+    /// rendered as their block text where present; empty messages are kept
+    /// so turn boundaries stay visible.
+    pub fn transcript(&self) -> Vec<ChatMessage> {
+        self.messages
+            .iter()
+            .map(|m| ChatMessage {
+                role: m.role.clone(),
+                text: m
+                    .content
+                    .iter()
+                    .filter_map(|block| match block {
+                        ContentBlock::Text { text } => Some(text.as_str()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n\n"),
+            })
+            .collect()
     }
 
     pub fn execute_hooks_for_event(&self, event: &Event, context: &EventContext) -> EventContext {

@@ -1,0 +1,19 @@
+[package]
+name = "looprs-tui"
+version.workspace = true
+edition.workspace = true
+description = "Interactive terminal menus for looprs (provider/model selection)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow = { workspace = true } #unified
+crossterm = { version = "0.28", features = ["event-stream"] }
+futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
+looprs = { workspace = true } #unified
+ratatui = "0.29"
+tokio = { workspace = true, features = ["sync", "rt", "macros"] } #unified

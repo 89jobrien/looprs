@@ -76,6 +76,25 @@ fn apply_nu_env(path: &std::path::Path) {
 async fn main() -> Result<()> {
     load_nu_env();
     let args: Vec<String> = env::args().collect();
+    if matches!(args.get(1).map(String::as_str), Some("provider")) {
+        return run_provider_menu();
+    }
+
+    if matches!(args.get(1).map(String::as_str), Some("tui")) {
+        ui::init_logging();
+        let bootstrap = match runtime::bootstrap_runtime(None).await {
+            Ok(bootstrap) => bootstrap,
+            Err(err) => {
+                if let Some(report) = runtime::provider_bootstrap_report(&err) {
+                    eprintln!("{report:?}");
+                    std::process::exit(1);
+                }
+                return Err(err);
+            }
+        };
+        return looprs_tui::chat::run(bootstrap.agent).await;
+    }
+
     if matches!(args.get(1).map(String::as_str), Some("seed")) {
         let dir_str = args.get(2).map(String::as_str).unwrap_or(".looprs");
         let dir = looprs::seed::expand_tilde(dir_str);
@@ -616,11 +635,16 @@ async fn run_interactive(
 
 fn print_usage() {
     ui::error_full(
-        r#"Usage: looprs [OPTIONS] | looprs seed [DIR]
+        r#"Usage: looprs [OPTIONS] | looprs seed [DIR] | looprs provider | looprs tui
 
 COMMANDS:
   seed [DIR]             Write example config files to DIR (default: .looprs).
                          Use ~ for home (e.g. ~/.looprs). Does not overwrite.
+  provider               Interactive menu to choose the active provider and
+                         (for local/Ollama) which model, written to
+                         .looprs/provider.json.
+  tui                    Alternate TUI mode: scrollback transcript pane over
+                         an input box, instead of the default REPL.
 
 OPTIONS:
   -p, --prompt <TEXT>    Run with single prompt and exit (scriptable mode)
@@ -634,9 +658,85 @@ EXAMPLES:
   looprs                           # Interactive mode
   looprs seed                      # Create .looprs/config.json.example, etc.
   looprs seed ~/.looprs            # Seed home config dir
+  looprs provider                  # Choose provider/model interactively
+  looprs tui                       # Launch the alternate chat TUI
   looprs -p "explain closures"     # Run single prompt and exit
 "#,
     );
+}
+
+/// List locally installed Ollama models via `ollama list`. Returns an
+/// empty vec if `ollama` isn't on PATH or the command fails.
+fn list_ollama_models() -> Vec<String> {
+    let Ok(output) = std::process::Command::new("ollama").arg("list").output() else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    let Ok(text) = String::from_utf8(output.stdout) else {
+        return Vec::new();
+    };
+    parse_ollama_list_output(&text)
+}
+
+/// Pure parser for `ollama list` output: first column of every row after
+/// the `NAME  ID  SIZE  MODIFIED` header.
+fn parse_ollama_list_output(text: &str) -> Vec<String> {
+    text.lines()
+        .skip(1)
+        .filter_map(|line| line.split_whitespace().next())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Interactive `looprs provider` entrypoint: pick a provider, and for
+/// `local` also pick an installed Ollama model, then persist the choice
+/// to `.looprs/provider.json`.
+fn run_provider_menu() -> Result<()> {
+    let providers = vec![
+        "anthropic".to_string(),
+        "openai".to_string(),
+        "local (Ollama)".to_string(),
+    ];
+
+    let Some(index) = looprs_tui::select("Select a provider", &providers)? else {
+        println!("Cancelled.");
+        return Ok(());
+    };
+
+    let mut config = ProviderConfig::load().unwrap_or_default();
+
+    match index {
+        0 => config.provider = Some("anthropic".to_string()),
+        1 => config.provider = Some("openai".to_string()),
+        2 => {
+            let models = list_ollama_models();
+            if models.is_empty() {
+                ui::error(
+                    "No Ollama models found. Install Ollama and run `ollama pull <model>` first.",
+                );
+                return Ok(());
+            }
+            let Some(model_index) = looprs_tui::select("Select a local model", &models)? else {
+                println!("Cancelled.");
+                return Ok(());
+            };
+            config.provider = Some("local".to_string());
+            config.local = Some(ProviderSettings {
+                model: Some(models[model_index].clone()),
+                ..Default::default()
+            });
+        }
+        _ => unreachable!("select() returned an out-of-range index"),
+    }
+
+    config.save()?;
+    println!(
+        "Saved provider={} to .looprs/provider.json",
+        config.provider.as_deref().unwrap_or("?")
+    );
+    Ok(())
 }
 
 fn build_command_items(command_registry: &CommandRegistry) -> Vec<String> {
@@ -1172,4 +1272,40 @@ async fn execute_command(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod provider_menu_tests {
+    use super::parse_ollama_list_output;
+
+    // Captured from a real `ollama list` invocation.
+    const REAL_OLLAMA_LIST_OUTPUT: &str = "NAME                                             ID              SIZE      MODIFIED\nfunctiongemma:latest                             7c19b650567a    300 MB    2 months ago\ngemma-lg:latest                                  e6349aa91a78    24 GB     2 months ago\nhf.co/unsloth/gemma-4-26B-A4B-it-GGUF:UD-Q6_K    e6349aa91a78    24 GB     2 months ago\nnomic-embed-text:latest                          0a109f422b47    274 MB    2 months ago\nllama3.2:latest                                  a80c4f17acd5    2.0 GB    4 months ago\n";
+
+    #[test]
+    fn parses_model_names_from_real_output() {
+        let models = parse_ollama_list_output(REAL_OLLAMA_LIST_OUTPUT);
+        assert_eq!(
+            models,
+            vec![
+                "functiongemma:latest",
+                "gemma-lg:latest",
+                "hf.co/unsloth/gemma-4-26B-A4B-it-GGUF:UD-Q6_K",
+                "nomic-embed-text:latest",
+                "llama3.2:latest",
+            ]
+        );
+    }
+
+    #[test]
+    fn header_only_output_yields_no_models() {
+        let models = parse_ollama_list_output(
+            "NAME                                             ID              SIZE      MODIFIED\n",
+        );
+        assert!(models.is_empty());
+    }
+
+    #[test]
+    fn empty_output_yields_no_models() {
+        assert!(parse_ollama_list_output("").is_empty());
+    }
 }

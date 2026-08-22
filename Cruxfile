@@ -1,18 +1,32 @@
 # Cruxfile for looprs
-name: looprs-ci
+pipeline: looprs-ci
+
 steps:
-  - name: self-check
-    run: taskit self-check
-    gate: true
-  - name: fmt --check
-    run: taskit fmt --check
-  - name: lint
-    run: taskit lint
-  - name: compile-tests
-    run: taskit compile-tests
-  - name: test
-    run: taskit test
-  - name: check-deps
-    run: taskit check-deps
-  - name: check-protocol-drift
-    run: taskit check-protocol-drift
+  - step: self-check
+    handler: shell::capture
+    args:
+      cmd: "taskit self check"
+  - step: fmt-check
+    handler: shell::capture
+    args:
+      cmd: "taskit check fmt --check"
+  - step: lint
+    handler: shell::capture
+    args:
+      cmd: "taskit check lint"
+  - step: compile-tests
+    handler: shell::capture
+    args:
+      cmd: "taskit check compile"
+  - step: test
+    handler: shell::capture
+    args:
+      cmd: "taskit test run"
+  - step: check-deps
+    handler: shell::capture
+    args:
+      cmd: "taskit check deps"
+  - step: check-protocol-drift
+    handler: shell::capture
+    args:
+      cmd: "taskit protocol drift"

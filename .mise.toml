@@ -42,8 +42,8 @@ description = "Remove build artifacts"
 run = "make clean"
 
 [tasks.install]
-description = "Build and install binary locally"
-run = "make install"
+description = "Build and install the looprs binary locally"
+run = "cargo xtask install"
 
 [tasks.run]
 description = "Run compiled looprs binary"
@@ -76,6 +76,22 @@ run = "make ci"
 [tasks."verify:all"]
 description = "Run all local verification checks"
 run = "make all"
+
+[tasks.validate]
+description = "Run a looprs-driven validation sweep over the given files"
+run = "nu scripts/validation-sweep.nu"
+
+[tasks.demo]
+description = "Run looprs with a canned demo prompt against the OpenAI provider"
+run = "nu scripts/demo.nu"
+
+[tasks.provider]
+description = "Launch the interactive provider/model selection TUI"
+run = "cargo run --bin looprs -- provider"
+
+[tasks.tui]
+description = "Launch the alternate chat TUI"
+run = "cargo run --bin looprs -- tui"
 
 [env]
 RUST_BACKTRACE = "1"

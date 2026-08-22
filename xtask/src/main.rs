@@ -24,6 +24,11 @@ const CLI_BIN_TEST_ARGS: &[&str] = &[
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+
+    if is_plain_install(&args) {
+        exit(run_install());
+    }
+
     let is_pre_push = is_plain_pre_push(&args);
 
     // Try running taskit directly first
@@ -81,6 +86,21 @@ fn is_plain_pre_push(args: &[String]) -> bool {
     matches!(args, [subcommand] if subcommand == "pre-push")
 }
 
+/// `taskit self install` installs taskit itself, not looprs — intercept
+/// `install` here instead of delegating, since only this workspace knows
+/// which crate produces the `looprs` binary.
+fn is_plain_install(args: &[String]) -> bool {
+    matches!(args, [subcommand] if subcommand == "install")
+}
+
+fn run_install() -> i32 {
+    let status = Command::new("cargo")
+        .args(["install", "--path", "crates/looprs-cli", "--force"])
+        .status()
+        .expect("failed to run cargo install");
+    status.code().unwrap_or(1)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -104,6 +124,18 @@ mod tests {
     #[test]
     fn pre_push_with_taskit_args_stays_taskit_only() {
         assert!(!is_plain_pre_push(&args(&["pre-push", "--dry-run"])));
+    }
+
+    #[test]
+    fn plain_install_is_intercepted() {
+        assert!(is_plain_install(&args(&["install"])));
+    }
+
+    #[test]
+    fn non_plain_install_falls_through_to_taskit() {
+        assert!(!is_plain_install(&args(&["dev", "install"])));
+        assert!(!is_plain_install(&args(&["install", "--dry-run"])));
+        assert!(!is_plain_install(&args(&[])));
     }
 
     #[test]

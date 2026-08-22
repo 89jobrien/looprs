@@ -380,22 +380,19 @@ fn fuzzy_score(query: &str, candidate: &str) -> Option<i32> {
     let mut pos = 0;
     let cand = candidate.to_lowercase();
     for ch in query.chars() {
-        if let Some(idx) = cand[pos..].find(ch) {
-            let abs = pos + idx;
-            if let Some(prev) = last_match {
-                if abs == prev + 1 {
-                    score += CONSECUTIVE_MATCH_BONUS;
-                } else {
-                    score += 2;
-                }
+        let idx = cand[pos..].find(ch)?;
+        let abs = pos + idx;
+        if let Some(prev) = last_match {
+            if abs == prev + 1 {
+                score += CONSECUTIVE_MATCH_BONUS;
             } else {
-                score += 1;
+                score += 2;
             }
-            last_match = Some(abs);
-            pos = abs + 1;
         } else {
-            return None;
+            score += 1;
         }
+        last_match = Some(abs);
+        pos = abs + 1;
     }
     Some(score)
 }

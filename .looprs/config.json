@@ -54,7 +54,7 @@
     "context_sharing": true,
     "max_parallel": 3,
     "orchestration": "sequential",
-    "delegate_by_default": true,
+    "delegate_by_default": false,
     "fs_mode": "write",
     "default_agent": null
   },
