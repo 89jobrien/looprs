@@ -28,6 +28,10 @@ impl UserOutput for UiOutput {
         ui::assistant_text(text);
     }
 
+    fn write_chunk(&self, chunk: &str) {
+        ui::write_chunk(chunk);
+    }
+
     fn tool_call(&self, tool_name: &str, input_preview: &str) {
         ui::tool_call(tool_name, input_preview);
     }

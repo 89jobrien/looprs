@@ -313,7 +313,11 @@ async fn run_scriptable(
     }
     agent.add_user_message(prepared_prompt);
 
-    if let Err(e) = agent.run_turn().await {
+    ui::assistant_lead_in();
+    let result = agent.run_turn_streaming().await;
+    println!();
+
+    if let Err(e) = result {
         if cli_args.json_output {
             let error_json = serde_json::json!({
                 "success": false,

@@ -285,6 +285,22 @@ pub fn assistant_text(text: &str) {
     emit_machine_event("assistant_text", serde_json::json!({ "text": text }));
 }
 
+/// Print the `●` lead-in for an assistant turn without any text, so
+/// subsequent `write_chunk` calls can stream onto the same line.
+pub fn assistant_lead_in() {
+    print!("\n{} ", "●".blue().bold());
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+}
+
+/// Write one streamed chunk of assistant text in place, with no added
+/// prefix or newline, flushing immediately so it renders incrementally.
+pub fn write_chunk(text: &str) {
+    let safe = sanitize::sanitize_preview_for_console(text);
+    print!("{}", safe.blue());
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+    emit_machine_event("write_chunk", serde_json::json!({ "text": text }));
+}
+
 pub fn tool_call(tool_name: &str, input_preview: &str) {
     let safe_name = sanitize::sanitize_preview_for_console(tool_name);
     let safe_preview = sanitize::sanitize_preview_for_console(input_preview);
