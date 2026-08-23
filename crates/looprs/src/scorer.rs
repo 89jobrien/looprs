@@ -64,10 +64,10 @@ pub async fn run_scorer(
     scorer_model: &str,
     db_path: Option<&str>,
 ) -> Result<Vec<f32>> {
-    let api_key = match std::env::var("OPENAI_API_KEY") {
+    let api_key = match crate::providers::resolve_secret_env("OPENAI_API_KEY") {
         Ok(k) => k,
-        Err(_) => {
-            log::warn!("OPENAI_API_KEY not set — skipping interaction scoring");
+        Err(e) => {
+            log::warn!("OPENAI_API_KEY unavailable — skipping interaction scoring: {e}");
             return Ok(vec![]);
         }
     };

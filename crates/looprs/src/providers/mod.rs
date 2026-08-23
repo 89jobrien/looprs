@@ -48,6 +48,46 @@ pub struct ProviderOverrides {
     pub model: Option<ModelId>,
 }
 
+/// Read an env var, resolving `op://` 1Password references via `op read`.
+///
+/// API key env vars are sometimes left as unresolved 1Password secret
+/// references (e.g. when a shell profile doesn't source them through
+/// `op run`/direnv). Rather than fail with an opaque 401, shell out to the
+/// `op` CLI so looprs works the same whether the caller pre-resolved the
+/// secret or not.
+pub fn resolve_secret_env(var_name: &str) -> Result<String, ProviderError> {
+    let value =
+        env::var(var_name).map_err(|_| ProviderError::MissingApiKey(var_name.to_string()))?;
+
+    if let Some(reference) = value.strip_prefix("op://") {
+        let output = std::process::Command::new("op")
+            .args(["read", &format!("op://{reference}")])
+            .output()
+            .map_err(|e| {
+                ProviderError::Config(format!(
+                    "failed to run `op read` for {var_name} ({value}): {e}"
+                ))
+            })?;
+
+        if !output.status.success() {
+            return Err(ProviderError::Config(format!(
+                "`op read` failed for {var_name} ({value}): {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+
+        let secret = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if secret.is_empty() {
+            return Err(ProviderError::Config(format!(
+                "`op read` returned an empty value for {var_name} ({value})"
+            )));
+        }
+        return Ok(secret);
+    }
+
+    Ok(value)
+}
+
 /// Check if an OpenAI model is a reasoning model (o1, o3 series).
 pub(crate) fn is_reasoning_model(model: &str) -> bool {
     model.starts_with("o1") || model.starts_with("o3")
@@ -220,41 +260,36 @@ async fn create_provider_by_name(
 ) -> Result<Box<dyn LLMProvider>, ProviderError> {
     match name.to_lowercase().as_str() {
         "anthropic" => {
-            let key = env::var("ANTHROPIC_API_KEY")
-                .map_err(|_| ProviderError::MissingApiKey("anthropic".to_string()))?;
+            let key = resolve_secret_env("ANTHROPIC_API_KEY")?;
             let model = resolve_model("anthropic", config_file, &overrides);
             Ok(Box::new(anthropic::AnthropicProvider::new_with_model(
                 key, model,
             )?))
         }
         "anthropic-sdk" | "claude-sdk" => {
-            let key = env::var("ANTHROPIC_API_KEY")
-                .map_err(|_| ProviderError::MissingApiKey("anthropic".to_string()))?;
+            let key = resolve_secret_env("ANTHROPIC_API_KEY")?;
             let model = resolve_model("anthropic", config_file, &overrides);
             Ok(Box::new(
                 anthropic_sdk::AnthropicSdkProvider::new_with_model(key, model)?,
             ))
         }
         "openai" => {
-            let key = env::var("OPENAI_API_KEY")
-                .map_err(|_| ProviderError::MissingApiKey("openai".to_string()))?;
+            let key = resolve_secret_env("OPENAI_API_KEY")?;
             let model = resolve_model("openai", config_file, &overrides);
             Ok(Box::new(openai::OpenAIProvider::new_with_model(
                 key, model,
             )?))
         }
         "openai-sdk" => {
-            let key = env::var("OPENAI_API_KEY")
-                .map_err(|_| ProviderError::MissingApiKey("openai".to_string()))?;
+            let key = resolve_secret_env("OPENAI_API_KEY")?;
             let model = resolve_model("openai", config_file, &overrides);
             Ok(Box::new(openai_sdk::OpenAISdkProvider::new_with_model(
                 key, model,
             )?))
         }
         "gemini" | "google" => {
-            let key = env::var("GEMINI_API_KEY")
-                .or_else(|_| env::var("GOOGLE_API_KEY"))
-                .map_err(|_| ProviderError::MissingApiKey("gemini".to_string()))?;
+            let key = resolve_secret_env("GEMINI_API_KEY")
+                .or_else(|_| resolve_secret_env("GOOGLE_API_KEY"))?;
             let model = resolve_model("gemini", config_file, &overrides);
             Ok(Box::new(gemini::GeminiProvider::new_with_model(
                 key, model,
