@@ -19,6 +19,12 @@ pub use unions::*;
 #[derive(Debug, Clone)]
 pub enum StreamTypes {
     ChatMessage(ChatMessage),
+
+    ToolCall(ToolCall),
+
+    ToolDefinition(ToolDefinition),
+
+    Union2ListToolCallOrString(Union2ListToolCallOrString),
 }
 
 impl baml::KnownTypes for StreamTypes {
@@ -29,6 +35,12 @@ impl baml::KnownTypes for StreamTypes {
     fn type_name(&self) -> &'static str {
         match self {
             StreamTypes::ChatMessage(_) => "ChatMessage",
+
+            StreamTypes::ToolCall(_) => "ToolCall",
+
+            StreamTypes::ToolDefinition(_) => "ToolDefinition",
+
+            StreamTypes::Union2ListToolCallOrString(_) => "Union2ListToolCallOrString",
         }
     }
 }

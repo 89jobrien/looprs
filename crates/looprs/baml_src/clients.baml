@@ -28,7 +28,7 @@ client<llm> Ollama {
 client<llm> DefaultClient {
     provider fallback
     options {
-        strategy [Anthropic, OpenAI]
+        strategy [OpenAI, Anthropic]
     }
 }
 

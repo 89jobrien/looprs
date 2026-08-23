@@ -3,4 +3,30 @@
 //
 // Learn more at https://docs.boundaryml.com
 
-// No unions defined
+//! Generated union types.
+
+use super::*;
+use baml::{BamlDecode, BamlEncode};
+
+/// Generated from: (string | ToolCall[])
+#[derive(Debug, Clone, BamlEncode, BamlDecode)]
+#[baml(union)]
+pub enum Union2ListToolCallOrString {
+    #[baml(name = "string")]
+    String(String),
+
+    #[baml(name = "List__ToolCall")]
+    ListToolCall(Vec<ToolCall>),
+}
+
+impl AsRef<Union2ListToolCallOrString> for Union2ListToolCallOrString {
+    fn as_ref(&self) -> &Union2ListToolCallOrString {
+        self
+    }
+}
+
+impl Default for Union2ListToolCallOrString {
+    fn default() -> Self {
+        Self::String(Default::default())
+    }
+}

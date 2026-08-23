@@ -24,6 +24,12 @@ pub use baml::{Checked, StreamState};
 #[derive(Debug, Clone)]
 pub enum Types {
     ChatMessage(ChatMessage),
+
+    ToolCall(ToolCall),
+
+    ToolDefinition(ToolDefinition),
+
+    Union2ListToolCallOrString(Union2ListToolCallOrString),
 }
 
 impl baml::KnownTypes for Types {
@@ -34,6 +40,12 @@ impl baml::KnownTypes for Types {
     fn type_name(&self) -> &'static str {
         match self {
             Types::ChatMessage(_) => "ChatMessage",
+
+            Types::ToolCall(_) => "ToolCall",
+
+            Types::ToolDefinition(_) => "ToolDefinition",
+
+            Types::Union2ListToolCallOrString(_) => "Union2ListToolCallOrString",
         }
     }
 }

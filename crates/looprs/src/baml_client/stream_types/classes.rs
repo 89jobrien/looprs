@@ -27,3 +27,41 @@ impl AsRef<ChatMessage> for ChatMessage {
         self
     }
 }
+
+/// A single tool invocation requested by the model.
+
+#[derive(Debug, Clone, Default, BamlDecode)]
+
+pub struct ToolCall {
+    pub name: Option<String>,
+
+    pub arguments: Option<String>,
+
+    pub id: Option<String>,
+}
+
+impl AsRef<ToolCall> for ToolCall {
+    fn as_ref(&self) -> &ToolCall {
+        self
+    }
+}
+
+/// Describes a tool the model may call. `input_schema` is the tool's JSON
+/// schema serialized as a string (kept as a string to avoid modeling
+/// arbitrary JSON Schema shapes in BAML).
+
+#[derive(Debug, Clone, Default, BamlDecode)]
+
+pub struct ToolDefinition {
+    pub name: Option<String>,
+
+    pub description: Option<String>,
+
+    pub input_schema: Option<String>,
+}
+
+impl AsRef<ToolDefinition> for ToolDefinition {
+    fn as_ref(&self) -> &ToolDefinition {
+        self
+    }
+}

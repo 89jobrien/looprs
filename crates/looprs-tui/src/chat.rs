@@ -229,6 +229,11 @@ pub async fn run(agent: Agent) -> Result<()> {
                 turn_handle = None;
                 match joined {
                     Ok((returned_agent, turn_result)) => {
+                        // TODO(verify): turn errors are pushed to live_text but then
+                        // unconditionally cleared below before the next draw, so a
+                        // failed turn (auth, rate limit, network) renders as silence
+                        // with no assistant reply and no visible error. Append the
+                        // error into static_transcript instead of only live_text.
                         if let Err(e) = turn_result {
                             live_text.push_str(&format!("\n[error] {e}\n"));
                         }

@@ -59,6 +59,24 @@ impl TypeBuilder {
         )
     }
 
+    /// Access the `ToolCall` class builder.
+    pub fn ToolCall(&self) -> ToolCallClassBuilder {
+        ToolCallClassBuilder::new(
+            self.inner
+                .get_class("ToolCall")
+                .expect("class ToolCall is defined in schema"),
+        )
+    }
+
+    /// Access the `ToolDefinition` class builder.
+    pub fn ToolDefinition(&self) -> ToolDefinitionClassBuilder {
+        ToolDefinitionClassBuilder::new(
+            self.inner
+                .get_class("ToolDefinition")
+                .expect("class ToolDefinition is defined in schema"),
+        )
+    }
+
     // =========================================================================
     // Schema Enum Accessors (1:1 with schema enum names)
     // =========================================================================
