@@ -3,26 +3,47 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
+/// A named sub-agent persona, either bundled (see
+/// [`AgentRegistry::bundled_agents`]) or loaded from a `.yaml`/`.yml` file
+/// under an agents directory (see [`AgentRegistry::load_from_directory`]).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AgentDefinition {
+    /// Unique identifier used to look the agent up in an [`AgentRegistry`]
+    /// and as its `default_agent` config value.
     pub name: String,
+    /// Short human-readable label for the agent's specialty, e.g.
+    /// `"Senior Code Reviewer"`.
     #[serde(default)]
     pub role: Option<String>,
+    /// Short summary of what the agent does, shown in agent listings.
     #[serde(default)]
     pub description: Option<String>,
+    /// System prompt used when this agent is delegated to.
     #[serde(default)]
     pub system_prompt: Option<String>,
+    /// Names of the built-in tools this agent is allowed to use.
     #[serde(default)]
     pub tools: Vec<String>,
+    /// Names of skills made available to this agent.
     #[serde(default)]
     pub skills: Vec<String>,
+    /// Free-form constraint labels (e.g. `"read-only"`) describing
+    /// restrictions on this agent's behavior; interpretation is up to the
+    /// caller.
     #[serde(default)]
     pub constraints: Vec<String>,
+    /// Substrings that, when found in a user prompt, cause
+    /// [`AgentRegistry::select_for_prompt`] to delegate to this agent. An
+    /// empty list means this agent is never matched by trigger and can
+    /// only be selected as the configured default.
     #[serde(default)]
     pub triggers: Vec<String>,
 }
 
 impl AgentDefinition {
+    /// Returns whether `prompt` contains any of this agent's `triggers`
+    /// (case-insensitive substring match). Always `false` if `triggers` is
+    /// empty.
     pub fn matches_prompt(&self, prompt: &str) -> bool {
         if self.triggers.is_empty() {
             return false;
@@ -35,12 +56,14 @@ impl AgentDefinition {
     }
 }
 
+/// A lookup table of [`AgentDefinition`]s, keyed by name.
 #[derive(Debug, Clone, Default)]
 pub struct AgentRegistry {
     agents: HashMap<String, AgentDefinition>,
 }
 
 impl AgentRegistry {
+    /// Creates an empty registry.
     pub fn new() -> Self {
         Self {
             agents: HashMap::new(),
@@ -129,24 +152,36 @@ impl AgentRegistry {
         ]
     }
 
+    /// Inserts `agent`, replacing any existing definition with the same
+    /// name.
     pub fn register(&mut self, agent: AgentDefinition) {
         self.agents.insert(agent.name.clone(), agent);
     }
 
+    /// Looks up an agent by exact name.
     pub fn get(&self, name: &str) -> Option<&AgentDefinition> {
         self.agents.get(name)
     }
 
+    /// Returns whether the registry has no registered agents.
     pub fn is_empty(&self) -> bool {
         self.agents.is_empty()
     }
 
+    /// Returns all registered agents, sorted by name.
     pub fn list(&self) -> Vec<&AgentDefinition> {
         let mut list: Vec<&AgentDefinition> = self.agents.values().collect();
         list.sort_by_key(|a| &a.name);
         list
     }
 
+    /// Selects which agent, if any, should handle `prompt`.
+    ///
+    /// Resolution order: first, the (name-sorted) agent whose
+    /// [`AgentDefinition::matches_prompt`] returns `true`; otherwise
+    /// `default_agent` if it names a registered agent; otherwise, if
+    /// `delegate_by_default` is `true`, the first agent in name-sorted
+    /// order; otherwise `None`.
     pub fn select_for_prompt(
         &self,
         prompt: &str,
@@ -174,6 +209,14 @@ impl AgentRegistry {
         None
     }
 
+    /// Loads every `.yaml`/`.yml` file in `dir` as an [`AgentDefinition`]
+    /// into a new registry. Returns an empty registry if `dir` doesn't
+    /// exist. Files that fail to parse are skipped with a warning logged
+    /// via [`crate::ui::warn`], rather than failing the whole load.
+    ///
+    /// # Errors
+    /// Returns an error if `dir` exists but cannot be read (e.g.
+    /// permissions).
     // qual:allow(iosp) reason: "I/O boundary — reads agent YAML files from directory"
     pub fn load_from_directory(dir: &PathBuf) -> anyhow::Result<Self> {
         let mut registry = Self::new();
@@ -205,6 +248,14 @@ impl AgentRegistry {
         Ok(registry)
     }
 
+    /// Loads agents from an optional user-level directory and an optional
+    /// repo-level directory (via [`AgentRegistry::load_from_directory`])
+    /// into a single registry. Repo-level definitions are registered after
+    /// user-level ones, so an agent name defined in both wins with the
+    /// repo-level definition.
+    ///
+    /// # Errors
+    /// Returns an error if either directory exists but cannot be read.
     // qual:allow(iosp) reason: "I/O boundary — loads agents from user + repo directories"
     pub fn load_dual_source(
         user_dir: Option<&PathBuf>,
