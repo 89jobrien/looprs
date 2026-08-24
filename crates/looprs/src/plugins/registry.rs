@@ -2,16 +2,25 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+/// Resolves a tool name to its executable path. Implementations decide
+/// the resolution strategy (e.g. searching `PATH`, as
+/// [`crate::plugins::PathResolver`] does).
 pub trait ToolResolver: Send + Sync {
+    /// Returns the executable path for `tool`, or `None` if it cannot be
+    /// found.
     fn resolve(&self, tool: &str) -> Option<PathBuf>;
 }
 
+/// Caches tool resolution results from a [`ToolResolver`] so repeated
+/// lookups for the same tool name avoid re-running the resolver's
+/// underlying strategy (e.g. a `PATH` scan).
 pub struct ToolRegistry {
     resolver: Arc<dyn ToolResolver>,
     cache: Mutex<HashMap<String, Option<PathBuf>>>,
 }
 
 impl ToolRegistry {
+    /// Creates a registry backed by `resolver`, with an empty cache.
     pub fn new(resolver: Arc<dyn ToolResolver>) -> Self {
         Self {
             resolver,
@@ -19,10 +28,17 @@ impl ToolRegistry {
         }
     }
 
+    /// Returns whether `tool` resolves to an executable. Caches the
+    /// result for subsequent lookups.
     pub fn has(&self, tool: &str) -> bool {
         self.resolve(tool).is_some()
     }
 
+    /// Resolves `tool`, caching the result for subsequent lookups.
+    ///
+    /// # Errors
+    /// Returns an [`std::io::ErrorKind::NotFound`] error if `tool` cannot
+    /// be resolved.
     pub fn require(&self, tool: &str) -> std::io::Result<PathBuf> {
         self.resolve(tool).ok_or_else(|| {
             std::io::Error::new(

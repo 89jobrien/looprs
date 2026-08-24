@@ -23,6 +23,10 @@ pub struct Plugins {
 }
 
 impl Plugins {
+    /// Creates a [`Plugins`] instance backed by the given `runner` (for
+    /// executing tools) and `resolver` (for locating them). Prefer
+    /// [`Plugins::system`] in production code; construct directly in tests
+    /// to inject a [`MockRunner`].
     pub fn new(runner: Arc<dyn Runner>, resolver: Arc<dyn ToolResolver>) -> Self {
         Self {
             runner,
@@ -30,6 +34,10 @@ impl Plugins {
         }
     }
 
+    /// Returns the process-wide [`Plugins`] instance, backed by
+    /// [`OsRunner`] and [`PathResolver`]. Initialized lazily on first
+    /// access and reused for the process's lifetime, including its
+    /// tool-resolution cache.
     pub fn system() -> &'static Plugins {
         static INSTANCE: OnceLock<Plugins> = OnceLock::new();
         INSTANCE.get_or_init(|| Plugins::new(Arc::new(OsRunner), Arc::new(PathResolver)))
@@ -60,6 +68,7 @@ impl Plugins {
     }
 }
 
+/// Convenience wrapper for [`Plugins::system`].
 pub fn system() -> &'static Plugins {
     Plugins::system()
 }

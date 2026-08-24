@@ -3,10 +3,16 @@ use std::path::Path;
 use std::process::{Command, Output};
 use std::sync::{Arc, Mutex};
 
+/// Executes an external program and captures its output. Abstracts over
+/// real subprocess execution ([`OsRunner`]) so tool adapters can be tested
+/// against a [`MockRunner`] instead.
 pub trait Runner: Send + Sync {
+    /// Runs `program` with `args` to completion and returns its captured
+    /// stdout, stderr, and exit status.
     fn output(&self, program: &Path, args: &[OsString]) -> std::io::Result<Output>;
 }
 
+/// [`Runner`] that shells out via [`std::process::Command`].
 pub struct OsRunner;
 
 impl Runner for OsRunner {
@@ -15,9 +21,12 @@ impl Runner for OsRunner {
     }
 }
 
+/// A single invocation recorded by [`MockRunner`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunCall {
+    /// The program path the call was made with.
     pub program: std::path::PathBuf,
+    /// The arguments the call was made with.
     pub args: Vec<OsString>,
 }
 
@@ -30,6 +39,8 @@ pub struct MockRunner {
 }
 
 impl MockRunner {
+    /// Creates a [`MockRunner`] with no recorded calls and no queued
+    /// outputs.
     pub fn new() -> Self {
         Self {
             calls: Arc::new(Mutex::new(Vec::new())),
@@ -37,10 +48,13 @@ impl MockRunner {
         }
     }
 
+    /// Queues an output (or error) to be returned by the next call to
+    /// [`Runner::output`], in FIFO order.
     pub fn push_output(&self, out: std::io::Result<Output>) {
         self.outputs.lock().unwrap().push(out);
     }
 
+    /// Returns every call recorded so far, in call order.
     pub fn calls(&self) -> Vec<RunCall> {
         self.calls.lock().unwrap().clone()
     }

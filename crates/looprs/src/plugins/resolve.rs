@@ -2,6 +2,8 @@ use std::path::{Path, PathBuf};
 
 use super::registry::ToolResolver;
 
+/// [`ToolResolver`] implementation that searches the `PATH` environment
+/// variable for an executable file named `tool` (see [`find_in_path`]).
 pub struct PathResolver;
 
 impl ToolResolver for PathResolver {
