@@ -1,15 +1,25 @@
 use serde::{Deserialize, Serialize};
 
+/// Controls which built-in tools are allowed to modify the filesystem or
+/// run shell commands (see `crate::tools::enforce_fs_mode`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum FsMode {
+    /// No filesystem writes or shell commands: `write`, `edit`, `nu`, and
+    /// `bash` are all denied.
     Read,
+    /// Edits and writes to *existing* files are allowed, but new files
+    /// cannot be created via `write`; shell commands (`nu`/`bash`) are
+    /// denied.
     Update,
+    /// No restrictions: all built-in tools may run. The default mode.
     #[default]
     Write,
 }
 
 impl FsMode {
+    /// Returns the lowercase name used in config files and prompts (e.g.
+    /// `"read"`).
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Read => "read",
@@ -18,6 +28,9 @@ impl FsMode {
         }
     }
 
+    /// Parses a mode name, case-insensitively and ignoring surrounding
+    /// whitespace. Returns `None` for anything other than `"read"`,
+    /// `"update"`, or `"write"`.
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_lowercase().as_str() {
             "read" => Some(Self::Read),
@@ -27,6 +40,8 @@ impl FsMode {
         }
     }
 
+    /// Returns the next mode in the cycle `Read -> Update -> Write ->
+    /// Read`, for UI toggling (e.g. a keybinding that cycles modes).
     pub fn next(self) -> Self {
         match self {
             Self::Read => Self::Update,
@@ -35,6 +50,9 @@ impl FsMode {
         }
     }
 
+    /// Encodes the mode as `0` (`Read`), `1` (`Update`), or `2` (`Write`),
+    /// for storage in an [`std::sync::atomic::AtomicU8`] (see
+    /// [`crate::tools::ToolContext::fs_mode_handle`]).
     pub fn to_u8(self) -> u8 {
         match self {
             Self::Read => 0,
@@ -43,6 +61,10 @@ impl FsMode {
         }
     }
 
+    /// Decodes a value produced by [`FsMode::to_u8`]. Any value other than
+    /// `0` or `1` — including `2` and any out-of-range byte — decodes to
+    /// [`FsMode::Write`], so unexpected atomic state fails open to the
+    /// most permissive mode rather than panicking.
     pub fn from_u8(v: u8) -> Self {
         match v {
             0 => Self::Read,

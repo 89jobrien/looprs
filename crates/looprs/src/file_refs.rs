@@ -6,6 +6,8 @@ use crate::app_config::FileReferencesConfig;
 
 const DEFAULT_MAX_DIR_ENTRIES: usize = 200;
 
+/// Limits applied when resolving `@file` references in user messages:
+/// which file extensions are eligible and the maximum file size to inline.
 #[derive(Debug, Clone)]
 pub struct FileRefPolicy {
     allowed_extensions: Vec<String>,
@@ -13,6 +15,9 @@ pub struct FileRefPolicy {
 }
 
 impl FileRefPolicy {
+    /// Builds a policy from [`FileReferencesConfig`], lowercasing
+    /// configured extensions for case-insensitive matching and converting
+    /// `max_size_mb` to bytes (saturating on overflow).
     pub fn from_config(config: &FileReferencesConfig) -> Self {
         Self {
             allowed_extensions: config
@@ -24,6 +29,7 @@ impl FileRefPolicy {
         }
     }
 
+    /// Builds a policy from [`FileReferencesConfig::default`].
     pub fn default_policy() -> Self {
         let defaults = FileReferencesConfig::default();
         Self::from_config(&defaults)
@@ -164,6 +170,16 @@ fn resolve_reference(filename: &str, base_dir: &Path, policy: &FileRefPolicy) ->
     Ok(content)
 }
 
+/// Resolves a single `@`-style reference (without the leading `@`) to
+/// either a directory listing or file contents.
+///
+/// Like [`resolve_reference`], this canonicalizes the target and rejects
+/// paths that escape `base_dir`.
+///
+/// # Errors
+/// Returns an error if the path doesn't exist, escapes `base_dir`, or (for
+/// files) fails the size/extension checks in `policy` or isn't valid
+/// UTF-8.
 pub fn resolve_at_reference(
     reference: &str,
     base_dir: &Path,
@@ -190,9 +206,14 @@ pub fn resolve_at_reference(
     Ok(AtReference::File(content))
 }
 
+/// The resolved content of an `@`-style reference: either a directory
+/// listing or a file's contents.
 #[derive(Debug, Clone)]
 pub enum AtReference {
+    /// Newline-joined directory entry names (directories suffixed with
+    /// `/`), sorted and capped at `DEFAULT_MAX_DIR_ENTRIES` entries.
     Directory(String),
+    /// The referenced file's UTF-8 contents.
     File(String),
 }
 
