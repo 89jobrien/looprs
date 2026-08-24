@@ -3,9 +3,13 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
 
+/// A named provider/model pair, e.g. the `"fast"` or `"judge"` tier used
+/// for scoring (see [`ModelsConfig::tier`]).
 #[derive(Debug, Deserialize, Clone)]
 pub struct ProviderTier {
+    /// Provider identifier, e.g. `"openai"` or `"anthropic"`.
     pub provider: String,
+    /// Model identifier for this tier, e.g. `"gpt-4"`.
     pub model: String,
 }
 
@@ -17,8 +21,12 @@ struct MagiConfig {
     db: String,
 }
 
+/// Parsed `~/.looprs/models.toml`: the default provider/model plus named
+/// tiers (e.g. for scoring) and Magi-specific settings. Loaded via
+/// [`ModelsConfig::load`] or [`ModelsConfig::from_path`].
 #[derive(Debug, Deserialize, Clone)]
 pub struct ModelsConfig {
+    /// The provider/model used when no more specific tier applies.
     pub default: ProviderTier,
     #[serde(default)]
     tiers: HashMap<String, ProviderTier>,
@@ -27,25 +35,44 @@ pub struct ModelsConfig {
 }
 
 impl ModelsConfig {
+    /// Reads and parses a `models.toml` file at `path`.
+    ///
+    /// # Errors
+    /// Returns an error if `path` cannot be read, or if its contents are
+    /// not valid TOML matching [`ModelsConfig`]'s shape (in particular, the
+    /// `[default]` table with `provider` and `model` keys is required).
     pub fn from_path(path: &Path) -> Result<Self> {
         let content =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         toml::from_str(&content).context("parsing models.toml")
     }
 
+    /// Loads configuration from `~/.looprs/models.toml`.
+    ///
+    /// # Errors
+    /// Returns an error if the home directory cannot be determined, or via
+    /// [`ModelsConfig::from_path`] if the file is missing or invalid.
     pub fn load() -> Result<Self> {
         let home = dirs::home_dir().context("could not determine home directory")?;
         Self::from_path(&home.join(".looprs").join("models.toml"))
     }
 
+    /// Looks up a named tier (e.g. `"judge"`, `"fast"`), returning `None`
+    /// if it isn't defined in `models.toml`.
     pub fn tier(&self, name: &str) -> Option<&ProviderTier> {
         self.tiers.get(name)
     }
 
+    /// Returns the configured Magi modelcard path, or an empty string if
+    /// the `[magi]` section or its `modelcard` key was omitted.
     pub fn magi_modelcard(&self) -> &str {
         &self.magi.modelcard
     }
 
+    /// Returns the configured Magi database path, or an empty string if
+    /// the `[magi]` section or its `db` key was omitted. An empty value is
+    /// treated by callers (e.g. [`crate::agent::Agent`]) as "no database
+    /// configured".
     pub fn magi_db(&self) -> &str {
         &self.magi.db
     }
