@@ -6,20 +6,42 @@ use crate::file_refs::FileRefPolicy;
 use crate::fs_mode::FsMode;
 use crate::state::AppState;
 
+/// Top-level application configuration, loaded from `.looprs/config.json`
+/// via [`AppConfig::load`]. Every field is `#[serde(default)]`, so any
+/// subset of keys may be present in the file; missing sections fall back
+/// to their type's `Default` impl.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
+    /// Default provider request settings (context window, temperature,
+    /// timeout).
     pub defaults: DefaultsConfig,
+    /// Settings controlling `@file` reference resolution.
     pub file_references: FileReferencesConfig,
+    /// Tracks whether the first-run demo/onboarding flow has been shown.
     pub onboarding: OnboardingConfig,
+    /// Settings for the post-tool-use quality pipeline (checks,
+    /// compaction, scoring).
     pub pipeline: PipelineConfig,
+    /// Settings for sub-agent selection and delegation.
     pub agents: AgentsConfig,
+    /// Directories to load agents, commands, hooks, rules, and skills from.
     pub paths: PathsConfig,
+    /// Settings for session persistence.
     pub persistence: PersistenceConfig,
 }
 
 impl AppConfig {
-    /// Load from user-owned `.looprs/config.json`, then overlay onboarding from app state file.
+    /// Loads configuration from `.looprs/config.json` in the current
+    /// working directory, falling back to [`AppConfig::default`] if the
+    /// file doesn't exist. `onboarding.demo_seen` is then overlaid from the
+    /// app state file (see [`AppState::load`]) so the app never needs to
+    /// write back to `config.json` just to persist that flag.
+    ///
+    /// # Errors
+    /// Returns an error if `config.json` exists but cannot be read or
+    /// fails to parse as JSON. A missing or invalid state file is ignored
+    /// rather than propagated.
     // qual:allow(iosp) reason: "I/O boundary — reads config file and deserializes"
     pub fn load() -> anyhow::Result<Self> {
         let path = Path::new(".looprs/config.json");
@@ -36,16 +58,26 @@ impl AppConfig {
         Ok(config)
     }
 
+    /// Builds a [`FileRefPolicy`] from `self.file_references`, for use when
+    /// resolving `@file` references in user messages.
     pub fn file_ref_policy(&self) -> FileRefPolicy {
         FileRefPolicy::from_config(&self.file_references)
     }
 }
 
+/// Default provider request settings, used unless overridden by
+/// [`crate::agent::RuntimeSettings`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DefaultsConfig {
+    /// Caps the context window, in tokens, used for history compaction and
+    /// output-token budgeting. Defaults to `Some(8192)`.
     pub max_context_tokens: Option<u32>,
+    /// Sampling temperature passed to the provider. Defaults to
+    /// `Some(0.2)`.
     pub temperature: Option<f32>,
+    /// Per-inference-request timeout, in seconds. Defaults to
+    /// `Some(120)`.
     pub timeout_seconds: Option<u64>,
 }
 
@@ -59,11 +91,16 @@ impl Default for DefaultsConfig {
     }
 }
 
+/// Settings controlling how `@file` references in user messages are
+/// resolved and inlined.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FileReferencesConfig {
+    /// The marker prefix that triggers file resolution, e.g. `"@"`.
     pub prefix: String,
+    /// Maximum file size, in megabytes, that will be inlined.
     pub max_size_mb: u64,
+    /// File extensions (without the leading dot) eligible for resolution.
     pub allowed_extensions: Vec<String>,
 }
 
@@ -82,23 +119,41 @@ impl Default for FileReferencesConfig {
     }
 }
 
+/// Tracks first-run onboarding state persisted via the app state file (not
+/// `config.json` itself; see [`AppConfig::load`]).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct OnboardingConfig {
+    /// Whether the onboarding demo has already been shown to the user.
     pub demo_seen: bool,
 }
 
+/// Settings for the post-tool-use quality pipeline run by
+/// [`crate::agent::Agent::run_turn`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PipelineConfig {
+    /// Whether pipeline checks run at all. Disabled by default.
     pub enabled: bool,
+    /// Directory pipeline/agent logs are written to.
     pub log_dir: String,
+    /// Minimum reward score below which a run is considered a failure.
     pub reward_threshold: f32,
+    /// Whether at least one tool call is required for a turn to pass.
     pub require_tools: bool,
+    /// If a check fails, whether to roll the in-memory conversation back
+    /// to the pre-tool-call snapshot.
     pub auto_revert: bool,
+    /// Whether to stop at the first failing check instead of running the
+    /// rest.
     pub fail_fast: bool,
+    /// Whether a failing check blocks the turn (returns an error) rather
+    /// than just being reported.
     pub block_on_failure: bool,
+    /// Which individual checks (build/tests/lint/etc.) are enabled.
     pub checks: PipelineChecksConfig,
+    /// Settings for the repo-context block compacted into the system
+    /// prompt.
     pub compaction: PipelineCompactionConfig,
 }
 
@@ -118,14 +173,27 @@ impl Default for PipelineConfig {
     }
 }
 
+/// Settings for sub-agent selection and delegation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgentsConfig {
+    /// Whether delegated sub-agents share the parent's conversation
+    /// context.
     pub context_sharing: bool,
+    /// Maximum number of sub-agents that may run concurrently. Not yet
+    /// enforced: [`crate::agent::Agent::run_turn`] always orchestrates
+    /// sequentially regardless of this value.
     pub max_parallel: usize,
+    /// The orchestration strategy name; only `"sequential"` currently has
+    /// an effect.
     pub orchestration: String,
+    /// Whether to delegate to the first registered agent when no agent's
+    /// triggers match the prompt and no `default_agent` is set.
     pub delegate_by_default: bool,
+    /// Filesystem access mode applied to delegated sub-agents.
     pub fs_mode: FsMode,
+    /// Name of the agent to delegate to when no trigger matches the
+    /// prompt.
     pub default_agent: Option<String>,
 }
 
@@ -142,22 +210,34 @@ impl Default for AgentsConfig {
     }
 }
 
+/// Toggles for individual pipeline checks; all default to `false`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct PipelineChecksConfig {
+    /// Run the project build as a check.
     pub run_build: bool,
+    /// Run the test suite as a check.
     pub run_tests: bool,
+    /// Run the linter as a check.
     pub run_lint: bool,
+    /// Run type-checking as a check.
     pub run_typecheck: bool,
+    /// Run benchmarks as a check.
     pub run_bench: bool,
 }
 
+/// Settings for the repo-context block injected into the system prompt
+/// (see [`crate::pipeline::context_compact::compact_context`]).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PipelineCompactionConfig {
+    /// Include the current working-tree diff in the injected context.
     pub include_diff: bool,
+    /// Include a list of recently modified files.
     pub include_recent: bool,
+    /// Extra glob patterns whose matching files are also included.
     pub include_globs: Vec<String>,
+    /// Maximum number of items included per category.
     pub top_k: usize,
 }
 
@@ -172,6 +252,8 @@ impl Default for PipelineCompactionConfig {
     }
 }
 
+/// Backend used to persist session logs (see
+/// [`crate::ports::SessionStore`]).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStoreBackend {
@@ -182,6 +264,7 @@ pub enum SessionStoreBackend {
     Sqlite,
 }
 
+/// Settings for session persistence.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct PersistenceConfig {
@@ -189,13 +272,20 @@ pub struct PersistenceConfig {
     pub session_store: SessionStoreBackend,
 }
 
+/// Directories `looprs` loads its extensibility artifacts from, relative
+/// to the working directory.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PathsConfig {
+    /// Directory containing agent definition YAML files.
     pub agents: String,
+    /// Directory containing custom slash command definitions.
     pub commands: String,
+    /// Directory containing lifecycle hook YAML files.
     pub hooks: String,
+    /// Directory containing rule files injected into the system prompt.
     pub rules: String,
+    /// Directory containing skill definitions.
     pub skills: String,
 }
 
