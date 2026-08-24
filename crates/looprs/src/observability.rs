@@ -6,6 +6,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const OBSERVABILITY_DIR_ENV: &str = "LOOPRS_OBSERVABILITY_DIR";
 
+/// Returns the root directory for observability artifacts (traces, JSONL
+/// event logs).
+///
+/// Reads `LOOPRS_OBSERVABILITY_DIR` from the environment on every call;
+/// falls back to `.looprs/observability` (relative to the current working
+/// directory) if unset or blank.
 pub fn observability_root() -> PathBuf {
     std::env::var(OBSERVABILITY_DIR_ENV)
         .ok()
@@ -14,15 +20,31 @@ pub fn observability_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".looprs/observability"))
 }
 
+/// Returns the directory turn traces are written to:
+/// `<observability_root>/traces`.
 pub fn trace_dir() -> PathBuf {
     observability_root().join("traces")
 }
 
+/// Appends `value` as one JSON line to `<observability_root>/<name>.jsonl`
+/// (see [`append_jsonl`]).
+///
+/// # Errors
+/// Returns an error if the observability directory cannot be created or
+/// the file cannot be opened or written to.
 pub fn append_named_jsonl(name: &str, value: &Value) -> io::Result<()> {
     let path = observability_root().join(format!("{name}.jsonl"));
     append_jsonl(&path, value)
 }
 
+/// Appends `value` as one JSON line to `path`, wrapped as
+/// `{"ts": <millis since epoch>, "event": value}`. Creates `path`'s parent
+/// directories and the file itself if needed; always appends, never
+/// truncates.
+///
+/// # Errors
+/// Returns an error if the parent directory cannot be created, the file
+/// cannot be opened for appending, or the write fails.
 pub fn append_jsonl(path: &Path, value: &Value) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;

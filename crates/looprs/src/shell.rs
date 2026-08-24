@@ -5,10 +5,20 @@ use std::time::Duration;
 pub const NUSHELL_BIN: &str = "nu";
 pub const BASH_BIN: &str = "bash";
 
+/// Runs `command` via `nu -c <command>` to completion, with no timeout.
+/// Equivalent to `run_nu_command_with_timeout(command, None)`.
+///
+/// # Errors
+/// Returns an error if the `nu` binary cannot be spawned.
 pub fn run_nu_command(command: &str) -> io::Result<Output> {
     run_nu_command_with_timeout(command, None)
 }
 
+/// Runs `command` via `bash -c <command>` to completion, with no timeout.
+/// Equivalent to `run_bash_command_with_timeout(command, None)`.
+///
+/// # Errors
+/// Returns an error if the `bash` binary cannot be spawned.
 pub fn run_bash_command(command: &str) -> io::Result<Output> {
     run_bash_command_with_timeout(command, None)
 }

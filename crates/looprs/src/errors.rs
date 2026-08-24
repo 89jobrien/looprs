@@ -1,6 +1,10 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
+/// Errors from constructing or configuring an [`crate::providers::LLMProvider`].
+///
+/// Every variant carries a `miette` diagnostic code (`looprs::provider::*`)
+/// and, where the fix isn't obvious from the message, a `help` hint.
 #[derive(Debug, Error, Diagnostic)]
 pub enum ProviderError {
     #[error("No provider configured")]
@@ -41,6 +45,7 @@ pub enum ProviderError {
     ApiError(String),
 }
 
+/// Errors from constructing a [`crate::tools::ToolContext`].
 #[derive(Debug, Error, Diagnostic)]
 pub enum ToolContextError {
     #[error("Working directory unavailable: {0}")]
@@ -51,6 +56,8 @@ pub enum ToolContextError {
     WorkingDirUnavailable(#[from] std::io::Error),
 }
 
+/// Errors returned by [`crate::agent::Agent`] construction and turn
+/// execution.
 #[derive(Debug, Error, Diagnostic)]
 pub enum AgentError {
     #[error("Tool context initialization failed: {0}")]

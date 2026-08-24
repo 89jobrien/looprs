@@ -30,8 +30,12 @@ pub struct SystemMetrics {
 /// Process-level metrics for the current process.
 #[derive(Debug, Clone)]
 pub struct ProcessInfo {
+    /// This process's CPU usage percentage; may exceed 100 on multi-core
+    /// systems, per `sysinfo`'s accounting.
     pub cpu_usage: f64,
+    /// Resident memory usage, in bytes.
     pub memory_bytes: u64,
+    /// Virtual memory usage, in bytes.
     pub virtual_memory_bytes: u64,
 }
 
@@ -42,6 +46,8 @@ pub struct SystemMonitor {
 }
 
 impl SystemMonitor {
+    /// Creates a monitor with a fresh [`sysinfo::System`] snapshot and an
+    /// empty error window.
     pub fn new() -> Self {
         Self {
             sys: System::new_all(),

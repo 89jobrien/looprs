@@ -1,13 +1,24 @@
 use std::process::Command;
 
+/// A snapshot of the current repo's git state, for display in the
+/// statusline (see `crate::ui::statusline_prompt_statusline`).
 #[derive(Debug, Default, Clone)]
 pub struct GitInfo {
+    /// Current branch name, or `None` if detached HEAD, not a git repo, or
+    /// the `git` command failed.
     pub branch: Option<String>,
+    /// Number of commits the current branch is ahead of its upstream, or
+    /// `0` if there is no upstream or the count could not be determined.
     pub ahead: u32,
+    /// Number of tracked files with uncommitted changes.
     pub modified: u32,
+    /// Number of untracked files.
     pub untracked: u32,
 }
 
+/// Gathers a [`GitInfo`] snapshot by shelling out to `git`. Best-effort:
+/// any individual `git` invocation that fails (e.g. not a git repository)
+/// yields the corresponding field's default value rather than an error.
 pub fn collect() -> GitInfo {
     let branch = branch_name();
     let ahead = commits_ahead();
