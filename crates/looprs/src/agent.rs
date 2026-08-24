@@ -24,7 +24,9 @@ const ON_REPEAT_THRESHOLD: usize = 3;
 /// A single transcript entry for UI consumption: role plus flattened text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChatMessage {
+    /// The message role, e.g. `"user"` or `"assistant"`.
     pub role: String,
+    /// All text content blocks in the message, joined with blank lines.
     pub text: String,
 }
 
@@ -47,13 +49,42 @@ fn truncate_tool_result_for_context(content: &str) -> String {
     )
 }
 
+/// Per-session runtime configuration for [`Agent`], distinct from the
+/// on-disk [`AppConfig`](crate::app_config::AppConfig): these values are
+/// meant to be overridden per invocation (e.g. from CLI flags) without
+/// touching the persisted config file.
 #[derive(Debug, Clone, Default)]
 pub struct RuntimeSettings {
+    /// Default provider settings such as temperature, timeout, and max
+    /// context tokens.
     pub defaults: DefaultsConfig,
+    /// When set, caps the max output tokens requested from the provider to
+    /// no more than this value, even if the model's own limit is higher.
     pub max_tokens_override: Option<u32>,
+    /// The filesystem access mode enforced during tool execution (e.g.
+    /// read-only vs. read-write).
     pub fs_mode: FsMode,
 }
 
+/// Central orchestrator that owns the conversation history and drives a
+/// single agent turn: sending messages to an [`LLMProvider`], executing any
+/// tool calls the model requests via a [`ToolExecutor`], and reporting
+/// progress through a [`UserOutput`] port.
+///
+/// An `Agent` also drives the surrounding infrastructure for a turn: its
+/// [`EventManager`] fires lifecycle events (e.g. [`Event::PreToolUse`],
+/// [`Event::PostToolUse`]) that [`HookRegistry`] hooks can react to and
+/// inject context from; its [`ObservationManager`] captures tool executions
+/// for later analysis; and an optional [`SessionStore`] logs every message,
+/// inference, and tool call/result.
+///
+/// Construct one with [`Agent::new`] (production defaults) or
+/// [`Agent::new_with_runtime`] (explicit runtime settings and ports, used in
+/// tests). After construction, the `with_*` builder methods consume and
+/// return `Self` to swap out ports/registries before the agent starts
+/// running; the `set_*` methods instead mutate an existing agent in place,
+/// for reconfiguring it between turns (e.g. after the user switches models
+/// or toggles the filesystem mode mid-session).
 pub struct Agent {
     provider: Box<dyn LLMProvider>,
     messages: Vec<Message>,
@@ -75,6 +106,13 @@ pub struct Agent {
 }
 
 impl Agent {
+    /// Creates an [`Agent`] with production defaults: default
+    /// [`RuntimeSettings`], default [`FileRefPolicy`], no session logger,
+    /// and terminal output via [`UiOutput`](crate::adapters::UiOutput).
+    ///
+    /// # Errors
+    /// Returns [`AgentError::ToolContextInit`] if the tool context cannot be
+    /// initialized (e.g. the current working directory is unavailable).
     pub fn new(provider: Box<dyn LLMProvider>) -> Result<Self, AgentError> {
         use crate::adapters::UiOutput;
         Self::new_with_runtime(
@@ -86,6 +124,19 @@ impl Agent {
         )
     }
 
+    /// Creates an [`Agent`] with explicit runtime settings and ports.
+    ///
+    /// Use this over [`Agent::new`] when you need to inject a non-default
+    /// [`FileRefPolicy`], a [`SessionStore`] for logging, or a custom
+    /// [`UserOutput`] (as tests do, to avoid writing to the terminal). The
+    /// [`ModelsConfig`] is loaded from disk on a best-effort basis: if it
+    /// fails to load, model-tier lookups used by scoring simply become
+    /// unavailable rather than failing construction.
+    ///
+    /// # Errors
+    /// Returns [`AgentError::ToolContextInit`] if the tool context cannot be
+    /// initialized for `runtime.fs_mode` (e.g. the working directory is
+    /// unavailable).
     pub fn new_with_runtime(
         provider: Box<dyn LLMProvider>,
         runtime: RuntimeSettings,
@@ -128,49 +179,89 @@ impl Agent {
         self
     }
 
+    /// Replaces the hook registry, consuming and returning `Self`. Used at
+    /// construction time to wire up hooks loaded from `.looprs/hooks/`, or
+    /// in tests to inject a specific [`HookRegistry`].
     pub fn with_hooks(mut self, hooks: HookRegistry) -> Self {
         self.hooks = hooks;
         self
     }
 
+    /// Replaces the rule registry, consuming and returning `Self`. Rules
+    /// registered here are rendered into the system prompt built for every
+    /// turn.
     pub fn with_rules(mut self, rules: RuleRegistry) -> Self {
         self.rules = rules;
         self
     }
 
+    /// Fires `event` to every listener registered on this agent's
+    /// [`EventManager`], without running any hooks. Use
+    /// [`Agent::execute_hooks_for_event`] to also run the hook actions
+    /// registered for the event.
     pub fn fire_event(&self, event: Event, context: &EventContext) {
         self.events.fire(event, context);
     }
 
+    /// Swaps the active LLM provider on an already-constructed agent, e.g.
+    /// when the user switches models mid-session. Conversation history is
+    /// preserved.
     pub fn set_provider(&mut self, provider: Box<dyn LLMProvider>) {
         self.provider = provider;
     }
 
+    /// Replaces the runtime settings and immediately propagates the new
+    /// [`FsMode`] to the tool context, so subsequent tool calls are checked
+    /// against the updated mode.
     pub fn set_runtime_settings(&mut self, runtime: RuntimeSettings) {
         self.tool_ctx.set_fs_mode(runtime.fs_mode);
         self.runtime = runtime;
     }
 
+    /// Replaces the policy used to resolve `@file` references in subsequent
+    /// calls to [`Agent::add_user_message`].
     pub fn set_file_ref_policy(&mut self, policy: FileRefPolicy) {
         self.file_ref_policy = policy;
     }
 
+    /// Returns the filesystem access mode currently enforced during tool
+    /// execution.
     pub fn fs_mode(&self) -> FsMode {
         self.tool_ctx.fs_mode()
     }
 
+    /// Updates the filesystem access mode enforced during tool execution.
+    /// Takes `&self` because the mode is stored behind an atomic in the
+    /// tool context, so it can be changed from another thread (e.g. a UI
+    /// toggle) without requiring exclusive access to the agent.
     pub fn set_fs_mode(&self, mode: FsMode) {
         self.tool_ctx.set_fs_mode(mode);
     }
 
+    /// Returns a shared handle to the atomic backing the current
+    /// [`FsMode`], allowing external code (e.g. a UI thread) to read or
+    /// flip the mode concurrently with agent execution.
     pub fn fs_mode_handle(&self) -> std::sync::Arc<std::sync::atomic::AtomicU8> {
         self.tool_ctx.fs_mode_handle()
     }
 
+    /// Merges `metadata` into the metadata queued for the next turn.
+    /// Existing keys are overwritten by `metadata`. The pending metadata is
+    /// drained into the [`EventContext`] fired for
+    /// [`Event::UserPromptSubmit`] on the next call to [`Agent::run_turn`],
+    /// then cleared.
     pub fn set_turn_metadata(&mut self, metadata: HashMap<String, String>) {
         self.pending_metadata.extend(metadata);
     }
 
+    /// Appends a user message to the conversation history.
+    ///
+    /// If `text` contains `@file` references (see
+    /// [`file_refs::has_file_references`](crate::file_refs::has_file_references)),
+    /// they are resolved and inlined according to the current
+    /// [`FileRefPolicy`]. If resolution fails, a warning is emitted via the
+    /// output port and the original, unresolved text is used instead — the
+    /// message is never dropped.
     pub fn add_user_message(&mut self, text: impl Into<String>) {
         let text_str = text.into();
 
@@ -195,14 +286,21 @@ impl Agent {
         self.messages.push(Message::user(resolved));
     }
 
+    /// Discards all conversation history. Does not reset session token
+    /// counters or captured observations.
     pub fn clear_history(&mut self) {
         self.messages.clear();
     }
 
+    /// Returns the maximum output tokens supported by the current
+    /// provider's model, before any [`RuntimeSettings::max_tokens_override`]
+    /// or `defaults.max_context_tokens` cap is applied.
     pub fn provider_model_max_tokens(&self) -> u32 {
         self.provider.model().max_tokens()
     }
 
+    /// Returns the identifier of the model currently in use by the active
+    /// provider.
     pub fn provider_model_id(&self) -> &crate::types::ModelId {
         self.provider.model()
     }
@@ -227,6 +325,10 @@ impl Agent {
         (chars / 4) as u32
     }
 
+    /// Returns the flattened text of the most recent assistant message, or
+    /// `None` if there is no assistant message yet, or its only content was
+    /// non-text (e.g. tool-use blocks) and therefore flattened to an empty
+    /// string.
     pub fn latest_assistant_text(&self) -> Option<String> {
         self.messages
             .iter()
@@ -245,6 +347,8 @@ impl Agent {
             .filter(|text| !text.is_empty())
     }
 
+    /// Returns the working directory that tool execution and `@file`
+    /// reference resolution are scoped to.
     pub fn working_dir(&self) -> &std::path::Path {
         &self.tool_ctx.working_dir
     }
@@ -271,10 +375,24 @@ impl Agent {
             .collect()
     }
 
+    /// Runs the hooks registered for `event` with no approval/prompt
+    /// callbacks, returning the context enriched with any values the hooks
+    /// injected. Equivalent to calling
+    /// [`Agent::execute_hooks_for_event_with_callbacks`] with every callback
+    /// set to `None`.
     pub fn execute_hooks_for_event(&self, event: &Event, context: &EventContext) -> EventContext {
         self.execute_hooks_for_event_with_callbacks(event, context, None, None, None)
     }
 
+    /// Runs every hook registered for `event`, forwarding `approval_fn`,
+    /// `prompt_fn`, and `secret_prompt_fn` to hook actions that need to ask
+    /// the user for approval or input.
+    ///
+    /// Hook execution failures are swallowed: a hook that errors is skipped
+    /// and does not affect other hooks or the caller. Hook results that
+    /// carry an `inject_key` are merged into `enriched_context.metadata`
+    /// under that key; if multiple hooks inject the same key, the last one
+    /// wins.
     // qual:allow(iosp) reason: "I/O boundary — orchestrates hook execution with callbacks"
     pub fn execute_hooks_for_event_with_callbacks(
         &self,
@@ -444,6 +562,48 @@ impl Agent {
     //      sequential remains the default.
     //
     // Blocked by: stable AgentBuilder and AgentRuntime Clone impls.
+    /// Runs one full agent turn: sends the current conversation (plus
+    /// system prompt and any hook-injected context) to the provider, then
+    /// repeatedly executes any requested tool calls and re-queries the
+    /// provider until a response contains no tool-use blocks.
+    ///
+    /// In detail, this:
+    /// - fires [`Event::DelegationStart`]/[`Event::DelegationComplete`]
+    ///   around the turn when `orchestration.agent` metadata is pending
+    ///   (see [`Agent::set_turn_metadata`]); only sequential orchestration
+    ///   is currently implemented, regardless of the requested strategy.
+    /// - fires [`Event::UserPromptSubmit`], runs its hooks, and merges both
+    ///   the hook-injected context and any pending turn metadata into the
+    ///   system prompt for this turn.
+    /// - loops: sends an inference request — capped by
+    ///   `defaults.timeout_seconds`, `max_tokens_override`, and
+    ///   `defaults.max_context_tokens` (the latter also triggers history
+    ///   compaction, see [`compact_messages`]) — streams resulting text to
+    ///   the output port, and for each requested tool call fires
+    ///   [`Event::PreToolUse`] then [`Event::PostToolUse`] on success or
+    ///   [`Event::OnError`] on failure, executes the tool via the
+    ///   configured [`ToolExecutor`], truncates the raw result to
+    ///   `MAX_TOOL_RESULT_CHARS_IN_CONTEXT` (16,000 chars) before adding it
+    ///   back to history, and records an observation.
+    /// - after each tool round-trip, if pipeline checks are enabled in
+    ///   [`AppConfig`](crate::app_config::AppConfig), runs them and, on
+    ///   failure, optionally reverts the in-memory message history to the
+    ///   pre-tool-call snapshot (`pipeline.auto_revert`) before returning
+    ///   an error.
+    /// - on successful completion, persists captured observations to
+    ///   `~/.looprs/observations.db` on a best-effort basis (failures are
+    ///   logged as warnings, not returned).
+    ///
+    /// A tool called three times in a row within a single turn triggers an
+    /// on-repeat quality score; any tool error triggers an on-error score.
+    /// Both are best-effort via [`Agent::maybe_score`] and never affect the
+    /// turn's outcome.
+    ///
+    /// # Errors
+    /// Returns [`AgentError::Inference`] if the provider call fails,
+    /// [`AgentError::Timeout`] if `defaults.timeout_seconds` elapses before
+    /// the provider responds, or [`AgentError::PipelineFailure`] if
+    /// pipeline checks fail after a tool-use round-trip.
     pub async fn run_turn(&mut self) -> Result<(), AgentError> {
         let delegated_agent = self.pending_metadata.get("orchestration.agent").cloned();
         if let Some(agent_name) = delegated_agent.clone() {
