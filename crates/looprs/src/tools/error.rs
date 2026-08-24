@@ -1,6 +1,11 @@
 use miette::Diagnostic;
 use thiserror::Error;
 
+/// Errors returned by built-in tool execution (see
+/// [`crate::tools::execute_tool`]).
+///
+/// Every variant carries a `miette` diagnostic code (`looprs::tool::*`) and,
+/// where the fix isn't obvious from the error message, a `help` hint.
 #[derive(Error, Debug, Diagnostic)]
 pub enum ToolError {
     #[error("File not found: {0}")]

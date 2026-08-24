@@ -26,17 +26,39 @@ use crate::errors::ToolContextError;
 
 pub use error::ToolError;
 
+/// Sandboxed execution context shared by all built-in tools.
+///
+/// Every tool that touches the filesystem resolves paths through
+/// [`ToolContext::resolve_path`], which enforces a jail: relative paths may
+/// not escape `working_dir`, and absolute paths are rejected outright. The
+/// active [`FsMode`] additionally gates which tools are allowed to run (see
+/// [`enforce_fs_mode`]) and can be read or changed concurrently via the
+/// atomic returned by [`ToolContext::fs_mode_handle`].
 pub struct ToolContext {
+    /// The directory that relative tool paths are resolved against and
+    /// jailed to.
     pub working_dir: PathBuf,
     fs_mode: Arc<AtomicU8>,
 }
 
 impl ToolContext {
+    /// Creates a [`ToolContext`] rooted at the process's current working
+    /// directory, with [`FsMode::default()`].
+    ///
+    /// # Errors
+    /// Returns [`ToolContextError::WorkingDirUnavailable`] if the current
+    /// working directory cannot be determined (e.g. it was deleted).
     #[allow(dead_code)]
     pub fn new() -> Result<Self, ToolContextError> {
         Self::new_with_mode(FsMode::default())
     }
 
+    /// Creates a [`ToolContext`] rooted at the process's current working
+    /// directory, with the given `mode` enforced for tool execution.
+    ///
+    /// # Errors
+    /// Returns [`ToolContextError::WorkingDirUnavailable`] if the current
+    /// working directory cannot be determined.
     pub fn new_with_mode(mode: FsMode) -> Result<Self, ToolContextError> {
         Ok(Self {
             working_dir: env::current_dir().map_err(ToolContextError::WorkingDirUnavailable)?,
@@ -44,6 +66,9 @@ impl ToolContext {
         })
     }
 
+    /// Creates a [`ToolContext`] rooted at an explicit `working_dir`,
+    /// bypassing the process's current directory. Used in tests to sandbox
+    /// tool execution to a temporary directory.
     #[allow(dead_code)]
     pub fn from_working_dir(working_dir: PathBuf, mode: FsMode) -> Self {
         Self {
@@ -52,14 +77,22 @@ impl ToolContext {
         }
     }
 
+    /// Returns the filesystem access mode currently enforced for tools run
+    /// through this context.
     pub fn fs_mode(&self) -> FsMode {
         FsMode::from_u8(self.fs_mode.load(Ordering::Relaxed))
     }
 
+    /// Updates the filesystem access mode enforced for tools run through
+    /// this context. Takes `&self` since the mode is stored behind an
+    /// atomic, so it can be changed concurrently with tool execution.
     pub fn set_fs_mode(&self, mode: FsMode) {
         self.fs_mode.store(mode.to_u8(), Ordering::Relaxed);
     }
 
+    /// Returns a shared handle to the atomic backing the current
+    /// [`FsMode`], so it can be read or updated from elsewhere (e.g. a UI
+    /// thread) without holding a reference to the [`ToolContext`] itself.
     pub fn fs_mode_handle(&self) -> Arc<AtomicU8> {
         self.fs_mode.clone()
     }
@@ -104,6 +137,7 @@ pub(crate) struct ToolArgs<'a> {
 }
 
 impl<'a> ToolArgs<'a> {
+    /// Wraps a raw JSON `args` value for typed, validating field access.
     pub fn new(args: &'a Value) -> Self {
         Self { args }
     }
@@ -123,6 +157,12 @@ impl<'a> ToolArgs<'a> {
             .ok_or_else(|| ToolError::MissingParameter(key.to_string()))
     }
 
+    /// Returns the string value of `key`.
+    ///
+    /// # Errors
+    /// Returns [`ToolError::MissingParameter`] if `key` is absent, or
+    /// [`ToolError::InvalidParameterType`] if the root value isn't a JSON
+    /// object or `key`'s value isn't a string.
     pub fn get_str(&self, key: &str) -> Result<&str, ToolError> {
         let value = self.get_value(key)?;
         value
@@ -153,6 +193,12 @@ impl<'a> ToolArgs<'a> {
         }
     }
 
+    /// Returns the string value of `key`, or `None` if `key` is absent or
+    /// `null`.
+    ///
+    /// # Errors
+    /// Returns [`ToolError::InvalidParameterType`] if the root value isn't
+    /// a JSON object, or `key`'s value is present but not a string.
     pub fn get_str_optional(&self, key: &str) -> Result<Option<&str>, ToolError> {
         // Can't use get_optional due to lifetime constraints on as_str()
         let map = self.object()?;
@@ -170,6 +216,9 @@ impl<'a> ToolArgs<'a> {
         }
     }
 
+    /// Returns the bool value of `key`, or `default` if `key` is absent,
+    /// `null`, the root value isn't a JSON object, or the value isn't a
+    /// bool. Unlike the other accessors, this never returns an error.
     pub fn get_bool(&self, key: &str, default: bool) -> bool {
         let map = match self.args.as_object() {
             Some(map) => map,
@@ -181,11 +230,24 @@ impl<'a> ToolArgs<'a> {
         }
     }
 
+    /// Returns the `u64` value of `key`, or `None` if `key` is absent or
+    /// `null`.
+    ///
+    /// # Errors
+    /// Returns [`ToolError::InvalidParameterType`] if the root value isn't
+    /// a JSON object, or `key`'s value is present but not representable
+    /// as a `u64`.
     pub fn get_u64(&self, key: &str) -> Result<Option<u64>, ToolError> {
         self.get_optional(key, Value::as_u64, "u64")
     }
 }
 
+/// The built-in tools exposed to the LLM: filesystem operations
+/// ([`Tool::Read`], [`Tool::Write`], [`Tool::Edit`], [`Tool::Glob`],
+/// [`Tool::Grep`]) and shell execution ([`Tool::Nu`], [`Tool::Bash`]).
+/// [`Tool::from_name`] parses the model-facing tool name, [`Tool::definition`]
+/// describes its JSON schema for the provider, and [`Tool::execute`] runs
+/// it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Tool {
     Read,
@@ -208,6 +270,8 @@ impl Tool {
         Tool::Bash,
     ];
 
+    /// Returns the model-facing tool name used in [`Tool::definition`] and
+    /// accepted by [`Tool::from_name`].
     #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match self {
@@ -221,6 +285,9 @@ impl Tool {
         }
     }
 
+    /// Parses a model-facing tool name into a [`Tool`]. Accepts both
+    /// `"nu"` and the alias `"nushell"` for [`Tool::Nu`]. Returns `None`
+    /// for any name not recognized as a built-in tool.
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "read" => Some(Tool::Read),
@@ -234,6 +301,8 @@ impl Tool {
         }
     }
 
+    /// Returns the [`ToolDefinition`] (name, description, JSON input
+    /// schema) advertised to the LLM provider for this tool.
     pub fn definition(&self) -> ToolDefinition {
         match self {
             Tool::Read => ToolDefinition {
@@ -375,6 +444,14 @@ impl Tool {
         }
     }
 
+    /// Runs this tool with the given JSON `args` against `ctx`, without
+    /// any filesystem-mode enforcement (see [`execute_tool`] for the
+    /// mode-checked entry point used by the agent).
+    ///
+    /// # Errors
+    /// Returns a [`ToolError`] specific to the tool: parameter validation
+    /// errors, filesystem/regex/glob errors, or a
+    /// [`ToolError::CommandFailed`] for shell tools.
     pub fn execute(&self, args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
         match self {
             Tool::Read => read::tool_read(args, ctx),
@@ -449,6 +526,16 @@ fn enforce_fs_mode(tool: Tool, args: &Value, ctx: &ToolContext) -> Result<(), To
     }
 }
 
+/// Looks up the tool named `name`, checks it against `ctx`'s current
+/// [`FsMode`], and runs it with `args` if allowed. This is the entry point
+/// used by [`ToolExecutor`] implementations, as opposed to
+/// [`Tool::execute`], which skips the mode check.
+///
+/// # Errors
+/// Returns [`ToolError::UnknownTool`] if `name` doesn't match a built-in
+/// tool, [`ToolError::ModeDenied`] if the current [`FsMode`] disallows the
+/// tool (or, for [`Tool::Write`] in [`FsMode::Update`], if the target file
+/// doesn't already exist), or any error the tool itself returns.
 pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
     match Tool::from_name(name) {
         Some(tool) => {
@@ -459,6 +546,9 @@ pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<Strin
     }
 }
 
+/// Returns the [`ToolDefinition`]s for every built-in [`Tool`]. Passed to
+/// the provider on every inference request so the model knows what tools
+/// it can call.
 pub fn get_tool_definitions() -> Vec<ToolDefinition> {
     Tool::ALL.iter().map(|tool| tool.definition()).collect()
 }
