@@ -52,6 +52,7 @@ pub struct RuleRegistry {
 }
 
 impl RuleRegistry {
+    /// Creates an empty registry.
     pub fn new() -> Self {
         Self {
             rules: HashMap::new(),
@@ -105,7 +106,12 @@ impl RuleRegistry {
         Ok(loaded)
     }
 
-    /// Load rules from both user and repo directories with repo precedence
+    /// Loads rules from `~/.looprs/rules/` (if `HOME` is set) and then
+    /// from `.looprs/rules/` in the current working directory, with
+    /// repo-level rules registered second so they override any
+    /// user-level rule with the same ID. Load failures for either
+    /// directory are logged to stderr and otherwise ignored — this never
+    /// fails.
     // qual:allow(iosp) reason: "I/O boundary — reads rule files from filesystem"
     pub fn load_all() -> Self {
         let mut registry = Self::new();

@@ -8,6 +8,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::observability;
 use crate::providers::{InferenceRequest, InferenceResponse};
 
+/// Appends a JSONL trace record for one inference turn to
+/// `<observability::trace_dir()>/<session_id>.jsonl` (see
+/// [`append_turn_trace_in_dir`]).
+///
+/// # Errors
+/// Returns an error if the trace directory cannot be created, the trace
+/// file cannot be opened, or serialization/writing fails.
 pub fn append_turn_trace(
     session_id: &str,
     request: &InferenceRequest,
@@ -17,6 +24,13 @@ pub fn append_turn_trace(
     append_turn_trace_in_dir(base.as_path(), session_id, request, response)
 }
 
+/// Appends a JSONL trace record — timestamp, session ID, and the full
+/// request/response pair — to `<base_dir>/<session_id>.jsonl`, creating
+/// `base_dir` if needed. Always appends, never truncates.
+///
+/// # Errors
+/// Returns an error if `base_dir` cannot be created, the trace file cannot
+/// be opened, or serialization/writing fails.
 pub fn append_turn_trace_in_dir(
     base_dir: &Path,
     session_id: &str,
@@ -62,6 +76,8 @@ pub fn append_turn_trace_in_dir(
     Ok(())
 }
 
+/// Returns the path a trace for `session_id` would be written to under
+/// `base_dir`, without creating anything.
 pub fn session_trace_path(base_dir: &Path, session_id: &str) -> PathBuf {
     base_dir.join(format!("{session_id}.jsonl"))
 }
