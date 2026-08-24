@@ -23,20 +23,25 @@ pub struct SkillRegistry {
 }
 
 impl SkillRegistry {
+    /// Creates an empty registry.
     pub fn new() -> Self {
         Self { skills: Vec::new() }
     }
 
+    /// Inserts `skill`, replacing any existing skill with the same name
+    /// (last write wins).
     pub fn register(&mut self, skill: Skill) {
         // Remove existing skill with same name (for precedence)
         self.skills.retain(|s| s.name != skill.name);
         self.skills.push(skill);
     }
 
+    /// Looks up a skill by exact name.
     pub fn get(&self, name: &str) -> Option<&Skill> {
         self.skills.iter().find(|s| s.name == name)
     }
 
+    /// Returns all registered skills, in registration order (not sorted).
     pub fn list(&self) -> Vec<&Skill> {
         self.skills.iter().collect()
     }

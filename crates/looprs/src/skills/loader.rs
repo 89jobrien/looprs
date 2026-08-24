@@ -8,7 +8,15 @@ use super::SkillRegistry;
 use super::discovery::find_skills_in_dir;
 
 impl SkillRegistry {
-    /// Load skills from a directory (recursively finds SKILL.md files)
+    /// Loads skills from a directory (recursively finds `SKILL.md` files
+    /// up to a depth of 3).
+    ///
+    /// Skills that fail to load (unreadable file or invalid frontmatter)
+    /// are skipped with a warning printed to stderr, rather than failing
+    /// the whole load.
+    ///
+    /// # Errors
+    /// Returns an error if `dir` does not exist.
     // qual:allow(iosp) reason: "I/O boundary — loads skill files from directory"
     pub fn load_from_directory(&mut self, dir: &Path) -> Result<usize> {
         if !dir.exists() {

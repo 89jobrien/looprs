@@ -2,28 +2,53 @@ use regex::Regex;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Minimal frontmatter fields extracted for skill discovery listings,
+/// without parsing or validating the full skill body.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SkillFrontmatterSummary {
+    /// The skill's `name` frontmatter field, or empty if missing.
     pub name: String,
+    /// The skill's `description` frontmatter field, or empty if missing.
     pub description: String,
 }
 
+/// A `SKILL.md` file found while walking a skills directory, with its
+/// frontmatter summary but not its full parsed content (see
+/// [`crate::skills::parser::parse_skill_file`] for that).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiscoveredSkill {
+    /// The skill's containing directory.
     pub path: PathBuf,
+    /// Path to the skill's `SKILL.md` file.
     pub skill_file: PathBuf,
+    /// The skill's name: its frontmatter `name` field if present,
+    /// otherwise the containing directory's file name.
     pub name: String,
+    /// The skill's `description` frontmatter field, or empty if absent.
     pub description: String,
+    /// Caller-supplied label for where this skill was found (e.g.
+    /// `"internal"`, `"personal"`, `"superpowers"`).
     pub source_type: String,
 }
 
+/// The result of resolving a skill name to a concrete `SKILL.md` file (see
+/// [`resolve_skill_path`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedSkillPath {
+    /// Path to the resolved `SKILL.md` file.
     pub skill_file: PathBuf,
+    /// Which directory the skill was resolved from: `"personal"` or
+    /// `"superpowers"`.
     pub source_type: String,
+    /// The skill name with any `superpowers:` prefix stripped.
     pub skill_path: String,
 }
 
+/// Reads `file_path` and extracts its `name`/`description` frontmatter
+/// fields via [`extract_frontmatter_from_content`].
+///
+/// Returns [`SkillFrontmatterSummary::default`] (empty fields) if the file
+/// cannot be read, rather than returning an error.
 pub fn extract_frontmatter(file_path: &Path) -> SkillFrontmatterSummary {
     let Ok(content) = fs::read_to_string(file_path) else {
         return SkillFrontmatterSummary::default();
@@ -31,6 +56,11 @@ pub fn extract_frontmatter(file_path: &Path) -> SkillFrontmatterSummary {
     extract_frontmatter_from_content(&content)
 }
 
+/// Extracts the `name` and `description` fields from the YAML frontmatter
+/// block (delimited by `---` lines) at the start of `content`, using a
+/// line-oriented `key: value` scan rather than a full YAML parser. Any
+/// field not present, or content with no frontmatter block at all, yields
+/// an empty string for that field.
 pub fn extract_frontmatter_from_content(content: &str) -> SkillFrontmatterSummary {
     let mut in_frontmatter = false;
     let mut name = String::new();
@@ -69,6 +99,10 @@ pub fn extract_frontmatter_from_content(content: &str) -> SkillFrontmatterSummar
 }
 
 // qual:allow(iosp) reason: "I/O boundary — walks filesystem to discover skill files"
+/// Recursively walks `dir` up to `max_depth` levels deep, looking for
+/// subdirectories that contain a `SKILL.md` file, and returns a
+/// [`DiscoveredSkill`] for each one found (tagged with `source_type`).
+/// Returns an empty list if `dir` doesn't exist.
 pub fn find_skills_in_dir(dir: &Path, source_type: &str, max_depth: usize) -> Vec<DiscoveredSkill> {
     let mut skills = Vec::new();
     if !dir.exists() {
@@ -78,6 +112,15 @@ pub fn find_skills_in_dir(dir: &Path, source_type: &str, max_depth: usize) -> Ve
     skills
 }
 
+/// Resolves `skill_name` to a concrete `SKILL.md` file under either
+/// `personal_dir` or `superpowers_dir`.
+///
+/// A `superpowers:` prefix on `skill_name` forces resolution against
+/// `superpowers_dir`, skipping `personal_dir` entirely (the prefix is
+/// stripped from the returned [`ResolvedSkillPath::skill_path`]).
+/// Otherwise, `personal_dir` is tried first and `superpowers_dir` second.
+/// Returns `None` if neither directory has a matching
+/// `<skill_name>/SKILL.md`.
 pub fn resolve_skill_path(
     skill_name: &str,
     superpowers_dir: Option<&Path>,
@@ -117,6 +160,10 @@ pub fn resolve_skill_path(
     None
 }
 
+/// Removes the leading YAML frontmatter block (delimited by `---` lines)
+/// from `content` and returns the remaining body, trimmed of leading and
+/// trailing whitespace. Content with no frontmatter delimiters is returned
+/// unchanged (trimmed).
 pub fn strip_frontmatter(content: &str) -> String {
     let mut in_frontmatter = false;
     let mut frontmatter_ended = false;
