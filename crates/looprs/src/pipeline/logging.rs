@@ -4,12 +4,22 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Appends structured JSONL events to `<log_dir>/events.jsonl`, one JSON
+/// object per line. Safe to share across threads: writes are serialized
+/// via an internal mutex.
 pub struct PipelineLogger {
     run_id: Option<String>,
     file: Mutex<File>,
 }
 
 impl PipelineLogger {
+    /// Creates (or opens for appending) `<log_dir>/events.jsonl`, creating
+    /// `log_dir` if it doesn't already exist. The logger starts with no
+    /// `run_id` tagged on events.
+    ///
+    /// # Errors
+    /// Returns an error if `log_dir` cannot be created or the log file
+    /// cannot be opened.
     pub fn new(log_dir: PathBuf) -> io::Result<Self> {
         create_dir_all(&log_dir)?;
         let path = log_dir.join("events.jsonl");

@@ -11,12 +11,38 @@ use walkdir::WalkDir;
 
 const MAX_FILE_BYTES: u64 = 64 * 1024;
 
+/// The result of [`compact_context`]: a text block ready to inject into
+/// the system prompt, plus the list of files it was built from.
 #[derive(Debug, Clone, Default)]
 pub struct CompactedContext {
+    /// Concatenated `// File: <path>` headers and file contents (or a
+    /// `// Skipped: ...` placeholder for files that were too large,
+    /// unreadable, or not valid UTF-8), in the order files were selected.
     pub text: String,
+    /// Repo-relative paths of the files represented in `text`, in the
+    /// same order.
     pub files: Vec<String>,
 }
 
+/// Builds a repo-context block to inject into the system prompt, drawing
+/// from up to four sources controlled by `config`: files changed in the
+/// working-tree diff (`include_diff`), files reported by `git status`
+/// (`include_recent`), files matching `include_globs`, and the `top_k`
+/// most recently modified files matching those globs (found via `rg
+/// --files` when available, falling back to a manual directory walk).
+///
+/// Sources are concatenated in that order with duplicates removed (first
+/// occurrence wins). Each file's content is included unless it exceeds
+/// `MAX_FILE_BYTES` (64 KiB) or isn't valid UTF-8, in which case a
+/// `// Skipped: ...` placeholder is emitted instead. Files resolved from
+/// glob patterns are canonicalized and verified to stay within
+/// `repo_root`, so a glob cannot be used to read files outside the repo.
+///
+/// # Errors
+/// This function's `Result` is effectively infallible in practice:
+/// internal failures (git/rg not found, unreadable files, non-UTF8
+/// content) are handled by skipping the affected source or file rather
+/// than propagating an error.
 // qual:allow(iosp) reason: "I/O boundary — reads files and runs git commands for context compaction"
 pub fn compact_context(
     repo_root: &Path,

@@ -7,6 +7,9 @@ use std::process::Command;
 use crate::app_config::PipelineChecksConfig;
 use crate::pipeline::types::{PipelineReport, StepResult};
 
+/// Runs the configured quality-pipeline check suite (build/lint/tests/typecheck)
+/// via `cargo`, used by [`crate::agent::Agent::run_turn`] after a tool-use
+/// round-trip when `pipeline.enabled` is set.
 #[derive(Debug, Default)]
 pub struct PipelineRunner;
 
