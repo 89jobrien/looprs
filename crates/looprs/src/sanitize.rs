@@ -9,6 +9,12 @@ const BEL: u8 = 0x07;
 const CSI_FINAL_LOW: u8 = 0x40;
 const CSI_FINAL_HIGH: u8 = 0x7e;
 
+/// Returns the maximum number of characters console previews are
+/// truncated to (see [`sanitize_preview_for_console`] and
+/// [`truncate_preview`]).
+///
+/// Reads `LOOPRS_PREVIEW_LEN` from the environment on every call; falls
+/// back to `4000` if unset, unparseable, or `0`.
 pub fn preview_len() -> usize {
     std::env::var("LOOPRS_PREVIEW_LEN")
         .ok()
@@ -17,6 +23,13 @@ pub fn preview_len() -> usize {
         .unwrap_or(DEFAULT_PREVIEW_LEN)
 }
 
+/// Returns whether [`sanitize_for_console`] should skip redaction and ANSI
+/// stripping and return its input unchanged.
+///
+/// This is `true` only when all of the following hold: the binary was
+/// built with `debug_assertions` (i.e. never in a release build),
+/// `LOOPRS_ALLOW_RAW_OUTPUT` is `"1"` or case-insensitively `"true"`, and
+/// `LOOPRS_ENV` is not `"prod"` or `"production"`.
 pub fn allow_raw_output() -> bool {
     if !cfg!(debug_assertions) {
         return false;
@@ -37,6 +50,13 @@ pub fn allow_raw_output() -> bool {
     !matches!(env.as_str(), "prod" | "production")
 }
 
+/// Removes ANSI escape sequences from `input`: CSI sequences (e.g. SGR
+/// color codes `ESC[...m`), OSC sequences (terminated by BEL or `ESC\\`),
+/// and DCS/APC/PM/SOS sequences (`ESC P`/`_`/`^`/`X`, also terminated by
+/// `ESC\\`). Any other two-byte sequence starting with `ESC` is dropped as
+/// a single unit. Operates on raw bytes internally, so invalid UTF-8
+/// produced by that byte-level processing is replaced with U+FFFD via
+/// [`String::from_utf8_lossy`] rather than panicking.
 pub fn strip_ansi(input: &str) -> String {
     // Remove common ANSI CSI sequences (e.g., ESC[...m)
     let bytes = input.as_bytes();
@@ -101,6 +121,15 @@ pub fn strip_ansi(input: &str) -> String {
     String::from_utf8_lossy(&out).to_string()
 }
 
+/// Strips ANSI escapes and redacts likely secrets (API keys, JWTs,
+/// PEM-encoded private keys, provider tokens, `Authorization` headers,
+/// URL-embedded credentials, and `key: value`/`key=value` pairs whose key
+/// looks secret-like) from `input`, for safe display on a shared or logged
+/// console.
+///
+/// Returns `input` unchanged, with no redaction or ANSI stripping, if
+/// [`allow_raw_output`] is `true`. Does not truncate length; use
+/// [`sanitize_preview_for_console`] when a bounded preview is needed.
 pub fn sanitize_for_console(input: &str) -> String {
     if allow_raw_output() {
         return input.to_string();
@@ -110,6 +139,10 @@ pub fn sanitize_for_console(input: &str) -> String {
     redact(&no_ansi)
 }
 
+/// Applies [`sanitize_for_console`] to `input`, then truncates the result
+/// to [`preview_len`] characters (appending a `"... [truncated N chars]"`
+/// suffix when truncated). The character count and truncation point apply
+/// to the *sanitized* text, not the original.
 pub fn sanitize_preview_for_console(input: &str) -> String {
     let sanitized = sanitize_for_console(input);
     truncate_chars(&sanitized, preview_len())
