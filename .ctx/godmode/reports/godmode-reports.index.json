@@ -1,0 +1,15 @@
+{
+  "categories": {
+    "introspection": {
+      "files": [
+        "introspection/introspection-2026-08-25.md"
+      ]
+    },
+    "reflect": {
+      "files": [
+        "reflect/reflect-2026-07-08.md",
+        "reflect/reflect-2026-07-12.md"
+      ]
+    }
+  }
+}
