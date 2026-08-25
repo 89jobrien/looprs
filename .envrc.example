@@ -1,6 +1,6 @@
 source_up
 
-# Secrets are inherited from the global loader in /Users/joe/dev/.env.nu.
+# Secrets are inherited from the global loader in /Users/joe/dev/.envrc.
 # Default provider is set in .looprs/provider.json.
 
 # Suppress noisy BAML runtime logs; set to "info" to see request traces.
