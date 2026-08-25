@@ -1,0 +1,6 @@
+name: models
+description: "List selectable models (current, providers, local, tiers, remote catalogs)"
+aliases:
+  - ls-models
+action:
+  type: list_models

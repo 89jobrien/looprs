@@ -11,6 +11,7 @@ The canonical, always-current list is `/help`'s own message text
 |---------|---------|--------|-------|
 | `/help` | `/h` | message | Lists available custom commands |
 | `/model [provider[/model]]` | `/m` | switch_provider | Show or switch provider in-session, e.g. `/model openai/gpt-4o` |
+| `/models` | `/ls-models` | list_models | Grouped discovery: current, providers, local, tiers, remote catalogs |
 | `/check` | | shell | `cargo check --workspace` |
 | `/build` | | shell | `cargo build --workspace --release` |
 | `/test` | | shell | `cargo test --lib` |

@@ -8,6 +8,7 @@ action:
     Custom commands:
 
     /model [provider[/model]]  Show or switch provider. e.g. /model openai/gpt-4o
+    /models                    Show grouped model catalog (local + configured + remote)
     /check                     cargo check --workspace
     /build                     cargo build --workspace --release
     /test                      cargo test --lib
