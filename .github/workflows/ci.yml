@@ -24,6 +24,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Install tools
         uses: taiki-e/install-action@v2
         with:
@@ -56,6 +59,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Check MSRV
         run: cargo check --workspace
 
@@ -70,6 +76,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Install cargo-llvm-cov + cargo-rail
         uses: taiki-e/install-action@v2
@@ -98,6 +107,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Install taskit
         run: cargo install taskit
