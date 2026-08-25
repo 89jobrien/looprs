@@ -117,7 +117,7 @@ jobs:
         run: cargo install --locked taskit
 
       - name: Install cargo-fuzz
-        run: cargo install --locked cargo-fuzz
+        run: cargo +nightly install --locked cargo-fuzz
 
       - name: Fuzz fuzz_parse_skill
         run: taskit fuzz fuzz_parse_skill --duration 30
