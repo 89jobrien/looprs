@@ -15,7 +15,7 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use futures::StreamExt as _;
-use looprs::{Agent, ChatMessage};
+use looprs::Agent;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
@@ -58,6 +58,12 @@ pub enum InputAction {
     Continue,
     Submit,
     Quit,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ChatMessage {
+    role: String,
+    text: String,
 }
 
 /// Applies a key press to the input buffer, returning what the chat loop
@@ -204,6 +210,10 @@ pub async fn run(agent: Agent) -> Result<()> {
                                 let message = input.trim().to_string();
                                 input.clear();
                                 if !message.is_empty() {
+                                    static_transcript.push(ChatMessage {
+                                        role: "user".to_string(),
+                                        text: message.clone(),
+                                    });
                                     let mut turn_agent =
                                         agent_slot.take().expect("agent present while idle");
                                     turn_agent.add_user_message(message);
@@ -229,12 +239,12 @@ pub async fn run(agent: Agent) -> Result<()> {
                 turn_handle = None;
                 match joined {
                     Ok((returned_agent, turn_result)) => {
-                        // Rebuild from the agent's own transcript first, then
-                        // append a synthetic "error" entry on failure so it
-                        // survives the live_text.clear() below and is still
-                        // visible on the next draw (a failed turn otherwise
-                        // rendered as silence: no assistant reply, no error).
-                        static_transcript = returned_agent.transcript();
+                        if !live_text.is_empty() {
+                            static_transcript.push(ChatMessage {
+                                role: "assistant".to_string(),
+                                text: live_text.clone(),
+                            });
+                        }
                         if let Err(e) = turn_result {
                             static_transcript.push(ChatMessage {
                                 role: "error".to_string(),
