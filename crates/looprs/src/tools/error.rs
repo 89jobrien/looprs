@@ -68,3 +68,97 @@ pub enum ToolError {
     #[diagnostic(code(looprs::tool::invalid_path))]
     InvalidPath(String),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn code_of(err: &ToolError) -> String {
+        err.code()
+            .expect("diagnostic must carry a code")
+            .to_string()
+    }
+
+    #[test]
+    fn display_messages_are_actionable() {
+        assert_eq!(
+            ToolError::FileNotFound("/tmp/x.rs".into()).to_string(),
+            "File not found: /tmp/x.rs"
+        );
+        assert_eq!(
+            ToolError::AmbiguousPattern(3).to_string(),
+            "Pattern appears 3 times; use all=true or be more specific"
+        );
+        assert_eq!(
+            ToolError::InvalidParameterType {
+                key: "all".into(),
+                expected: "bool"
+            }
+            .to_string(),
+            "Invalid parameter type for all: expected bool"
+        );
+        assert_eq!(
+            ToolError::ModeDenied {
+                tool: "write".into(),
+                mode: "read-only".into(),
+                reason: "fs_mode".into()
+            }
+            .to_string(),
+            "Tool 'write' is not allowed in read-only mode: fs_mode"
+        );
+    }
+
+    #[test]
+    fn diagnostic_codes_cover_variants() {
+        let cases: Vec<(ToolError, &str)> = vec![
+            (
+                ToolError::FileNotFound("f".into()),
+                "looprs::tool::file_not_found",
+            ),
+            (
+                ToolError::PatternNotFound("p".into()),
+                "looprs::tool::pattern_not_found",
+            ),
+            (
+                ToolError::MissingParameter("q".into()),
+                "looprs::tool::missing_parameter",
+            ),
+            (ToolError::UnknownTool("zz".into()), "looprs::tool::unknown"),
+            (
+                ToolError::CommandFailed("c".into()),
+                "looprs::tool::command_failed",
+            ),
+            (
+                ToolError::PathOutsideWorkingDir("../x".into()),
+                "looprs::tool::path_outside_working_dir",
+            ),
+            (
+                ToolError::InvalidPath("\0".into()),
+                "looprs::tool::invalid_path",
+            ),
+        ];
+        for (err, expected) in cases {
+            assert_eq!(code_of(&err), expected, "variant: {err}");
+        }
+    }
+
+    #[test]
+    fn help_text_present_where_guidance_exists() {
+        assert!(ToolError::PatternNotFound("p".into()).help().is_some());
+        assert!(ToolError::UnknownTool("z".into()).help().is_some());
+        assert!(
+            ToolError::PathOutsideWorkingDir("../x".into())
+                .help()
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn io_error_converts_via_from() {
+        let io = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
+        let err: ToolError = io.into();
+        assert!(matches!(err, ToolError::Io(_)));
+        assert_eq!(code_of(&err), "looprs::tool::io");
+        assert!(err.to_string().starts_with("IO error:"));
+    }
+}

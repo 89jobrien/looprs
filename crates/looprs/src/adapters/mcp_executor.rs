@@ -105,4 +105,19 @@ mod tests {
         let result = executor.execute("echo", &serde_json::json!({}), &ctx);
         assert!(result.is_err());
     }
+
+    /// With a DefaultToolExecutor fallback, the adapter satisfies the port
+    /// contract: unknown tools surface as UnknownTool from the fallback.
+    #[test]
+    fn mcp_executor_with_default_fallback_satisfies_contract() {
+        use crate::tools::executor::{DefaultToolExecutor, assert_tool_executor_contract};
+
+        let executor =
+            McpToolExecutor::with_fallback("http://127.0.0.1:0/mcp", Box::new(DefaultToolExecutor));
+        let ctx = ToolContext::from_working_dir(
+            std::env::current_dir().unwrap(),
+            crate::fs_mode::FsMode::Write,
+        );
+        assert_tool_executor_contract(&executor, &ctx);
+    }
 }

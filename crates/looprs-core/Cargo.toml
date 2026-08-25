@@ -10,6 +10,9 @@ homepage.workspace = true
 documentation.workspace = true
 rust-version.workspace = true
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
 [dependencies]
 anyhow = { workspace = true } #unified
 async-trait = "0.1"
@@ -25,4 +28,3 @@ test-contracts = []
 
 [dev-dependencies]
 tempfile = { workspace = true } #unified
-

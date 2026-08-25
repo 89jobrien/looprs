@@ -213,3 +213,104 @@ pub struct DataAnomaly {
     /// Model confidence in this detection, in the range `0.0..=1.0`.
     pub confidence: f32,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn message_analysis_roundtrips() {
+        let analysis = MessageAnalysis {
+            intent: UserIntent {
+                category: IntentCategory::Modification,
+                sub_intent: Some("rename function".into()),
+                parameters: vec!["agent.rs".into()],
+                confidence: 0.9,
+            },
+            sentiment: SentimentContext {
+                sentiment: Sentiment::Neutral,
+                mood: Mood::Mixed,
+                intensity: 0.4,
+                aspects: vec!["naming".into()],
+            },
+            topics: vec!["refactoring".into()],
+            entities: vec!["agent.rs".into()],
+            requires_action: true,
+            confidence: 0.85,
+        };
+
+        let json = serde_json::to_string(&analysis).unwrap();
+        let back: MessageAnalysis = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.intent.category, IntentCategory::Modification);
+        assert_eq!(back.sentiment.mood, Mood::Mixed);
+        assert!(back.requires_action);
+        assert_eq!(back.entities, vec!["agent.rs".to_string()]);
+    }
+
+    #[test]
+    fn system_health_roundtrips_with_components() {
+        let health = SystemHealth {
+            status: HealthStatus::Degraded,
+            components: vec![ComponentHealth {
+                name: "db".into(),
+                status: HealthStatus::Critical,
+                message: Some("connection pool exhausted".into()),
+            }],
+            overall_score: 0.42,
+            recommendations: vec!["restart db".into()],
+        };
+
+        let json = serde_json::to_string(&health).unwrap();
+        let back: SystemHealth = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.status, HealthStatus::Degraded);
+        assert_eq!(back.components[0].status, HealthStatus::Critical);
+        assert_eq!(
+            back.components[0].message.as_deref(),
+            Some("connection pool exhausted")
+        );
+    }
+
+    #[test]
+    fn workflow_state_roundtrips_terminal_stage() {
+        let state = WorkflowState {
+            stage: WorkflowStage::Failed,
+            progress: 0.8,
+            current_task: None,
+            completed_tasks: vec!["step-1".into(), "step-2".into()],
+            pending_tasks: vec![],
+            errors: vec!["timeout on step-3".into()],
+        };
+
+        let back: WorkflowState =
+            serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+        assert_eq!(back.stage, WorkflowStage::Failed);
+        assert_eq!(back.completed_tasks.len(), 2);
+        assert_eq!(back.errors.len(), 1);
+    }
+
+    #[test]
+    fn data_anomaly_serializes_variant_names() {
+        let anomaly = DataAnomaly {
+            anomaly_type: AnomalyType::Statistical,
+            severity: AnomalySeverity::High,
+            description: "spike in latency".into(),
+            affected_fields: vec!["p99".into()],
+            confidence: 0.95,
+        };
+
+        let json = serde_json::to_value(&anomaly).unwrap();
+        assert_eq!(json["anomaly_type"], "Statistical");
+        assert_eq!(json["severity"], "High");
+    }
+
+    #[test]
+    fn sentiment_enum_serializes_graded_variants() {
+        for (value, expected) in [
+            (Sentiment::VeryPositive, "VeryPositive"),
+            (Sentiment::VeryNegative, "VeryNegative"),
+        ] {
+            let json = serde_json::to_value(value).unwrap();
+            assert_eq!(json, expected);
+        }
+    }
+}

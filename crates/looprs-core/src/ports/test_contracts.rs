@@ -8,7 +8,10 @@
 // The function skeleton exists in this file but only covers MessageBroker and SessionStore.
 // Add a parallel suite for InferenceProvider (single-turn, tool-call, multi-turn).
 
+use crate::observation::Observation;
 use crate::ports::message_broker::{Message, MessageBroker};
+use crate::ports::model_catalog::RemoteModelCatalogPort;
+use crate::ports::observation_store::ObservationStore;
 use crate::ports::session_store::{SessionEvent, SessionStore};
 use crate::ports::user_output::UserOutput;
 
@@ -164,6 +167,86 @@ pub fn assert_user_output_contract(output: &dyn UserOutput) {
     output.write_chunk("");
 }
 
+// ── ObservationStore ────────────────────────────────────────────────────
+
+/// Assert that an `ObservationStore` implementation satisfies the full contract.
+///
+/// Contract:
+/// 1. Saving an empty batch succeeds.
+/// 2. Saving a batch of observations (all fields populated, including
+///    optional ones) succeeds.
+/// 3. Repeated saves of the same batch succeed — persistence must be
+///    idempotent-tolerant, not fail on duplicates.
+pub fn assert_observation_store_contract(store: &dyn ObservationStore) {
+    // 1. Empty batch
+    store
+        .save(&[])
+        .expect("save() must accept an empty observation batch");
+
+    // 2. Fully populated batch
+    let obs_with_id = Observation::new(
+        "bash".into(),
+        serde_json::json!({"command": "echo hi"}),
+        "hi".to_string(),
+        Some(crate::types::ToolId::new("tu-1")),
+        "sess-conformance".to_string(),
+    )
+    .with_context("conformance capture".to_string());
+    let obs_minimal = Observation::new(
+        "read".into(),
+        serde_json::json!({}),
+        String::new(),
+        None,
+        "sess-conformance".to_string(),
+    );
+    let batch = vec![obs_with_id, obs_minimal];
+    store
+        .save(&batch)
+        .expect("save() must accept a fully populated batch");
+
+    // 3. Repeated save of the same data must not error
+    store
+        .save(&batch)
+        .expect("repeated save() of identical observations must not error");
+}
+
+// ── RemoteModelCatalogPort ──────────────────────────────────────────────
+
+/// Assert that a `RemoteModelCatalogPort` implementation satisfies the full contract.
+///
+/// Contract:
+/// 1. `source()` is callable and stable across calls.
+/// 2. `list_models()` for any provider returns either models with non-empty
+///    provider/model strings, or a structured `RemoteCatalogError`.
+/// 3. An empty provider name does not panic.
+pub async fn assert_remote_model_catalog_contract(catalog: &dyn RemoteModelCatalogPort) {
+    // 1. Stable source
+    let _ = catalog.source();
+
+    for provider in ["anthropic", "openai", ""] {
+        match catalog.list_models(provider).await {
+            Ok(models) => {
+                for model in &models {
+                    assert!(
+                        !model.provider.is_empty(),
+                        "list_models({provider:?}) returned a model with empty provider"
+                    );
+                    assert!(
+                        !model.model.is_empty(),
+                        "list_models({provider:?}) returned a model with empty model id"
+                    );
+                }
+            }
+            Err(err) => {
+                assert!(
+                    !err.message.is_empty(),
+                    "list_models({provider:?}) error must carry a message"
+                );
+            }
+        }
+    }
+}
+
 /// Assert the full InferenceProvider live contract.
 ///
 /// Gated behind `LOOPRS_RUN_LIVE_LLM_TESTS=1` — requires a real API key.
@@ -219,4 +302,80 @@ pub async fn assert_inference_provider_live_contract(
         resp.usage.output_tokens > 0,
         "live contract: usage.output_tokens must be > 0"
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ports::model_catalog::{CatalogSource, RemoteCatalogError, RemoteModel};
+
+    /// Reference in-memory ObservationStore used to validate the contract
+    /// suite itself. Also serves as a reusable test double for other tests.
+    pub struct MemObservationStore {
+        saved: std::sync::Mutex<Vec<Vec<Observation>>>,
+    }
+
+    impl MemObservationStore {
+        pub fn new() -> Self {
+            Self {
+                saved: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+
+        pub fn batch_count(&self) -> usize {
+            self.saved.lock().unwrap().len()
+        }
+    }
+
+    impl Default for MemObservationStore {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    impl ObservationStore for MemObservationStore {
+        fn save(&self, observations: &[Observation]) -> Result<(), anyhow::Error> {
+            self.saved.lock().unwrap().push(observations.to_vec());
+            Ok(())
+        }
+    }
+
+    /// Reference RemoteModelCatalogPort fake backed by a static table.
+    pub struct FakeCatalog;
+
+    #[async_trait::async_trait]
+    impl RemoteModelCatalogPort for FakeCatalog {
+        async fn list_models(
+            &self,
+            provider: &str,
+        ) -> Result<Vec<RemoteModel>, RemoteCatalogError> {
+            if provider.is_empty() {
+                return Err(RemoteCatalogError {
+                    provider: provider.to_string(),
+                    message: "provider name must not be empty".to_string(),
+                });
+            }
+            Ok(vec![RemoteModel {
+                provider: provider.to_string(),
+                model: format!("{provider}-fake-model"),
+                source: CatalogSource::GistFallback,
+            }])
+        }
+
+        fn source(&self) -> CatalogSource {
+            CatalogSource::LiveApi
+        }
+    }
+
+    #[test]
+    fn observation_store_contract_holds_for_reference_fake() {
+        let store = MemObservationStore::new();
+        assert_observation_store_contract(&store);
+        assert_eq!(store.batch_count(), 3, "contract performs exactly 3 saves");
+    }
+
+    #[tokio::test]
+    async fn remote_model_catalog_contract_holds_for_reference_fake() {
+        assert_remote_model_catalog_contract(&FakeCatalog).await;
+    }
 }

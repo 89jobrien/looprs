@@ -5,6 +5,7 @@
 
 pub mod inference_provider;
 pub mod message_broker;
+pub mod model_catalog;
 pub mod observation_store;
 pub mod plugin_executor;
 pub mod session_store;
@@ -18,6 +19,7 @@ pub use inference_provider::{
     InferStream, InferenceProvider, InferenceRequest, InferenceResponse, Usage,
 };
 pub use message_broker::{Message, MessageBroker};
+pub use model_catalog::{CatalogSource, RemoteCatalogError, RemoteModel, RemoteModelCatalogPort};
 pub use observation_store::ObservationStore;
 pub use plugin_executor::PluginExecutor;
 pub use session_store::{SessionEvent, SessionStore};

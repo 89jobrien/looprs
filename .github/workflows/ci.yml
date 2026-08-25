@@ -112,3 +112,15 @@ jobs:
       - name: Fuzz fuzz_strip_ansi
         run: taskit fuzz fuzz_strip_ansi --duration 30
         working-directory: fuzz
+
+      - name: Fuzz fuzz_parse_hook
+        run: taskit fuzz fuzz_parse_hook --duration 30
+        working-directory: fuzz
+
+      - name: Fuzz fuzz_parse_session_event
+        run: taskit fuzz fuzz_parse_session_event --duration 30
+        working-directory: fuzz
+
+      - name: Fuzz fuzz_parse_content_block
+        run: taskit fuzz fuzz_parse_content_block --duration 30
+        working-directory: fuzz
