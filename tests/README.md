@@ -13,7 +13,7 @@ cargo nextest run -p looprs
 cargo nextest run -p looprs-cli --bin looprs
 
 # Local pre-push gate
-cargo xtask pre-push
+cargo xtask check pre-push
 
 # With coverage
 cargo llvm-cov nextest --workspace --html
@@ -22,7 +22,7 @@ cargo llvm-cov nextest --workspace --html
 cargo watch -x "nextest run"
 ```
 
-`cargo xtask pre-push` delegates to `taskit pre-push` and then runs the `looprs-cli` binary tests separately. This matters because the `looprs-cli` package has a lightweight library target for workspace tooling, while its argument parsing and CLI behavior tests live under the `looprs` binary target.
+`cargo xtask check pre-push` delegates to `taskit check pre-push` and then runs the `looprs-cli` binary tests separately. This matters because the `looprs-cli` package has a lightweight library target for workspace tooling, while its argument parsing and CLI behavior tests live under the `looprs` binary target.
 
 ## Test Categories
 
@@ -39,4 +39,4 @@ cargo watch -x "nextest run"
 - Use `cargo nextest run --workspace` for the main workspace suite.
 - Use `cargo nextest run -p looprs-cli --bin looprs` when validating CLI parsing or startup behavior directly.
 - Use `cargo clippy --all-targets --all-features -- -D warnings` for warning-free Rust changes.
-- Use `cargo xtask pre-push` before pushing; it combines `taskit` propagation/protocol checks with the CLI binary tests.
+- Use `cargo xtask check pre-push` before pushing; it combines `taskit` propagation/protocol checks with the CLI binary tests.

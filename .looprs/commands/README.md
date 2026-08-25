@@ -38,7 +38,7 @@ description: Short description
 aliases:
   - alias
 action:
-  type: message|prompt|shell|switch_provider|outsource
+  type: message|prompt|shell|switch_provider|outsource|list_models
   # for message:
   text: "..."
   # for prompt:
@@ -47,7 +47,7 @@ action:
   # for shell:
   command: "..."
   inject_output: true
-  # switch_provider and outsource take no extra fields
+  # switch_provider, outsource, and list_models take no extra fields
 ```
 
 `{args}` in a `shell` command's `command:` string is substituted with the

@@ -117,9 +117,10 @@ action:
   inject_output: true
 ```
 
-Action types: `prompt` (send to LLM), `shell` (run command with Nushell), `message` (print to console).
+Action types: `prompt` (send to LLM), `shell` (run command with Nushell),
+`message` (print to console), `switch_provider`, `outsource`, `list_models`.
 
-Built-in repo commands: `/help`, `/refactor`, `/test`, `/lint`.
+Repo command set evolves; run `/help` for the canonical in-session list.
 
 ### Skills
 
