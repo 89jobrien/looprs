@@ -12,6 +12,13 @@ cargo build --release
 # or: cargo install --path crates/looprs-cli
 ```
 
+## Local env
+
+```bash
+cp .envrc.example .envrc
+direnv allow
+```
+
 ## Configure
 
 Pick a provider:
@@ -194,10 +201,10 @@ cargo build --workspace
 cargo nextest run --workspace
 cargo nextest run -p looprs-cli --bin looprs
 cargo clippy --all-targets --all-features -- -D warnings
-cargo xtask pre-push
+cargo xtask check pre-push
 ```
 
-The `Makefile` is still available for common shortcuts such as `make build`, `make lint`, and `make all`. Use `cargo xtask pre-push` before pushing; the installed `.githooks/pre-push` delegates to the same command and includes the `looprs-cli` binary test suite that library-only shortcuts do not cover.
+The `Makefile` is still available for common shortcuts such as `make build`, `make lint`, and `make all`. Use `cargo xtask check pre-push` before pushing; the installed `.githooks/pre-push` delegates to the same command and includes the `looprs-cli` binary test suite that library-only shortcuts do not cover.
 
 ## License
 

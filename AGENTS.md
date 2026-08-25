@@ -22,7 +22,7 @@ gates run through `cargo` / `cargo xtask` (which delegates to `taskit`), not
 cargo build --workspace
 cargo nextest run --workspace
 cargo clippy --all-targets --all-features -- -D warnings
-cargo xtask pre-push          # required before pushing; runs fmt + clippy + CLI binary tests
+cargo xtask check pre-push    # required before pushing; runs fmt + clippy + CLI binary tests
 ```
 
 ## Landing the Plane (Session Completion)
@@ -32,7 +32,7 @@ succeeds (only push when explicitly asked to — see `~/.claude/CLAUDE.md`).
 
 **MANDATORY WORKFLOW:**
 
-1. **Run quality gates** (if code changed) — `cargo fmt`, `cargo clippy`, `cargo nextest run --workspace`, `cargo xtask pre-push`
+1. **Run quality gates** (if code changed) — `cargo fmt`, `cargo clippy`, `cargo nextest run --workspace`, `cargo xtask check pre-push`
 2. **File follow-up work** — `doob todo add` for anything that needs a later pass
 3. **Commit** — only when explicitly asked
 4. **Push** — only when explicitly asked; verify with `git status` afterward
@@ -184,7 +184,7 @@ cargo build --workspace
 Or the pre-push gate used by `.githooks/pre-push`:
 
 ```bash
-cargo xtask pre-push
+cargo xtask check pre-push
 ```
 
 ## Debugging Tips

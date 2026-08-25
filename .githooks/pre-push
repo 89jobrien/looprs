@@ -1,4 +1,4 @@
 #!/bin/sh
 # Delegate to taskit pre-push checks.
 # Install: git config core.hooksPath .githooks
-exec cargo xtask pre-push
+exec cargo xtask check pre-push
