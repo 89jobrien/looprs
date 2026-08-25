@@ -135,7 +135,7 @@ db = "/path/to/db"
         let path = Path::new("/nonexistent/path/to/models.toml");
         let result = ModelsConfig::from_path(path);
         assert!(result.is_err());
-        let err_msg = format!("{:?}", result);
+        let err_msg = format!("{result:?}");
         assert!(err_msg.contains("reading") || err_msg.contains("No such file"));
     }
 
@@ -152,7 +152,7 @@ provider = "openai"
 
         let result = ModelsConfig::from_path(file.path());
         assert!(result.is_err());
-        let err_msg = format!("{:?}", result);
+        let err_msg = format!("{result:?}");
         assert!(err_msg.contains("parsing"));
     }
 

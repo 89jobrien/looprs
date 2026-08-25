@@ -145,8 +145,7 @@ mod tests {
         let err = ToolError::CommandFailed("rg execution failed".to_string());
         assert!(
             err.to_string().contains("Command execution failed"),
-            "expected CommandFailed variant, got: {}",
-            err
+            "expected CommandFailed variant, got: {err}"
         );
         // Ensure we're NOT using MissingParameter for this case
         let wrong = ToolError::MissingParameter("rg execution failed".to_string());
