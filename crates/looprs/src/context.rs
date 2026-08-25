@@ -1,21 +1,24 @@
-use crate::{jj, kan};
+use crate::{doob, git_info};
 use serde::{Deserialize, Serialize};
+
+/// Project name doob todos are queried under. Matches the `--project`
+/// scoping convention used across this workspace's doob usage.
+const DOOB_PROJECT: &str = "looprs";
+const DOOB_TODO_LIMIT: usize = 5;
 
 /// Context available at session start
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionContext {
-    pub jj_status: Option<jj::JjStatus>,
-    pub jj_recent_commits: Option<Vec<String>>,
-    pub kan_status: Option<kan::KanStatus>,
+    pub git: git_info::GitInfo,
+    pub doob_status: Option<doob::DoobStatus>,
 }
 
 impl SessionContext {
-    /// Collect context from jj and kan if available
+    /// Collect context from git and doob if available
     pub fn collect() -> Self {
         SessionContext {
-            jj_status: jj::get_status(),
-            jj_recent_commits: jj::get_recent_commits(5),
-            kan_status: kan::get_status(),
+            git: git_info::collect(),
+            doob_status: doob::collect(DOOB_PROJECT, DOOB_TODO_LIMIT),
         }
     }
 
@@ -23,35 +26,23 @@ impl SessionContext {
     pub fn format_for_prompt(&self) -> Option<String> {
         let mut parts = Vec::new();
 
-        // Format jj status if available
-        if let Some(ref status) = self.jj_status {
+        if let Some(ref branch) = self.git.branch {
             parts.push(format!(
-                "## Repository Status\n- Branch: {}\n- Commit: {}\n- Description: {}",
-                status.branch, status.commit, status.description
+                "## Repository Status\n- Branch: {branch}\n- Commits ahead of upstream: {}\n- Modified files: {}\n- Untracked files: {}",
+                self.git.ahead, self.git.modified, self.git.untracked
             ));
         }
 
-        // Format recent commits if available
-        if let Some(ref commits) = self.jj_recent_commits {
-            let commits_str = commits
+        if let Some(ref doob) = self.doob_status {
+            let todos_str = doob
+                .todos
                 .iter()
-                .map(|c| format!("  - {c}"))
-                .collect::<Vec<_>>()
-                .join("\n");
-            parts.push(format!("## Recent Commits\n{commits_str}"));
-        }
-
-        // Format kan status if available
-        if let Some(ref kan) = self.kan_status {
-            let columns_str = kan
-                .by_column
-                .iter()
-                .map(|col| format!("  - {}: {}", col.name, col.count))
+                .map(|t| format!("  - (p{}) {}", t.priority, t.content))
                 .collect::<Vec<_>>()
                 .join("\n");
             parts.push(format!(
-                "## Kanban Board\n  Total tasks: {}\n{columns_str}",
-                kan.total_tasks
+                "## Pending Todos ({DOOB_PROJECT})\n  Total pending: {}\n{todos_str}",
+                doob.count
             ));
         }
 
@@ -64,7 +55,7 @@ impl SessionContext {
 
     /// Check if there is any context available
     pub fn is_empty(&self) -> bool {
-        self.jj_status.is_none() && self.jj_recent_commits.is_none() && self.kan_status.is_none()
+        self.git.branch.is_none() && self.doob_status.is_none()
     }
 }
 
@@ -74,35 +65,62 @@ mod tests {
 
     #[test]
     fn test_session_context_collect() {
-        // Should work even with no jj repo
+        // Should work even with no doob available; git branch will be set
+        // since this crate itself lives in a git repo.
         let ctx = SessionContext::collect();
-        assert!(ctx.is_empty()); // No jj in current env
+        assert!(ctx.doob_status.is_none());
     }
 
     #[test]
     fn test_session_context_format_empty() {
         let ctx = SessionContext {
-            jj_status: None,
-            jj_recent_commits: None,
-            kan_status: None,
+            git: git_info::GitInfo::default(),
+            doob_status: None,
         };
         assert!(ctx.format_for_prompt().is_none());
     }
 
     #[test]
-    fn test_session_context_format_with_jj() {
+    fn test_session_context_format_with_git() {
         let ctx = SessionContext {
-            jj_status: Some(jj::JjStatus {
-                branch: "main".to_string(),
-                commit: "abc123".to_string(),
-                description: "Initial commit".to_string(),
-            }),
-            jj_recent_commits: None,
-            kan_status: None,
+            git: git_info::GitInfo {
+                branch: Some("main".to_string()),
+                ahead: 2,
+                modified: 1,
+                untracked: 0,
+            },
+            doob_status: None,
         };
 
         let text = ctx.format_for_prompt().expect("expected formatted prompt");
         assert!(text.contains("main"));
-        assert!(text.contains("abc123"));
+        assert!(text.contains("Commits ahead of upstream: 2"));
+    }
+
+    #[test]
+    fn test_session_context_format_with_doob() {
+        let ctx = SessionContext {
+            git: git_info::GitInfo::default(),
+            doob_status: Some(doob::DoobStatus {
+                count: 1,
+                todos: vec![doob::DoobTodo {
+                    content: "Fix bug".to_string(),
+                    priority: 3,
+                }],
+            }),
+        };
+
+        let text = ctx.format_for_prompt().expect("expected formatted prompt");
+        assert!(text.contains("Fix bug"));
+        assert!(text.contains("Total pending: 1"));
+    }
+
+    #[test]
+    fn test_session_context_is_empty() {
+        let ctx = SessionContext {
+            git: git_info::GitInfo::default(),
+            doob_status: None,
+        };
+        assert!(ctx.is_empty());
     }
 }

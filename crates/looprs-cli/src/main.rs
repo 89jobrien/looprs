@@ -363,7 +363,7 @@ async fn run_interactive(
     };
     bind_repl_keys(&mut rl, repl_state, repl_sets, agent.fs_mode_handle());
 
-    // Collect session context (jj status, kan board, etc.)
+    // Collect session context (git status, pending doob todos, etc.)
     let context = SessionContext::collect();
 
     ui::header(

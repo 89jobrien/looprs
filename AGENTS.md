@@ -4,108 +4,102 @@ This document provides guidance for AI agents working on the looprs codebase.
 
 ## Project Overview
 
-looprs is a unified abstraction layer for agentic AI that provides:
-- Multi-provider LLM support (Anthropic, OpenAI, local models via Ollama)
-- Built-in tools for file operations and shell execution
-- Extensibility through commands, skills, agents, rules, and hooks
-- Event-driven architecture with lifecycle hooks
+looprs is a Rust LLM agent loop CLI and library — a full agent runtime:
+multi-turn conversation management, tool execution, provider abstraction, and
+a YAML-based extension system for hooks, skills, commands, agents, and rules.
 
 ## Development Tools
 
-This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
+Issue tracking, planning, and cross-repo work for this project happen through
+the `doob` CLI and Linear (see the workspace-level `~/dev/CLAUDE.md` for
+Linear team/workspace details) — not a repo-local issue tracker. Quality
+gates run through `cargo` / `cargo xtask` (which delegates to `taskit`), not
+`make`.
 
 ## Quick Reference
 
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --status in_progress  # Claim work
-bd close <id>         # Complete work
-bd sync               # Sync with git
+cargo build --workspace
+cargo nextest run --workspace
+cargo clippy --all-targets --all-features -- -D warnings
+cargo xtask pre-push          # required before pushing; runs fmt + clippy + CLI binary tests
 ```
 
 ## Landing the Plane (Session Completion)
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+**When ending a work session**, work is NOT complete until `git push`
+succeeds (only push when explicitly asked to — see `~/.claude/CLAUDE.md`).
 
 **MANDATORY WORKFLOW:**
 
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd sync
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
+1. **Run quality gates** (if code changed) — `cargo fmt`, `cargo clippy`, `cargo nextest run --workspace`, `cargo xtask pre-push`
+2. **File follow-up work** — `doob todo add` for anything that needs a later pass
+3. **Commit** — only when explicitly asked
+4. **Push** — only when explicitly asked; verify with `git status` afterward
+5. **Hand off** — update `.ctx/HANDOFF.<repo>.<repo>.yaml` per the workspace convention
 
 ## Architecture Overview
 
-### CLI Application (`src/bin/looprs/`)
+### Workspace layout
 
-The CLI is organized into focused modules:
+```
+crates/looprs-core/   — core API types, port traits, lightweight adapters
+crates/looprs/        — agent runtime, providers, tools, hooks, skills, plugins, config
+crates/looprs-cli/    — looprs binary, CLI arg parsing, REPL, runtime facade
+crates/looprs-tui/    — `looprs provider` (select menu) and `looprs tui` (chat TUI)
+xtask/                — local automation shim (delegates to taskit)
+tests/                — workspace integration tests
+fuzz/                 — fuzz targets (excluded from default workspace)
+```
 
-- **`main.rs`** - Entry point with argument parsing and initialization
-- **`cli.rs`** - CLI configuration and setup logic
-- **`repl.rs`** - Interactive REPL loop handling user input and responses
-- **`args.rs`** - Command-line argument definitions using `clap`
+**Ownership rules** are canonical in `docs/ownership-model.md`:
+- Shared runtime behavior → `crates/looprs/`
+- Port traits and domain types → `crates/looprs-core/`
+- CLI/surface concerns only → `crates/looprs-cli/`
+- Interactive terminal UI → `crates/looprs-tui/`
+- Customization/config → `.looprs/` (never mutate as a side effect of normal operation)
 
-**Design principle:** Keep the CLI layer thin - it coordinates between user input and the core library.
+### Core Library (`crates/looprs/src/`)
 
-### Core Library (`src/`)
-
-The main library components:
-
-- **`agent.rs`** - Central orchestrator managing:
+- **`agent.rs`** — Central orchestrator managing:
   - LLM provider interactions
   - Message history and context
   - Tool execution lifecycle
   - Event firing and hook invocation
   - Observation capture
 
-- **`app_config.rs`** - Centralized configuration management
-  - Application-wide settings
-  - Runtime configuration
-  - Shared state coordination
+- **`app_config.rs`** — Centralized configuration management (`.looprs/config.json` → `AppConfig`)
 
-- **`providers/`** - LLM provider implementations:
-  - `anthropic.rs` - Claude models (native tool support)
-  - `openai.rs` - GPT models (function calling)
-  - `local.rs` - Ollama integration (limited tool support)
-  - `mod.rs` - `LLMProvider` trait and auto-detection
+- **`providers/`** — LLM provider implementations, selected via `PROVIDER` env var or `.looprs/provider.json`:
+  - `anthropic.rs` — Claude models (native tool support)
+  - `openai.rs` — GPT models (function calling)
+  - `local.rs` — Ollama integration
+  - `gemini.rs` — Google Gemini (`gemini`, alias `google`)
+  - `baml_provider.rs` — BAML-backed provider (`baml`)
+  - `anthropic_sdk.rs` / `openai_sdk.rs` — SDK-backed variants (`anthropic-sdk`, `openai-sdk`, `claude-sdk`)
+  - `mod.rs` — `LLMProvider` trait and provider selection
 
-- **`tools/`** - Built-in capabilities exposed to LLMs:
-  - `bash.rs` - Shell command execution
-  - `read.rs` - File reading with pagination
-  - `write.rs` - File creation/overwriting
-  - `edit.rs` - Text replacement
-  - `grep.rs` - Content search (ripgrep integration)
-  - `glob.rs` - File pattern matching (fd integration)
+- **`tools/`** — Built-in capabilities exposed to LLMs: `bash.rs`, `read.rs`,
+  `write.rs`, `edit.rs`, `grep.rs` (ripgrep integration), `glob.rs` (fd
+  integration), `nu.rs` (Nushell), plus `executor.rs`/`error.rs`
 
-- **`events.rs` + `hooks/`** - Event-driven system:
-  - 8 lifecycle events (SessionStart, SessionEnd, etc.)
+- **`events.rs` + `hooks/`** — Event-driven system:
+  - 8 lifecycle events: `SessionStart`, `UserPromptSubmit`, `InferenceComplete`,
+    `PreToolUse`, `PostToolUse`, `OnError`, `OnWarning`, `SessionEnd`
   - YAML-based hook definitions in `.looprs/hooks/`
-  - Actions: command execution, context injection, conditionals
+  - Actions: command execution (via Nushell), context injection, conditionals
 
-- **`context.rs`** - Session context collection:
-  - Auto-gathers repo status (jj), open issues (bd), board state (kan)
-  - Injected into system prompts for contextual awareness
+- **`context.rs`** — Session-start context collection: git repo status
+  (`git_info.rs`) and pending `doob` todos scoped to this project
+  (`doob.rs`), injected into the system prompt
 
-- **`observation.rs` + `observation_manager.rs`** - Incremental learning:
-  - Captures tool executions across sessions
-  - Stores in bd for continuity
-  - Loaded on SessionStart for agent memory
+- **`observability.rs`** — Structured JSONL traces/events. Root resolves to
+  `LOOPRS_OBSERVABILITY_DIR` if set, else `.looprs/observability/` if the
+  cwd has its own `.looprs/config.json` (project-scoped), else
+  `~/.looprs/observability/` (centralized default)
+
+- **`observation.rs` + `observation_manager.rs`** — Incremental learning:
+  captures tool executions for context injection across turns
 
 ### Extensibility Framework (`.looprs/`)
 
@@ -122,12 +116,15 @@ All customization happens in `.looprs/` without modifying core:
 └── rules/            # Constraints and guidelines
 ```
 
+`.looprs/` (repo-level) overrides `~/.looprs/` (user-level) on name collision.
+
 ## Code Style Guidelines
 
 ### Error Handling
 - Use `anyhow::Result` for functions that can fail
 - Provide context with `.context()` or `.with_context()`
-- Graceful degradation for optional features (don't crash if jj/bd missing)
+- No `unwrap()`/`expect()` in production paths
+- Graceful degradation for optional features (don't crash if `doob`/`ollama` missing)
 
 ### Async/Await
 - All LLM API calls are async (tokio runtime)
@@ -135,44 +132,30 @@ All customization happens in `.looprs/` without modifying core:
 - Tool execution is synchronous but may shell out to async processes
 
 ### Testing
+- `cargo nextest run --workspace`, not `cargo test`
 - Unit tests alongside implementation in `src/`
 - Integration tests in `tests/`
-- Run with `make test` or `cargo test --lib`
+- Live LLM tests are off by default — enable with `LOOPRS_RUN_LIVE_LLM_TESTS=1`
 
 ### Module Exports
 - `lib.rs` defines public API surface
 - Export only what's needed externally
-- Keep internal implementation details private
+- Directory `mod.rs` layout, not flat files
 
 ## Common Tasks
 
 ### Adding a New Tool
 
-1. Create `src/tools/newtool.rs`:
-```rust
-use anyhow::Result;
-use serde_json::{json, Value};
-
-pub fn execute(params: Value) -> Result<Value> {
-    // Implementation
-    Ok(json!({"result": "success"}))
-}
-```
-
-2. Register in `src/tools/mod.rs`:
-```rust
-pub mod newtool;
-// Add to tools vector in get_tools()
-```
-
-3. Add tests in `src/tools/newtool.rs`
+1. Create `crates/looprs/src/tools/newtool.rs`
+2. Register it in `crates/looprs/src/tools/mod.rs`
+3. Add tests alongside the implementation
 
 ### Adding an Event
 
-1. Add variant to `Event` enum in `src/events.rs`
-2. Fire event in appropriate location:
+1. Add variant to `Event` enum in `crates/looprs/src/events.rs`
+2. Fire event in the appropriate location:
 ```rust
-self.events.fire(Event::NewEvent, &mut event_ctx);
+self.fire_event(Event::NewEvent, &event_ctx);
 ```
 3. Update hook documentation
 
@@ -181,41 +164,43 @@ self.events.fire(Event::NewEvent, &mut event_ctx);
 Each provider has its own message format and tool calling convention:
 - **Anthropic**: native `tool_use` blocks in content array
 - **OpenAI**: `tool_calls` array + separate `tool` role messages
-- **Local**: text-based markers (limited)
+- **Local**: text-based markers (limited tool support)
 
-Be careful when changing provider logic - test all three providers.
+Be careful when changing provider logic — test all providers, or at minimum
+run against `local`/Ollama for a real end-to-end check (see
+`.claude/skills/run-looprs/SKILL.md`).
 
 ## Quality Gates
 
 Before committing changes:
 
 ```bash
-make fmt        # Format code
-make lint       # Run clippy
-make test       # Run tests
-make build      # Verify compilation
+cargo fmt --all
+cargo clippy --all-targets --all-features -- -D warnings
+cargo nextest run --workspace
+cargo build --workspace
 ```
 
-Or run all at once:
+Or the pre-push gate used by `.githooks/pre-push`:
+
 ```bash
-make all        # fmt-check, lint, test, build
+cargo xtask pre-push
 ```
 
 ## Debugging Tips
 
 ### REPL not responding
-- Check provider API keys are set
+- Check provider API keys are set (or `PROVIDER=local` with `ollama serve` running)
 - Verify network connectivity
 - Look for error messages in console
 
 ### Tool execution fails
-- Check tool exists in PATH (for external tools)
+- Check tool exists in PATH (for external tools like `rg`/`fd`)
 - Verify parameters match expected format
 - Look at tool output in conversation
 
 ### Hook not firing
 - Verify YAML syntax is valid
-- Check event name matches exactly
+- Check event name matches exactly (see the 8 lifecycle events above)
 - Confirm `.looprs/hooks/` directory exists
-- Look for warning messages on SessionStart
-
+- Look for warning messages on `SessionStart`

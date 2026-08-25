@@ -26,6 +26,10 @@ pub struct EventContext {
 }
 
 impl EventContext {
+    /// Create an empty context with every field unset.
+    ///
+    /// Populate it with the `with_*` builder methods; which fields are
+    /// meaningful depends on the [`Event`] being fired.
     pub fn new() -> Self {
         EventContext {
             session_context: None,
@@ -38,31 +42,40 @@ impl EventContext {
         }
     }
 
+    /// Attach accumulated session context, overwriting any previous value.
     pub fn with_session_context(mut self, ctx: String) -> Self {
         self.session_context = Some(ctx);
         self
     }
 
+    /// Attach the triggering user message, overwriting any previous value.
     pub fn with_user_message(mut self, msg: String) -> Self {
         self.user_message = Some(msg);
         self
     }
 
+    /// Attach the name of the tool involved, overwriting any previous value.
     pub fn with_tool_name(mut self, name: String) -> Self {
         self.tool_name = Some(name);
         self
     }
 
+    /// Attach captured tool output, overwriting any previous value.
     pub fn with_tool_output(mut self, output: String) -> Self {
         self.tool_output = Some(output);
         self
     }
 
+    /// Attach an error description, overwriting any previous value.
+    ///
+    /// Note there is no corresponding `with_warning`; set
+    /// [`EventContext::warning`] directly for [`Event::OnWarning`].
     pub fn with_error(mut self, error: String) -> Self {
         self.error = Some(error);
         self
     }
 
+    /// Insert one metadata entry, replacing any existing value for `key`.
     pub fn with_metadata(mut self, key: String, value: String) -> Self {
         self.metadata.insert(key, value);
         self
@@ -84,12 +97,17 @@ pub struct EventManager {
 }
 
 impl EventManager {
+    /// Create a manager with no registered handlers.
     pub fn new() -> Self {
         EventManager {
             handlers: HashMap::new(),
         }
     }
 
+    /// Register `handler` for `event`.
+    ///
+    /// Handlers accumulate: registering multiple handlers for the same event
+    /// runs all of them, in registration order.
     pub fn on<F>(&mut self, event: Event, handler: F)
     where
         F: Fn(Event, &EventContext) + Send + Sync + 'static,
@@ -100,6 +118,11 @@ impl EventManager {
             .push(Box::new(handler));
     }
 
+    /// Invoke every handler registered for `event`, in registration order.
+    ///
+    /// Dispatch is synchronous and firing an event with no handlers is a
+    /// no-op. Handlers cannot report failure, so a misbehaving handler will
+    /// not interrupt the others; panics propagate to the caller.
     pub fn fire(&self, event: Event, context: &EventContext) {
         if let Some(handlers) = self.handlers.get(&event) {
             for handler in handlers {
@@ -108,6 +131,9 @@ impl EventManager {
         }
     }
 
+    /// Remove all handlers registered for `event`.
+    ///
+    /// Handlers for other events are unaffected.
     pub fn clear(&mut self, event: Event) {
         self.handlers.remove(&event);
     }

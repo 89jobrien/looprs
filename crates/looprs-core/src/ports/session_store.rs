@@ -31,10 +31,12 @@ pub enum SessionEvent {
     SessionEnd,
 }
 
-// TODO: hex refactor Phase 3 + persistent observation layer (ideas #8, #9) —
-// Agent constructs SessionLogger internally; ObservationManager is in-memory only.
-// Add a SQLite adapter (rusqlite already a dep) that implements this trait and
-// persists events + observations across sessions. Enables cost tracking and replay.
+// TODO: hex refactor Phase 3 — Agent still constructs SessionLogger
+// internally rather than receiving it as an injected SessionStore. Note that
+// the persistence half of this idea is done: SqliteSessionStore implements
+// this trait, and ObservationManager::persist/load_from already round-trip
+// through SQLite (see the TODO in observation_manager.rs for the remaining
+// gap — the read path is never wired into a running command).
 /// Port: append session events to a durable store.
 ///
 /// Implementations decide the storage backend (filesystem JSONL, SQLite, etc.).

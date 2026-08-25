@@ -1,6 +1,11 @@
+use serde::{Deserialize, Serialize};
 use std::process::Command;
 
-#[derive(Debug, Default, Clone)]
+/// Git repository state for session-start context.
+///
+/// All counts are best-effort: any failed `git` invocation degrades to a
+/// default value rather than an error.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GitInfo {
     pub branch: Option<String>,
     pub ahead: u32,

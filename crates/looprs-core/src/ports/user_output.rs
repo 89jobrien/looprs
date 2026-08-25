@@ -1,7 +1,5 @@
 //! UserOutput port — abstraction over user-facing terminal/UI output.
 
-// Remaining: streaming write_chunk() path (idea #5, blocked on provider streaming support).
-
 /// Port: emit structured output to the user.
 ///
 /// Implementations may render to a terminal, a log file, a TUI widget,

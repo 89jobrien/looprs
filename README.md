@@ -31,6 +31,11 @@ ollama serve  # in another terminal
 export PROVIDER="local"
 looprs
 
+# Gemini
+export GEMINI_API_KEY="..."
+export PROVIDER="gemini"          # or: google
+looprs
+
 # SDK-backed providers
 export PROVIDER="openai-sdk"      # openai-sdk | anthropic-sdk | claude-sdk
 looprs
@@ -88,6 +93,7 @@ The `.looprs/` directory defines repo-local agent configuration. All extension p
 - `pipeline`: optional pipeline checks, compaction settings, and log directory.
 - `agents`: delegation defaults, filesystem mode, parallelism, and orchestration strategy.
 - `paths`: repo-local directories for agents, commands, hooks, rules, and skills.
+- `persistence`: session store backend (`sqlite` or `fs`, default `fs`).
 
 Provider selection and model settings are separate. Put `provider`, provider-specific `model`, `max_tokens`, and `timeout_secs` in `.looprs/provider.json`.
 
@@ -127,10 +133,10 @@ YAML hooks fire on session lifecycle events. Define in `.looprs/hooks/<EventName
 ```yaml
 name: show_status
 trigger: SessionStart
-condition: has_tool:jj
+condition: has_tool:git
 actions:
   - type: command
-    command: "jj log -r 'main::' | head -3"
+    command: "git log --oneline -5"
     inject_as: recent_commits
   - type: command
     command: "git status --short"
@@ -145,12 +151,14 @@ Action types: `command` (Nushell command, optional `inject_as` and `requires_app
 
 ## Observability
 
-looprs writes structured JSONL traces and events:
+looprs writes structured JSONL traces and events under `~/.looprs/observability/`
+by default (centralized across projects), or `.looprs/observability/` if the
+current directory has its own `.looprs/config.json` (project-scoped setup):
 
-- `.looprs/observability/traces/*.jsonl` — turn traces
-- `.looprs/observability/ui_events.jsonl` — UI/machine events
+- `<root>/traces/*.jsonl` — turn traces
+- `<root>/ui_events.jsonl` — UI/machine events
 
-Redirect to an external path:
+Override the root explicitly:
 
 ```bash
 export LOOPRS_OBSERVABILITY_DIR="$HOME/.local/share/looprs/observability"
@@ -172,6 +180,7 @@ The repository is a Cargo workspace:
 - `crates/looprs-core/` — core API, types, ports, events, and lightweight adapters
 - `crates/looprs/` — agent runtime, providers, tools, hooks, skills, plugins, configuration, and observability
 - `crates/looprs-cli/` — `looprs` binary, CLI argument parsing, REPL, and runtime facade
+- `crates/looprs-tui/` — `looprs provider` (provider/model select menu) and `looprs tui` (alternate chat TUI)
 - `xtask/` — local automation shim that delegates to `taskit`
 - `tests/` — workspace integration tests
 - `fuzz/` — fuzz targets, excluded from the default workspace

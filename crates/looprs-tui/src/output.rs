@@ -5,17 +5,40 @@
 use looprs::ports::UserOutput;
 use tokio::sync::mpsc::UnboundedSender;
 
+/// A single rendering event emitted by the agent runtime.
+///
+/// Mirrors the [`UserOutput`] port methods one-to-one so the TUI can replay
+/// them into a frame instead of writing to stdout. Apply them to a text
+/// buffer with [`apply_output_event`].
 #[derive(Debug, Clone)]
 pub enum OutputEvent {
+    /// A fragment of streamed assistant text, appended verbatim with no
+    /// separator. Chunks are not line-delimited.
     Chunk(String),
+    /// Informational notice, rendered on its own `[info]` line.
     Info(String),
+    /// Warning notice, rendered on its own `[warn]` line.
     Warn(String),
+    /// Error notice, rendered on its own `[error]` line.
     Error(String),
-    ToolCall { name: String, preview: String },
+    /// A tool invocation is starting.
+    ToolCall {
+        /// Name of the tool being invoked.
+        name: String,
+        /// Truncated preview of the tool input.
+        preview: String,
+    },
+    /// The preceding [`OutputEvent::ToolCall`] succeeded.
     ToolOk,
+    /// The preceding [`OutputEvent::ToolCall`] failed, with the error text.
     ToolErr(String),
 }
 
+/// A [`UserOutput`] implementation that forwards events to a channel.
+///
+/// Sends are fire-and-forget: if the receiver has been dropped the event is
+/// silently discarded rather than surfacing an error, so a closed TUI never
+/// breaks the agent loop.
 pub struct ChannelOutput(pub UnboundedSender<OutputEvent>);
 
 impl UserOutput for ChannelOutput {

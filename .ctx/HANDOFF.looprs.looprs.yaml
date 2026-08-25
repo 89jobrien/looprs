@@ -1,6 +1,6 @@
 project: looprs
 id: looprs
-updated: 2026-08-22
+updated: 2026-08-24
 items:
 - id: hex-phase-3
   doob_uuid: null
@@ -56,6 +56,23 @@ items:
   completed: null
   extra: []
 log:
+- date: 2026-08-24
+  summary: |
+    Session-context rework + docs accuracy pass + TUI fixes.
+    - Replaced jj/kan session context with git status (git_info) and pending
+      doob todos (new crates/looprs/src/doob.rs adapter); removed jj.rs/kan.rs
+      and Jj/Kan plugin adapters; added Doob binary adapter.
+    - API-guidelines pass: doob::collect naming (C-GETTER), module + field
+      docs, serde derives restored on SessionContext via GitInfo.
+    - Fixed Observation::to_description byte-slice panic on multibyte output
+      (char-safe truncation + regression test).
+    - TUI: turn errors now persist in transcript (chat.rs); terminal.clear()
+      on select() repaint to stop stale-glyph bleed.
+    - Docs: AGENTS.md/README/ownership-model rewritten for workspace layout;
+      .looprs/* READMEs synced to actual config surface; Dockerfile reference
+      recipe for minibox builds.
+    - All 438 tests passing; clippy -D warnings clean.
+  commits: []
 - date: '20260713.174514'
   summary: done=11 running=0 pending=0 blocked=0
   commits: []

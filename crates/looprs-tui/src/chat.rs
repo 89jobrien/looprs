@@ -229,15 +229,18 @@ pub async fn run(agent: Agent) -> Result<()> {
                 turn_handle = None;
                 match joined {
                     Ok((returned_agent, turn_result)) => {
-                        // TODO(verify): turn errors are pushed to live_text but then
-                        // unconditionally cleared below before the next draw, so a
-                        // failed turn (auth, rate limit, network) renders as silence
-                        // with no assistant reply and no visible error. Append the
-                        // error into static_transcript instead of only live_text.
-                        if let Err(e) = turn_result {
-                            live_text.push_str(&format!("\n[error] {e}\n"));
-                        }
+                        // Rebuild from the agent's own transcript first, then
+                        // append a synthetic "error" entry on failure so it
+                        // survives the live_text.clear() below and is still
+                        // visible on the next draw (a failed turn otherwise
+                        // rendered as silence: no assistant reply, no error).
                         static_transcript = returned_agent.transcript();
+                        if let Err(e) = turn_result {
+                            static_transcript.push(ChatMessage {
+                                role: "error".to_string(),
+                                text: e.to_string(),
+                            });
+                        }
                         live_text.clear();
                         agent_slot = Some(returned_agent);
                     }

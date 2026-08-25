@@ -26,10 +26,14 @@ macro_rules! newtype_id {
         pub struct $name(String);
 
         impl $name {
+            /// Wrap a string value in this newtype.
+            ///
+            /// No validation or normalization is performed.
             pub fn new(value: impl Into<String>) -> Self {
                 Self(value.into())
             }
 
+            /// Borrow the wrapped value as a string slice.
             pub fn as_str(&self) -> &str {
                 &self.0
             }
@@ -71,6 +75,11 @@ macro_rules! domain_event {
         }
 
         impl $name {
+            /// The variant name exactly as written in the source, for
+            /// example `"SessionStart"`.
+            ///
+            /// Used to match events against hook definitions, so the casing
+            /// is part of the public contract.
             pub fn name(&self) -> &'static str {
                 match self {
                     $(Self::$variant => stringify!($variant)),*

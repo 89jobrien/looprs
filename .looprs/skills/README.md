@@ -22,9 +22,10 @@ skills/
 
 ## Skill Format
 
-`SKILL.md` includes YAML frontmatter plus concise instructions:
-
-Current, concise: 
+`SKILL.md` is YAML frontmatter (delimited by `---`) followed by the skill's
+instructions as plain content. The parser (`skills/parser.rs`) only reads
+three frontmatter fields — `name` and `triggers` are required, `description`
+is optional. Anything else in frontmatter is ignored, not an error:
 
 ```markdown
 ---
@@ -34,20 +35,15 @@ triggers:
   - "error handling"
   - "Result type"
 ---
+
+The rest of the file is the skill's content, injected verbatim when
+triggered.
 ```
 
-```
-hooks: list[str]
-commands: list[str]
-tools: list[str]
-prompt: str
-model: str
-is_invocable: bool
-is_discoverable: bool
-metadata: 
-  - version: 0.0.0
-  - author: John Doe
-```
+There is no `hooks`/`commands`/`tools`/`prompt`/`model`/`is_invocable`/
+`metadata` schema — that's the public Anthropic Agent Skills spec, not what
+this parser implements. Keep skill authoring here to name/description/
+triggers/content.
 
 ## Notes
 

@@ -6,21 +6,21 @@ Repo-level configuration for looprs. These files are loaded in addition to user-
 
 ```
 .looprs/
-├── commands/                 # Custom slash commands (YAML)
-│   ├── help.yaml
-│   ├── refactor.yaml
-│   ├── test.yaml
-│   └── lint.yaml
-├── hooks/                    # Repo hooks (YAML)
-│   ├── SessionStart.yaml
-│   ├── demo_approval.yaml
-│   └── demo_onboarding.yaml
+├── commands/                 # Custom slash commands (YAML) — see commands/README.md
+├── hooks/                    # Repo hooks (YAML) — see hooks/README.md
+├── agents/                   # Agent role definitions (YAML) — see agents/README.md
+├── rules/                    # Constraint guidelines (Markdown) — see rules/README.md
 ├── skills/                   # Example skills (see skills/README.md)
-│   └── examples/
+├── scripts/                  # Helper scripts invoked by commands/hooks
+├── observability/            # JSONL traces/events (project-scoped; see root README's Observability section)
 ├── config.json               # Runtime defaults, file refs, pipeline, agents, paths
+├── provider.json              # Active provider/model settings (gitignored)
 ├── provider.json.example     # Provider config template
 └── provider-config.md        # Provider config notes
 ```
+
+(File lists inside each directory aren't reproduced here — they change
+often; see the directory itself or its own `README.md`.)
 
 ## Precedence
 
@@ -38,6 +38,7 @@ Repo-level configuration for looprs. These files are loaded in addition to user-
 - `pipeline`: optional self-improvement pipeline settings, checks, compaction, and log directory.
 - `agents`: role delegation settings, parallelism limit, orchestration strategy, filesystem mode, and optional default agent.
 - `paths`: repo-local extension directories for agents, commands, hooks, rules, and skills.
+- `persistence`: session store backend (`sqlite` at `~/.looprs/sessions.db`, or `fs` (default) at `~/.looprs/sessions/`).
 
 Provider selection, model IDs, `max_tokens`, and provider API timeouts belong in `.looprs/provider.json`, not `config.json`.
 

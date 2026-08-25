@@ -11,10 +11,15 @@ const TOKENS_CLAUDE: u32 = 190_000;
 const TOKENS_DEFAULT: u32 = 100_000;
 
 impl ModelId {
+    /// The default Anthropic model.
+    ///
+    /// Despite the name this returns `claude-sonnet-4-6`, not an Opus model;
+    /// the name is retained for backward compatibility with existing callers.
     pub fn claude_opus() -> Self {
         Self::new("claude-sonnet-4-6")
     }
 
+    /// The default small OpenAI model, `gpt-5-mini`.
     pub fn gpt_5_mini() -> Self {
         Self::new("gpt-5-mini")
     }
@@ -44,6 +49,11 @@ impl ModelId {
             + (output_tokens as f64 / 1_000_000.0) * output_pm
     }
 
+    /// Best-effort context window for this model, in tokens.
+    ///
+    /// Matching is substring-based on the lowercased model ID, so unknown or
+    /// newly released models fall back to a conservative 100,000 tokens
+    /// rather than failing.
     pub fn max_tokens(&self) -> u32 {
         let model = self.0.to_lowercase();
         match model.as_str() {

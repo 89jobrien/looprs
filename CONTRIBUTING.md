@@ -27,12 +27,12 @@ See `README.md` for setup and usage details.
 
 - Use `anyhow::Result` for fallible functions.
 - Add error context with `.context()` / `.with_context()`.
-- Keep the CLI thin; core logic belongs in `src/`.
+- Keep `crates/looprs-cli`/`crates/looprs-tui` thin; core logic belongs in `crates/looprs`.
 - Prefer small, focused modules.
 
 ## Tests
 
-- Unit tests live next to the code in `src/`.
+- Unit tests live next to the code, in each crate's `src/`.
 - Integration tests live in `tests/`.
 - Add tests for new behavior and bug fixes.
 

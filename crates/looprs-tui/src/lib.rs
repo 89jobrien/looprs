@@ -68,14 +68,14 @@ pub fn select(title: &str, items: &[String]) -> Result<Option<usize>> {
 fn run_select_loop(title: &str, items: &[String]) -> Result<Option<usize>> {
     let backend = CrosstermBackend::new(std::io::stdout());
     let mut terminal = Terminal::new(backend)?;
-    // TODO(verify): when select() is called more than once in a process
-    // (e.g. run_provider_menu picking a provider, then a local model), this
-    // fresh Terminal's diff buffer starts blank and skips writing cells
-    // whose new content happens to be a plain space, since it can't tell
-    // the physical terminal still has a stale glyph there from the prior
-    // call. Observed leaking a character from "Select a provider" into
-    // "Select a local model" ("Select a localdmodel"). terminal.clear()?
-    // here should fix it.
+    // When select() is called more than once in a process (e.g.
+    // run_provider_menu picking a provider, then a local model), a fresh
+    // Terminal's diff buffer starts blank and skips writing cells whose new
+    // content happens to be a plain space, since it can't tell the physical
+    // terminal still has a stale glyph there from the prior call. Force a
+    // full repaint so nothing bleeds through (previously observed leaking a
+    // character from "Select a provider" into "Select a local model").
+    terminal.clear()?;
 
     let mut selected = 0usize;
     loop {

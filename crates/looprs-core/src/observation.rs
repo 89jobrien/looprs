@@ -19,6 +19,11 @@ pub struct Observation {
 }
 
 impl Observation {
+    /// Capture an observation, stamping it with the current Unix time.
+    ///
+    /// The timestamp falls back to `0` if the system clock is before the Unix
+    /// epoch. [`Observation::context`] starts unset; add it with
+    /// [`Observation::with_context`].
     pub fn new(
         tool_name: String,
         input: Value,
@@ -42,15 +47,25 @@ impl Observation {
         }
     }
 
+    /// Attach a human-readable note explaining why this observation matters.
+    ///
+    /// The context also becomes the basis of [`Observation::to_title`].
     pub fn with_context(mut self, context: String) -> Self {
         self.context = Some(context);
         self
     }
 
+    /// Render the observation as Markdown for injection into model context.
+    ///
+    /// Output longer than 500 characters is truncated with a trailing `...`.
+    /// Truncation counts Unicode scalar values (`char`s), not bytes, so it
+    /// never panics or splits a multibyte character. The tool-use ID and
+    /// context sections are omitted when unset.
     pub fn to_description(&self) -> String {
         let input_str = serde_json::to_string_pretty(&self.input).unwrap_or_default();
-        let output_preview = if self.output.len() > OUTPUT_PREVIEW_LEN {
-            format!("{}...", &self.output[..OUTPUT_PREVIEW_LEN])
+        let output_preview = if self.output.chars().count() > OUTPUT_PREVIEW_LEN {
+            let truncated: String = self.output.chars().take(OUTPUT_PREVIEW_LEN).collect();
+            format!("{truncated}...")
         } else {
             self.output.clone()
         };
@@ -80,6 +95,10 @@ impl Observation {
         )
     }
 
+    /// Build a short `Observation: ...` label for this capture.
+    ///
+    /// Uses the first 60 characters of [`Observation::context`] when set,
+    /// otherwise the tool name.
     pub fn to_title(&self) -> String {
         if let Some(ctx) = &self.context {
             format!("Observation: {}", ctx.chars().take(60).collect::<String>())
@@ -142,6 +161,24 @@ mod tests {
         assert!(desc.contains("tool_7"));
         assert!(desc.contains("success"));
         assert!(desc.contains("Test execution"));
+    }
+
+    #[test]
+    fn description_truncates_multibyte_output_without_panicking() {
+        // 501 multibyte chars (3 bytes each): a byte-index slice at 500
+        // would land inside a character and panic.
+        let long_output: String = std::iter::repeat_n('\u{2603}', 501).collect();
+        let obs = Observation::new(
+            "bash".to_string(),
+            serde_json::json!({}),
+            long_output,
+            None,
+            "sess-123".to_string(),
+        );
+
+        let desc = obs.to_description();
+        let expected_preview: String = std::iter::repeat_n('\u{2603}', 500).collect();
+        assert!(desc.contains(&format!("{expected_preview}...")));
     }
 
     #[test]

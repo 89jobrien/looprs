@@ -1,13 +1,13 @@
 # Rules
 
-This repo does not currently define any rule files under `.looprs/rules/` beyond this README.
+Plain Markdown files under `.looprs/rules/*.md`, loaded into the agent system
+prompt on every session (`RuleRegistry`, skipping any `README.md`).
 
-If you add rules later, use plain markdown/text files such as:
+## Rules in this repo
 
-- `system-rules.md` (core behavior)
-- `code-rules.md` (quality/style)
-- `security-rules.md` (security constraints)
-- `testing-rules.md` (testing requirements)
-- `languages/rust-rules.md` (language-specific)
+- `looprs-overview.md` — orients the agent: this is looprs itself (the Rust
+  agent runtime), not a downstream consumer of it.
+- `code-quality.md` — code quality standards for changes in this repo.
+- `security.md` — security guidelines.
 
-Rules are intended to be loaded into agent system prompts and enforced by tooling, but the repo does not ship rule content yet.
+Add more `.md` files here to extend the constraint set; each is injected as-is.

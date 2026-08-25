@@ -1,0 +1,1 @@
+{"timestamp":"2026-08-23T14:13:50Z","git_sha":"04a92000f1ec46b456567f3f2385ee12b8e94402","metrics":[{"name":"ci_duration_ms","value":45642.0},{"name":"ci_passed","value":0.0}]}

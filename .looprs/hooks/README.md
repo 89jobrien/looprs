@@ -1,43 +1,44 @@
 # Hooks
 
-<!-- IDEA(Q5): add UserPromptSubmit.yaml to inject repo-specific context before
-every LLM call (branch, overdue todos, etc.). The event fires before inference
-and the executor supports inject_as context keys. -->
-
 Repo-level hooks loaded from `.looprs/hooks/*.yaml`. Repo hooks override user hooks with the same name.
 
 ## Hooks in this repo
 
 ### `SessionStart.yaml`
-- **name**: `project_info`
+- **name**: `session_start`
 - **trigger**: `SessionStart`
 - **actions**:
-  - message: "Loaded from repo-level hooks"
   - command: `git --no-pager log -1 --oneline` (injects `last_commit`)
+  - command: `git --no-pager status --short` (injects `git_status`)
 
-### `demo_approval.yaml`
-- **name**: `demo_approval_gate`
-- **trigger**: `SessionStart`
+### `UserPromptSubmit.yaml`
+- **trigger**: `UserPromptSubmit`
 - **actions**:
-  - message: welcome text
-  - command: `git --no-pager log -1 --oneline` (injects `last_commit`)
-  - command: `git --no-pager status --short` (requires approval, injects `git_status`)
+  - command: `git --no-pager branch --show-current` (injects `current_branch`)
+  - command: `git --no-pager diff --stat HEAD | tail -5` (injects `working_tree_diff`)
+- Keeps the model oriented on branch/dirty-tree state without a manual `/git` command.
+- Commands run through Nushell, so redirects use `e>`, not POSIX `2>`.
 
-### `demo_onboarding.yaml`
-- **name**: `demo_onboarding`
-- **trigger**: `SessionStart`
-- **actions**:
-  - message: intro text (session-only keys)
-  - confirm: skip onboarding
-  - confirm + secret_prompt + set_env for Anthropic/OpenAI
-  - conditional local provider step (Ollama)
-  - set_config: `onboarding.demo_seen = true`
+### `InferenceComplete.yaml`
+- **name**: `inference_complete`
+- **trigger**: `InferenceComplete`
+- **actions**: injects a lightweight `inference_event` marker after every response.
+
+### `PostToolUse.yaml`
+- **name**: `post_tool_use`
+- **trigger**: `PostToolUse`
+- **condition**: `"tool_name in ['write', 'edit']"` — **not currently a supported
+  condition syntax** (the executor only recognizes `on_branch:`, `has_tool:`,
+  `equals:`, `env_set:`, `config_flag:` prefixes; anything else fails closed
+  with a warning). This hook does not fire as written — needs either a
+  supported condition or an `eval_condition` extension.
+- **actions**: runs `cargo clippy --quiet` and injects output as `clippy_output`.
 
 ## Format (YAML)
 
 ```yaml
 name: hook_name
-trigger: SessionStart|SessionEnd|PreToolUse|PostToolUse|OnError|OnWarning
+trigger: SessionStart|UserPromptSubmit|InferenceComplete|PreToolUse|PostToolUse|OnError|OnWarning|SessionEnd
 actions:
   - type: message
     text: "..."
