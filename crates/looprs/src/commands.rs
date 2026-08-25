@@ -38,6 +38,9 @@ pub enum CommandAction {
     /// Print the outsource provider/model from ~/.looprs/models.toml.
     #[serde(rename = "outsource")]
     Outsource,
+    /// List available models across local/configured/remote sources.
+    #[serde(rename = "list_models")]
+    ListModels,
 }
 
 /// Registry of custom commands
@@ -311,5 +314,24 @@ action:
             }
             _ => panic!("Expected Message action"),
         }
+    }
+
+    #[test]
+    fn test_load_list_models_command() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_command_file(
+            temp_dir.path(),
+            "models.yaml",
+            r#"name: models
+description: List selectable models
+action:
+  type: list_models
+"#,
+        );
+
+        let registry =
+            CommandRegistry::load_from_directory(&temp_dir.path().to_path_buf()).unwrap();
+        let cmd = registry.get("models").unwrap();
+        assert!(matches!(cmd.action, CommandAction::ListModels));
     }
 }

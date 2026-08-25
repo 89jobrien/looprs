@@ -42,6 +42,19 @@ impl ModelsConfig {
         self.tiers.get(name)
     }
 
+    pub fn tier_lines(&self) -> Vec<String> {
+        let mut names = self.tiers.keys().cloned().collect::<Vec<_>>();
+        names.sort();
+        names
+            .into_iter()
+            .filter_map(|name| {
+                self.tiers
+                    .get(&name)
+                    .map(|tier| format!("{name} -> {}/{}", tier.provider, tier.model))
+            })
+            .collect()
+    }
+
     pub fn magi_modelcard(&self) -> &str {
         &self.magi.modelcard
     }
@@ -177,6 +190,37 @@ model = "gpt-4"
 
         let config = ModelsConfig::from_path(file.path()).expect("failed to parse config");
         assert!(config.tier("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_tier_lines_sorted() {
+        let mut file = NamedTempFile::new().expect("failed to create temp file");
+        let content = r#"
+[default]
+provider = "openai"
+model = "gpt-4"
+
+[tiers.zed]
+provider = "openai"
+model = "gpt-4.1"
+
+[tiers.alpha]
+provider = "anthropic"
+model = "claude-sonnet"
+"#;
+        file.write_all(content.as_bytes())
+            .expect("failed to write to temp file");
+        file.flush().expect("failed to flush temp file");
+
+        let config = ModelsConfig::from_path(file.path()).expect("failed to parse config");
+        let lines = config.tier_lines();
+        assert_eq!(
+            lines,
+            vec![
+                "alpha -> anthropic/claude-sonnet".to_string(),
+                "zed -> openai/gpt-4.1".to_string(),
+            ]
+        );
     }
 
     #[test]

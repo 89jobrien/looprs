@@ -694,6 +694,13 @@ fn parse_ollama_list_output(text: &str) -> Vec<String> {
         .collect()
 }
 
+fn models_gist_url() -> String {
+    env::var("LOOPRS_MODELS_GIST_URL").unwrap_or_else(|_| {
+        "https://gist.githubusercontent.com/pydanticai/known-models/refs/heads/main/models.json"
+            .to_string()
+    })
+}
+
 /// Interactive `looprs provider` entrypoint: pick a provider, and for
 /// `local` also pick an installed Ollama model, then persist the choice
 /// to `.looprs/provider.json`.
@@ -1273,6 +1280,27 @@ async fn execute_command(
                 Err(_) => ui::warn("models.toml not found at ~/.looprs/models.toml"),
             }
         }
+        CommandAction::ListModels => {
+            let local_models = list_ollama_models();
+
+            let live = match looprs::model_catalog::adapters::LiveApiCatalogAdapter::new(8) {
+                Ok(adapter) => adapter,
+                Err(err) => {
+                    ui::warn(format!("live catalog init failed: {}", err.message));
+                    return Ok(());
+                }
+            };
+
+            let fallback = looprs::model_catalog::adapters::PydanticAiGistCatalogAdapter::new(
+                models_gist_url(),
+            );
+
+            let overview =
+                looprs::build_models_overview(provider_name, model, &live, &fallback, local_models)
+                    .await;
+            let rendered = looprs::render_models_overview(&overview);
+            ui::info_full(rendered);
+        }
     }
 
     Ok(())
@@ -1311,5 +1339,12 @@ mod provider_menu_tests {
     #[test]
     fn empty_output_yields_no_models() {
         assert!(parse_ollama_list_output("").is_empty());
+    }
+
+    #[test]
+    fn parse_ollama_list_output_skips_header_and_reads_names() {
+        let text = "NAME ID SIZE MODIFIED\nllama3.2:latest abc 2G now\n";
+        let parsed = parse_ollama_list_output(text);
+        assert_eq!(parsed, vec!["llama3.2:latest"]);
     }
 }
