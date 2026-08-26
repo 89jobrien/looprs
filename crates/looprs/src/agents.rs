@@ -3,26 +3,36 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
+/// Declarative agent definition loaded from YAML.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AgentDefinition {
+    /// Stable agent identifier.
     pub name: String,
     #[serde(default)]
+    /// Optional human-readable role label.
     pub role: Option<String>,
     #[serde(default)]
+    /// Optional summary shown in listings/help.
     pub description: Option<String>,
     #[serde(default)]
+    /// Optional system prompt template.
     pub system_prompt: Option<String>,
     #[serde(default)]
+    /// Tool names this agent is allowed to use.
     pub tools: Vec<String>,
     #[serde(default)]
+    /// Skill names associated with this agent.
     pub skills: Vec<String>,
     #[serde(default)]
+    /// Free-form behavioral constraints.
     pub constraints: Vec<String>,
     #[serde(default)]
+    /// Prompt substrings that trigger auto-selection.
     pub triggers: Vec<String>,
 }
 
 impl AgentDefinition {
+    /// Return `true` when any configured trigger appears in `prompt`.
     pub fn matches_prompt(&self, prompt: &str) -> bool {
         if self.triggers.is_empty() {
             return false;
@@ -35,12 +45,14 @@ impl AgentDefinition {
     }
 }
 
+/// In-memory registry of named [`AgentDefinition`] values.
 #[derive(Debug, Clone, Default)]
 pub struct AgentRegistry {
     agents: HashMap<String, AgentDefinition>,
 }
 
 impl AgentRegistry {
+    /// Create an empty registry.
     pub fn new() -> Self {
         Self {
             agents: HashMap::new(),
@@ -129,24 +141,29 @@ impl AgentRegistry {
         ]
     }
 
+    /// Insert or replace an agent by name.
     pub fn register(&mut self, agent: AgentDefinition) {
         self.agents.insert(agent.name.clone(), agent);
     }
 
+    /// Look up an agent by name.
     pub fn get(&self, name: &str) -> Option<&AgentDefinition> {
         self.agents.get(name)
     }
 
+    /// Whether the registry contains no agents.
     pub fn is_empty(&self) -> bool {
         self.agents.is_empty()
     }
 
+    /// Return all agents sorted by name.
     pub fn list(&self) -> Vec<&AgentDefinition> {
         let mut list: Vec<&AgentDefinition> = self.agents.values().collect();
         list.sort_by_key(|a| &a.name);
         list
     }
 
+    /// Select an agent using triggers, then default, then optional fallback.
     pub fn select_for_prompt(
         &self,
         prompt: &str,
@@ -175,6 +192,7 @@ impl AgentRegistry {
     }
 
     // qual:allow(iosp) reason: "I/O boundary — reads agent YAML files from directory"
+    /// Load all `*.yaml`/`*.yml` agents from one directory.
     pub fn load_from_directory(dir: &PathBuf) -> anyhow::Result<Self> {
         let mut registry = Self::new();
 
@@ -206,6 +224,7 @@ impl AgentRegistry {
     }
 
     // qual:allow(iosp) reason: "I/O boundary — loads agents from user + repo directories"
+    /// Merge user and repo agent directories; repo definitions win on conflicts.
     pub fn load_dual_source(
         user_dir: Option<&PathBuf>,
         repo_dir: Option<&PathBuf>,

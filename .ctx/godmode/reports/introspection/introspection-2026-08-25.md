@@ -27,3 +27,7 @@
 
 - Updated `/Users/joe/.claude/skills/using-nu-libs/SKILL.md` to remove `git push --no-verify` from the `taskit-release` flow description (now `git push`).
 - Re-ran targeted anti-pattern checks; `--no-verify` occurrences now only appear as prohibition rules/policy patterns, not as recommended workflow steps.
+- Implemented all suggestion-level fixes:
+  - Expanded `godmode` CLI quick reference in `/Users/joe/.agents/skills/using-godmode/SKILL.md` to include newer subcommands (`policy`, `release`, `memory-banking`, `review`, `workflow`) and added an explicit `godmode --help` authority note.
+  - Annotated `/Users/joe/.agents/skills/open-knowledge-write-skill/SKILL.md` that `references/tiers.md` is an example placeholder path, not a required bundled file.
+  - Added a `## Requires` section in `/Users/joe/.agents/skills/mbx/onboarding-minibox/SKILL.md` documenting external helper dependencies and fallback behavior when absent.

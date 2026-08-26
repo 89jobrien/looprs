@@ -16,12 +16,19 @@ domain_event!(Event {
 /// Context data that flows through events
 #[derive(Debug, Clone)]
 pub struct EventContext {
+    /// Aggregated session context text available at event time.
     pub session_context: Option<String>,
+    /// User message that triggered the event, when applicable.
     pub user_message: Option<String>,
+    /// Tool name for tool-related events.
     pub tool_name: Option<String>,
+    /// Tool output payload for post-tool events.
     pub tool_output: Option<String>,
+    /// Error message for error events.
     pub error: Option<String>,
+    /// Warning message for warning events.
     pub warning: Option<String>,
+    /// Arbitrary key-value metadata for custom hook/event logic.
     pub metadata: HashMap<String, String>,
 }
 

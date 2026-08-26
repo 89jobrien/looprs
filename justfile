@@ -1,6 +1,8 @@
 default:
 	@just --list
 
+cliff := "git cliff --config cliff.toml"
+
 build:
 	cargo build --release
 
@@ -55,3 +57,19 @@ install-test-tools:
 	cargo install cargo-llvm-cov --locked
 	cargo install cargo-watch --locked
 	cargo install cargo-insta --locked
+
+# Generate unreleased changelog preview from commits.
+changelog:
+	@echo "==> Unreleased changelog preview"
+	{{cliff}} --unreleased --strip all
+
+# Generate changelog for commits since the latest tag.
+changelog-since-tag:
+	@echo "==> Changelog since latest tag"
+	{{cliff}} --latest --strip all
+
+# Regenerate CHANGELOG.md from git history.
+changelog-write:
+	@echo "==> Writing CHANGELOG.md"
+	{{cliff}} --output CHANGELOG.md
+	@echo "Wrote CHANGELOG.md"

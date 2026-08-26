@@ -204,3 +204,5 @@ cargo xtask check pre-push
 - Check event name matches exactly (see the 8 lifecycle events above)
 - Confirm `.looprs/hooks/` directory exists
 - Look for warning messages on `SessionStart`
+
+@OPAVS.md

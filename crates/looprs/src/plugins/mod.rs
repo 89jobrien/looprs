@@ -1,4 +1,5 @@
 pub mod binaries;
+pub mod manifests;
 mod registry;
 mod resolve;
 mod runner;

@@ -15,26 +15,37 @@ pub type InferStream =
 /// Request structure for LLM inference.
 #[derive(Debug, Clone)]
 pub struct InferenceRequest {
+    /// Target model identifier.
     pub model: ModelId,
+    /// Full message history for this inference call.
     pub messages: Vec<Message>,
+    /// Tool/function definitions exposed to the provider.
     pub tools: Vec<ToolDefinition>,
+    /// Output token cap for the response.
     pub max_tokens: u32,
+    /// Sampling temperature override, if set.
     pub temperature: Option<f32>,
+    /// System prompt used for this call.
     pub system: String,
 }
 
 /// Response structure from LLM inference.
 #[derive(Debug, Clone)]
 pub struct InferenceResponse {
+    /// Provider content blocks (text and tool-use blocks).
     pub content: Vec<ContentBlock>,
+    /// Provider stop reason label.
     pub stop_reason: String,
+    /// Token accounting for this response.
     pub usage: Usage,
 }
 
 /// Token usage information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Usage {
+    /// Prompt/input token count.
     pub input_tokens: u32,
+    /// Generated/output token count.
     pub output_tokens: u32,
 }
 

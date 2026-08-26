@@ -52,15 +52,17 @@ Persistent config: `.looprs/provider.json`. All env options: `.env.example`.
 
 ## Built-in Tools
 
+These are tool capabilities exposed to the model during a session (not slash commands typed at the REPL).
+
 | Tool | Description |
 |------|-------------|
-| `/read` | Read files with line pagination |
-| `/write` | Create or overwrite files |
-| `/edit` | Replace text in files |
-| `/glob` | Find files by name pattern (faster with `fd`) |
-| `/grep` | Search file contents (faster with `rg`) |
-| `/nu` | Execute a Nushell command |
-| `/bash` | Execute shell commands |
+| `read` | Read files with line pagination |
+| `write` | Create or overwrite files |
+| `edit` | Replace text in files |
+| `glob` | Find files by name pattern (faster with `fd`) |
+| `grep` | Search file contents (faster with `rg`) |
+| `nu` | Execute a Nushell command |
+| `bash` | Execute shell commands |
 
 Optional speedups (auto-detected, falls back to pure Rust):
 
@@ -205,7 +207,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo xtask check pre-push
 ```
 
-The `Makefile` is still available for common shortcuts such as `make build`, `make lint`, and `make all`. Use `cargo xtask check pre-push` before pushing; the installed `.githooks/pre-push` delegates to the same command and includes the `looprs-cli` binary test suite that library-only shortcuts do not cover.
+Primary quality gates run through `cargo` and `cargo xtask` (not `make`). The `Makefile` remains as a convenience layer for common shortcuts such as `make build`, `make lint`, and `make all`. Use `cargo xtask check pre-push` before pushing; the installed `.githooks/pre-push` delegates to the same command and includes the `looprs-cli` binary test suite that library-only shortcuts do not cover.
 
 ## License
 

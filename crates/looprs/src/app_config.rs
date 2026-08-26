@@ -6,15 +6,23 @@ use crate::file_refs::FileRefPolicy;
 use crate::fs_mode::FsMode;
 use crate::state::AppState;
 
+/// Top-level `.looprs/config.json` schema.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
+    /// Global defaults used by the runtime.
     pub defaults: DefaultsConfig,
+    /// File-reference parsing and safety limits.
     pub file_references: FileReferencesConfig,
+    /// One-time onboarding flags.
     pub onboarding: OnboardingConfig,
+    /// Optional pipeline execution settings.
     pub pipeline: PipelineConfig,
+    /// Multi-agent delegation settings.
     pub agents: AgentsConfig,
+    /// Filesystem locations for extensibility assets.
     pub paths: PathsConfig,
+    /// Persistence backend selection.
     pub persistence: PersistenceConfig,
 }
 
@@ -36,16 +44,21 @@ impl AppConfig {
         Ok(config)
     }
 
+    /// Build the effective file-reference policy from config.
     pub fn file_ref_policy(&self) -> FileRefPolicy {
         FileRefPolicy::from_config(&self.file_references)
     }
 }
 
+/// Defaults for model/runtime behavior.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DefaultsConfig {
+    /// Soft context cap used by runtime heuristics.
     pub max_context_tokens: Option<u32>,
+    /// Default sampling temperature.
     pub temperature: Option<f32>,
+    /// Default request timeout in seconds.
     pub timeout_seconds: Option<u64>,
 }
 
@@ -59,11 +72,15 @@ impl Default for DefaultsConfig {
     }
 }
 
+/// Settings for `@file` references in user prompts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FileReferencesConfig {
+    /// Prefix used to detect file references.
     pub prefix: String,
+    /// Maximum allowed referenced file size (MB).
     pub max_size_mb: u64,
+    /// File extensions permitted for inclusion.
     pub allowed_extensions: Vec<String>,
 }
 
@@ -82,23 +99,35 @@ impl Default for FileReferencesConfig {
     }
 }
 
+/// Onboarding state persisted outside `config.json` when possible.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct OnboardingConfig {
+    /// Whether the onboarding demo has already been shown.
     pub demo_seen: bool,
 }
 
+/// Deterministic pipeline runtime settings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PipelineConfig {
+    /// Enable pipeline execution.
     pub enabled: bool,
+    /// Directory where JSONL pipeline logs are written.
     pub log_dir: String,
+    /// Minimum score required for pipeline success.
     pub reward_threshold: f32,
+    /// Require external tools to be present.
     pub require_tools: bool,
+    /// Revert worktree changes on pipeline failure.
     pub auto_revert: bool,
+    /// Stop pipeline at first failing step.
     pub fail_fast: bool,
+    /// Block normal turn completion if pipeline fails.
     pub block_on_failure: bool,
+    /// Build/test/lint gate toggles.
     pub checks: PipelineChecksConfig,
+    /// Context compaction inputs and limits.
     pub compaction: PipelineCompactionConfig,
 }
 
@@ -118,14 +147,21 @@ impl Default for PipelineConfig {
     }
 }
 
+/// Delegation and orchestration defaults for multi-agent flows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgentsConfig {
+    /// Share contextual data between delegated agents.
     pub context_sharing: bool,
+    /// Maximum number of concurrent delegated agents.
     pub max_parallel: usize,
+    /// Orchestration strategy label.
     pub orchestration: String,
+    /// Delegate automatically when no explicit agent is requested.
     pub delegate_by_default: bool,
+    /// Default filesystem mode for delegated execution.
     pub fs_mode: FsMode,
+    /// Optional preferred agent name.
     pub default_agent: Option<String>,
 }
 
@@ -142,22 +178,33 @@ impl Default for AgentsConfig {
     }
 }
 
+/// On/off switches for pipeline checks.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct PipelineChecksConfig {
+    /// Run build check.
     pub run_build: bool,
+    /// Run tests.
     pub run_tests: bool,
+    /// Run linting.
     pub run_lint: bool,
+    /// Run type-check gate.
     pub run_typecheck: bool,
+    /// Run benchmark gate.
     pub run_bench: bool,
 }
 
+/// Inputs and limits for pipeline context compaction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PipelineCompactionConfig {
+    /// Include git diff snippets.
     pub include_diff: bool,
+    /// Include recently changed files.
     pub include_recent: bool,
+    /// Additional include globs.
     pub include_globs: Vec<String>,
+    /// Maximum number of relevance-ranked files to include.
     pub top_k: usize,
 }
 
@@ -182,6 +229,7 @@ pub enum SessionStoreBackend {
     Sqlite,
 }
 
+/// Persistence backend configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct PersistenceConfig {
@@ -189,13 +237,21 @@ pub struct PersistenceConfig {
     pub session_store: SessionStoreBackend,
 }
 
+/// Filesystem locations for user/repo extension assets.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PathsConfig {
+    /// Directory containing agent definition files.
     pub agents: String,
+    /// Directory containing slash command files.
     pub commands: String,
+    /// Directory containing hook definition files.
     pub hooks: String,
+    /// Directory containing plugin files.
+    pub plugins: String,
+    /// Directory containing rule definition files.
     pub rules: String,
+    /// Directory containing skill definition files.
     pub skills: String,
 }
 
@@ -205,6 +261,7 @@ impl Default for PathsConfig {
             agents: ".looprs/agents".to_string(),
             commands: ".looprs/commands".to_string(),
             hooks: ".looprs/hooks".to_string(),
+            plugins: ".looprs/plugins".to_string(),
             rules: ".looprs/rules".to_string(),
             skills: ".looprs/skills".to_string(),
         }
@@ -255,5 +312,6 @@ mod tests {
         let decoded: AppConfig = serde_json::from_str(&json).unwrap();
         assert!(!decoded.pipeline.enabled);
         assert_eq!(decoded.pipeline.log_dir, ".looprs/agent_logs/");
+        assert_eq!(decoded.paths.plugins, ".looprs/plugins");
     }
 }
