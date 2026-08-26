@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [unreleased]
+## [0.5.3] - 2026-08-26
 
 ### Chores
 - Anchor 13 tracked ideas as IDEA() comments across codebase
@@ -27,6 +27,7 @@ All notable changes to this project are documented in this file.
 - Add /models command metadata and help docs
 - Add OpenAI streaming support and backlog updates
 - Extract shared macro_rules crate
+- Add manifest-driven agent orchestration
 
 ### Fixes
 - Port bash/python heredoc commands to rust-script and internal actions
