@@ -1878,6 +1878,7 @@ dependencies = [
  "libc",
  "log",
  "looprs-core",
+ "looprs-macros",
  "miette",
  "proptest",
  "regex",
@@ -1921,12 +1922,17 @@ dependencies = [
  "async-trait",
  "chrono",
  "futures",
+ "looprs-macros",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
  "uuid",
 ]
+
+[[package]]
+name = "looprs-macros"
+version = "0.5.2"
 
 [[package]]
 name = "looprs-tui"

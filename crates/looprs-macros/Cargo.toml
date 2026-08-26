@@ -1,0 +1,11 @@
+[package]
+name = "looprs-macros"
+version.workspace = true
+edition.workspace = true
+description = "Reusable macro_rules! macros for looprs"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+rust-version.workspace = true
