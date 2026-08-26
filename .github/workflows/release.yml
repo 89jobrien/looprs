@@ -3,24 +3,26 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      crate:
-        description: "Crate to release (looprs-core | looprs | looprs-cli | all)"
-        required: true
-        default: all
       bump:
-        description: "Version bump (patch | minor | major)"
+        description: "Version bump type"
         required: true
-        default: patch
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 env:
   RUST_BACKTRACE: 1
+
+permissions:
+  contents: write
 
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,23 +33,49 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install cargo-rail
-        run: cargo install cargo-rail
+      - name: Install taskit
+        run: cargo install taskit
 
-      - name: Check release readiness
+      - name: Install git-cliff
+        run: cargo install git-cliff
+
+      - name: Bump workspace version
+        run: taskit release ${{ github.event.inputs.bump }}
+
+      - name: Regenerate changelog
+        run: git cliff --config cliff.toml --strip all --output CHANGELOG.md
+
+      - name: Resolve release version
+        id: version
+        run: echo "tag=$(taskit version | head -1 | awk '{print $NF}')" >> $GITHUB_OUTPUT
+
+      - name: Commit and tag release
+        id: tag_release
         run: |
-          if [ "${{ inputs.crate }}" = "all" ]; then
-            cargo rail release check --all
-          else
-            cargo rail release check ${{ inputs.crate }}
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          NEW_VERSION="${{ steps.version.outputs.tag }}"
+
+          if git rev-parse "v${NEW_VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${NEW_VERSION} already exists, skipping commit/tag"
+            echo "created_tag=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-      - name: Publish
+          git add Cargo.toml Cargo.lock CHANGELOG.md
+          git commit -m "chore(release): bump version to ${NEW_VERSION} and regenerate changelog"
+          git tag "v${NEW_VERSION}"
+          git push origin main --tags
+          echo "created_tag=true" >> "$GITHUB_OUTPUT"
+
+      - name: Publish workspace crates
+        if: steps.tag_release.outputs.created_tag == 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          if [ "${{ inputs.crate }}" = "all" ]; then
-            cargo rail release run --all --bump ${{ inputs.bump }}
-          else
-            cargo rail release run ${{ inputs.crate }} --bump ${{ inputs.bump }}
-          fi
+        run: taskit release publish
+
+      - name: Create GitHub release
+        if: steps.tag_release.outputs.created_tag == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: taskit release create "v${{ steps.version.outputs.tag }}" --notes-file CHANGELOG.md
