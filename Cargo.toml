@@ -11,7 +11,7 @@ resolver = "2"
 exclude = ["fuzz"]
 
 [workspace.package]
-version = "0.5.2"
+version = "0.5.3"
 edition = "2024"
 rust-version = "1.88.0"
 license = "MIT"
@@ -25,10 +25,10 @@ anyhow = "^1.0.101" #unified
 chrono = { version = "^0.4.44", features = ["serde"] } #unified
 colored = "^2.2.0" #unified
 dirs = "^5.0.1" #unified
-looprs = { path = "crates/looprs", version = "^0.5.0" } #unified
-looprs-core = { path = "crates/looprs-core", version = "^0.5.0" } #unified
-looprs-macros = { path = "crates/looprs-macros", version = "^0.5.0" } #unified
-looprs-tui = { path = "crates/looprs-tui", version = "^0.5.0" } #unified
+looprs = { path = "crates/looprs", version = "^0.5.3" } #unified
+looprs-core = { path = "crates/looprs-core", version = "^0.5.3" } #unified
+looprs-macros = { path = "crates/looprs-macros", version = "^0.5.3" } #unified
+looprs-tui = { path = "crates/looprs-tui", version = "^0.5.3" } #unified
 miette = { version = "^7.6.0", features = ["fancy"] } #unified
 proptest = "^1.10.0" #unified
 serde = { version = "^1.0.228", features = ["derive"] } #unified
