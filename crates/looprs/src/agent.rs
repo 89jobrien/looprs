@@ -24,7 +24,9 @@ const ON_REPEAT_THRESHOLD: usize = 3;
 /// A single transcript entry for UI consumption: role plus flattened text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChatMessage {
+    /// Message role (`user`, `assistant`, etc.).
     pub role: String,
+    /// Flattened text content for UI display.
     pub text: String,
 }
 
@@ -47,13 +49,18 @@ fn truncate_tool_result_for_context(content: &str) -> String {
     )
 }
 
+/// Mutable runtime settings applied to each agent turn.
 #[derive(Debug, Clone, Default)]
 pub struct RuntimeSettings {
+    /// Default runtime knobs loaded from app config.
     pub defaults: DefaultsConfig,
+    /// Optional hard override for max output tokens.
     pub max_tokens_override: Option<u32>,
+    /// Filesystem permission mode used by tool execution.
     pub fs_mode: FsMode,
 }
 
+/// Primary orchestrator for provider inference, tools, rules, and hooks.
 pub struct Agent {
     provider: Box<dyn LLMProvider>,
     messages: Vec<Message>,
@@ -75,6 +82,7 @@ pub struct Agent {
 }
 
 impl Agent {
+    /// Construct an agent with default runtime settings and console output.
     pub fn new(provider: Box<dyn LLMProvider>) -> Result<Self, AgentError> {
         use crate::adapters::UiOutput;
         Self::new_with_runtime(
@@ -86,6 +94,7 @@ impl Agent {
         )
     }
 
+    /// Construct an agent with explicit runtime, policy, and adapter ports.
     pub fn new_with_runtime(
         provider: Box<dyn LLMProvider>,
         runtime: RuntimeSettings,
@@ -128,49 +137,60 @@ impl Agent {
         self
     }
 
+    /// Replace the hook registry used for lifecycle events.
     pub fn with_hooks(mut self, hooks: HookRegistry) -> Self {
         self.hooks = hooks;
         self
     }
 
+    /// Replace the rule registry used for prompt/tool filtering.
     pub fn with_rules(mut self, rules: RuleRegistry) -> Self {
         self.rules = rules;
         self
     }
 
+    /// Fire one event through the internal event manager.
     pub fn fire_event(&self, event: Event, context: &EventContext) {
         self.events.fire(event, context);
     }
 
+    /// Swap the active provider implementation.
     pub fn set_provider(&mut self, provider: Box<dyn LLMProvider>) {
         self.provider = provider;
     }
 
+    /// Update runtime settings and propagate filesystem mode to tool context.
     pub fn set_runtime_settings(&mut self, runtime: RuntimeSettings) {
         self.tool_ctx.set_fs_mode(runtime.fs_mode);
         self.runtime = runtime;
     }
 
+    /// Update file-reference resolution policy.
     pub fn set_file_ref_policy(&mut self, policy: FileRefPolicy) {
         self.file_ref_policy = policy;
     }
 
+    /// Current filesystem mode used by tool execution.
     pub fn fs_mode(&self) -> FsMode {
         self.tool_ctx.fs_mode()
     }
 
+    /// Set filesystem mode used by tool execution.
     pub fn set_fs_mode(&self, mode: FsMode) {
         self.tool_ctx.set_fs_mode(mode);
     }
 
+    /// Shared atomic handle for cross-component filesystem mode updates.
     pub fn fs_mode_handle(&self) -> std::sync::Arc<std::sync::atomic::AtomicU8> {
         self.tool_ctx.fs_mode_handle()
     }
 
+    /// Add per-turn metadata that will be attached to the next turn.
     pub fn set_turn_metadata(&mut self, metadata: HashMap<String, String>) {
         self.pending_metadata.extend(metadata);
     }
 
+    /// Append a user message, resolving configured file references first.
     pub fn add_user_message(&mut self, text: impl Into<String>) {
         let text_str = text.into();
 
@@ -195,14 +215,17 @@ impl Agent {
         self.messages.push(Message::user(resolved));
     }
 
+    /// Remove all accumulated message history for this session.
     pub fn clear_history(&mut self) {
         self.messages.clear();
     }
 
+    /// Best-effort context-window size for the currently selected model.
     pub fn provider_model_max_tokens(&self) -> u32 {
         self.provider.model().max_tokens()
     }
 
+    /// Current provider model identifier.
     pub fn provider_model_id(&self) -> &crate::types::ModelId {
         self.provider.model()
     }
@@ -227,6 +250,7 @@ impl Agent {
         (chars / 4) as u32
     }
 
+    /// Most recent assistant text-only response, if present.
     pub fn latest_assistant_text(&self) -> Option<String> {
         self.messages
             .iter()
@@ -245,6 +269,7 @@ impl Agent {
             .filter(|text| !text.is_empty())
     }
 
+    /// Working directory backing tool execution.
     pub fn working_dir(&self) -> &std::path::Path {
         &self.tool_ctx.working_dir
     }
@@ -271,11 +296,13 @@ impl Agent {
             .collect()
     }
 
+    /// Execute hooks for an event using default callback handlers.
     pub fn execute_hooks_for_event(&self, event: &Event, context: &EventContext) -> EventContext {
         self.execute_hooks_for_event_with_callbacks(event, context, None, None, None)
     }
 
     // qual:allow(iosp) reason: "I/O boundary — orchestrates hook execution with callbacks"
+    /// Execute hooks for an event with optional interactive callbacks.
     pub fn execute_hooks_for_event_with_callbacks(
         &self,
         event: &Event,
@@ -444,6 +471,7 @@ impl Agent {
     //      sequential remains the default.
     //
     // Blocked by: stable AgentBuilder and AgentRuntime Clone impls.
+    /// Run one full agent turn (inference plus any requested tool loop).
     pub async fn run_turn(&mut self) -> Result<(), AgentError> {
         let delegated_agent = self.pending_metadata.get("orchestration.agent").cloned();
         if let Some(agent_name) = delegated_agent.clone() {

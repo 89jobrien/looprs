@@ -1,0 +1,54 @@
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+"""
+body = """{% if version -%}
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+## [unreleased]
+{% endif %}
+{% for group, commits in commits | group_by(attribute="group") -%}
+### {{ group }}
+{% for commit in commits -%}
+- {{ commit.message | trim | upper_first }}
+{% endfor %}
+{% endfor -%}"""
+trim = true
+footer = ""
+postprocessors = [
+  { pattern = "\\n\\n$", replace = "\\n" },
+]
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+split_commits = false
+
+commit_preprocessors = [
+  # Strip common gitmoji shortcodes.
+  { pattern = ":[a-zA-Z0-9_+-]+:", replace = "" },
+  # Strip Unicode emoji characters from commit messages.
+  { pattern = "[\\u{1F1E6}-\\u{1F1FF}\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]", replace = "" },
+]
+
+commit_parsers = [
+  { message = "^feat", group = "Features" },
+  { message = "^fix", group = "Fixes" },
+  { message = "^refactor", group = "Refactoring" },
+  { message = "^perf", group = "Performance" },
+  { message = "^docs", group = "Documentation" },
+  { message = "^test", group = "Tests" },
+  { message = "^build", group = "Build" },
+  { message = "^ci", group = "CI" },
+  { message = "^chore", group = "Chores" },
+  { message = "^revert", group = "Reverts" },
+  { message = ".*", group = "Other" },
+]
+
+protect_breaking_commits = true
+filter_commits = false
+topo_order = false
+sort_commits = "oldest"

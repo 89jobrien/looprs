@@ -18,6 +18,7 @@ anyhow = { workspace = true } #unified
 async-trait = "0.1"
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
 chrono = { workspace = true } #unified
+looprs-macros = { workspace = true } #unified
 serde = { workspace = true } #unified
 serde_json = { workspace = true } #unified
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] } #unified

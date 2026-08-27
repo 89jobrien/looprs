@@ -1,0 +1,12 @@
+name: taskit-orchestration
+kind: orchestration
+description: Route health-gate and baseline regression prompts to taskit.
+enabled: true
+required: false
+mode: daemon
+triggers:
+  - "taskit health"
+  - "--gate"
+  - "regression detected"
+  - "safety regression detected"
+route_to_agent: taskit

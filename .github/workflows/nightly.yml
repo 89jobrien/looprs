@@ -1,0 +1,51 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+env:
+  RUST_BACKTRACE: 1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  nightly:
+    name: Nightly Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install taskit
+        run: cargo install taskit
+
+      - name: Install git-cliff
+        run: cargo install git-cliff
+
+      - name: Quality gates
+        run: taskit check pre-push
+
+      - name: Release dry run
+        run: cargo publish --workspace --dry-run
+
+      - name: Validate changelog style
+        run: |
+          git cliff --config cliff.toml --unreleased --strip all > /tmp/changelog.md
+          if grep -Pq '[\x{1F1E6}-\x{1F1FF}\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]' /tmp/changelog.md; then
+            echo "emoji found in changelog output"
+            exit 1
+          fi

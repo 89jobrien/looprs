@@ -280,7 +280,7 @@ mod tests {
             .env_remove("GIT_INDEX_FILE")
             .status()
             .unwrap();
-        assert!(status.success(), "git {:?} failed", args);
+        assert!(status.success(), "git {args:?} failed");
     }
 
     fn init_git_repo(repo_root: &Path) {

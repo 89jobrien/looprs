@@ -20,23 +20,24 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: stable
           components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Install tools
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest,cargo-deny,cargo-machete
+          tool: cargo-nextest,cargo-llvm-cov,cargo-deny,cargo-machete
 
-      - name: Install taskit + cargo-rail
-        run: cargo install taskit cargo-rail
-
-      - name: Plan (surface visibility)
-        run: cargo rail graph --since HEAD~1 || true
+      - name: Install taskit
+        run: cargo +stable install --locked taskit
 
       - name: Run CI
-        run: cargo rail run --workflow ci --all
+        run: taskit ci --fail-fast
 
       # IDEA(M5) implemented: named integration-test gate for tests/ (309 LOC)
       - name: Integration tests
@@ -56,6 +57,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Check MSRV
         run: cargo check --workspace
 
@@ -68,19 +72,24 @@ jobs:
           fetch-depth: 0
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install cargo-llvm-cov + cargo-rail
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
 
-      - name: Install taskit + cargo-rail
-        run: cargo install taskit cargo-rail
+      - name: Install taskit
+        run: cargo +stable install --locked taskit
 
       - name: Generate coverage
-        run: cargo rail run --workflow coverage --all
+        run: taskit coverage
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v4
@@ -92,18 +101,25 @@ jobs:
     name: Fuzz (30s)
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    env:
+      RUSTUP_TOOLCHAIN: nightly
     steps:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Install taskit
-        run: cargo install taskit
+        run: cargo install --locked taskit
 
       - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz
+        run: cargo +nightly install --locked cargo-fuzz
 
       - name: Fuzz fuzz_parse_skill
         run: taskit fuzz fuzz_parse_skill --duration 30

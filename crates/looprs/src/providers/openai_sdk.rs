@@ -1,5 +1,6 @@
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
+use futures::{StreamExt, stream};
 use serde_json::{Value, json};
 
 use crate::api::ContentBlock;
@@ -74,6 +75,17 @@ impl OpenAISdkProvider {
             name: crate::types::ToolName::new(name),
             input,
         })
+    }
+
+    fn extract_stream_text(payload: &Value) -> Option<String> {
+        let choices = payload.get("choices")?.as_array()?;
+        let first = choices.first()?;
+        let delta = first.get("delta")?;
+        let text = delta.get("content")?.as_str()?;
+        if text.is_empty() {
+            return None;
+        }
+        Some(text.to_string())
     }
 }
 
@@ -201,6 +213,92 @@ impl LLMProvider for OpenAISdkProvider {
         "openai-sdk"
     }
 
+    fn supports_streaming(&self) -> bool {
+        true
+    }
+
+    async fn infer_stream(&self, req: &InferenceRequest) -> looprs_core::ports::InferStream {
+        let tools = req
+            .tools
+            .iter()
+            .map(|t| {
+                json!({
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.input_schema,
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let model = req.model.as_str();
+        let is_reasoning = super::is_reasoning_model(model);
+        let uses_completion_tokens = model.starts_with("gpt-5")
+            || model.starts_with("gpt-4o")
+            || model.starts_with("gpt-4-turbo-2024")
+            || is_reasoning;
+
+        let mut body = json!({
+            "model": req.model.as_str(),
+            "messages": vec![
+                json!({
+                    "role": "system",
+                    "content": req.system
+                })
+            ]
+            .into_iter()
+            .chain(req.messages.iter().flat_map(Self::convert_to_openai_messages))
+            .collect::<Vec<_>>(),
+            "tools": tools,
+            "tool_choice": if tools.is_empty() { "none" } else { "auto" },
+            "stream": true,
+        });
+
+        if uses_completion_tokens {
+            body["max_completion_tokens"] = json!(req.max_tokens);
+        } else {
+            body["max_tokens"] = json!(req.max_tokens);
+        }
+
+        if super::supports_temperature(model)
+            && let Some(temp) = req.temperature
+        {
+            body["temperature"] = json!(temp);
+        }
+
+        type JsonStream = std::pin::Pin<
+            Box<dyn futures::Stream<Item = Result<Value, async_openai::error::OpenAIError>> + Send>,
+        >;
+
+        let stream_result: Result<JsonStream, async_openai::error::OpenAIError> =
+            self.client.chat().create_stream_byot(body).await;
+
+        let response_stream = match stream_result {
+            Ok(s) => s,
+            Err(e) => {
+                return Box::pin(stream::once(async move {
+                    Err(Box::new(ProviderError::ApiError(format!(
+                        "OpenAI SDK stream error: {e}"
+                    )))
+                        as Box<dyn std::error::Error + Send + Sync>)
+                }));
+            }
+        };
+
+        let text_stream = response_stream.flat_map(|item| {
+            let maybe_text: Option<Result<String, Box<dyn std::error::Error + Send + Sync>>> =
+                match item {
+                    Ok(payload) => Self::extract_stream_text(&payload).map(Ok),
+                    Err(e) => Some(Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)),
+                };
+            stream::iter(maybe_text)
+        });
+
+        Box::pin(text_stream)
+    }
+
     fn model(&self) -> &ModelId {
         &self.model
     }
@@ -266,6 +364,48 @@ mod tests {
             }
             _ => panic!("expected tool use block"),
         }
+    }
+
+    #[test]
+    fn openai_sdk_provider_reports_streaming_support() {
+        let p = OpenAISdkProvider::new("test-key".to_string())
+            .expect("OpenAISdkProvider::new must succeed in test");
+        assert!(p.supports_streaming());
+    }
+
+    #[test]
+    fn extract_stream_text_reads_delta_content() {
+        let payload = json!({
+            "choices": [
+                {
+                    "delta": {
+                        "content": "hello"
+                    }
+                }
+            ]
+        });
+
+        assert_eq!(
+            OpenAISdkProvider::extract_stream_text(&payload),
+            Some("hello".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_stream_text_ignores_empty_or_missing_delta() {
+        let empty = json!({
+            "choices": [
+                {
+                    "delta": {
+                        "content": ""
+                    }
+                }
+            ]
+        });
+        let missing = json!({ "choices": [] });
+
+        assert_eq!(OpenAISdkProvider::extract_stream_text(&empty), None);
+        assert_eq!(OpenAISdkProvider::extract_stream_text(&missing), None);
     }
 
     #[test]

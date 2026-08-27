@@ -1,6 +1,12 @@
 # Agents
 
-This repo does not currently define any agent YAML files under `.looprs/agents/` beyond this README.
+This repo currently defines these agent YAML files under `.looprs/agents/`:
+
+- `opencode.yaml`
+- `planner.yaml`
+- `reviewer.yaml`
+- `taskit.yaml`
+
 `AgentRegistry` is fully wired; `config.json`'s `agents.delegate_by_default` is
 currently `false` (delegation is opt-in per session/command) with `max_parallel: 3`.
 

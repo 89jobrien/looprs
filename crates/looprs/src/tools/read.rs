@@ -56,7 +56,7 @@ pub(super) fn tool_read(args: &Value, ctx: &ToolContext) -> Result<String, ToolE
         let trimmed = line.trim_end_matches(&['\n', '\r'][..]);
 
         let line_no = offset + written + 1;
-        let _ = writeln!(&mut output, "{:4}| {}", line_no, trimmed);
+        let _ = writeln!(&mut output, "{line_no:4}| {trimmed}");
         written += 1;
     }
 
