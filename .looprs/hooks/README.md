@@ -38,7 +38,7 @@ Repo-level hooks loaded from `.looprs/hooks/*.yaml`. Repo hooks override user ho
 
 ```yaml
 name: hook_name
-trigger: SessionStart|UserPromptSubmit|InferenceComplete|PreToolUse|PostToolUse|OnError|OnWarning|SessionEnd
+trigger: SessionStart|UserPromptSubmit|InferenceComplete|PreToolUse|PostToolUse|OnError|OnWarning|SessionEnd|DelegationStart|DelegationComplete
 actions:
   - type: message
     text: "..."

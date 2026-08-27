@@ -154,7 +154,7 @@ actions:
     approval_prompt: "Inject git status into context?"
 ```
 
-Events: `SessionStart`, `UserPromptSubmit`, `InferenceComplete`, `PreToolUse`, `PostToolUse`, `OnError`, `OnWarning`, `SessionEnd`.
+Events: `SessionStart`, `UserPromptSubmit`, `InferenceComplete`, `PreToolUse`, `PostToolUse`, `OnError`, `OnWarning`, `SessionEnd`, `DelegationStart`, `DelegationComplete`.
 
 Action types: `command` (Nushell command, optional `inject_as` and `requires_approval`), `message`, `conditional`.
 

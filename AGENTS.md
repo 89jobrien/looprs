@@ -84,8 +84,9 @@ fuzz/                 — fuzz targets (excluded from default workspace)
   integration), `nu.rs` (Nushell), plus `executor.rs`/`error.rs`
 
 - **`events.rs` + `hooks/`** — Event-driven system:
-  - 8 lifecycle events: `SessionStart`, `UserPromptSubmit`, `InferenceComplete`,
-    `PreToolUse`, `PostToolUse`, `OnError`, `OnWarning`, `SessionEnd`
+  - 10 lifecycle events: `SessionStart`, `UserPromptSubmit`, `InferenceComplete`,
+    `PreToolUse`, `PostToolUse`, `OnError`, `OnWarning`, `SessionEnd`,
+    `DelegationStart`, `DelegationComplete`
   - YAML-based hook definitions in `.looprs/hooks/`
   - Actions: command execution (via Nushell), context injection, conditionals
 
@@ -201,7 +202,7 @@ cargo xtask check pre-push
 
 ### Hook not firing
 - Verify YAML syntax is valid
-- Check event name matches exactly (see the 8 lifecycle events above)
+- Check event name matches exactly (see the 10 lifecycle events above)
 - Confirm `.looprs/hooks/` directory exists
 - Look for warning messages on `SessionStart`
 
