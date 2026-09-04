@@ -87,6 +87,8 @@ pub use crate::adapters::{
     ChannelBroker, NullOutput, PluginsAdapter, RetryProvider, SqliteSessionStore,
 };
 /// Primary agent runtime type and chat/runtime models.
+// TODO(automation-2): Keep external automation behind a versioned process protocol so Crux
+// does not couple to looprs release cadence, Tokio runtime choices, or feature graph.
 pub use crate::agent::{Agent, ChatMessage, RuntimeSettings};
 /// Agent definition schema and agent registry.
 pub use crate::agents::{AgentDefinition, AgentRegistry};
