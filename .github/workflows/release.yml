@@ -13,6 +13,10 @@ on:
           - minor
           - major
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 env:
   RUST_BACKTRACE: 1
 
@@ -23,21 +27,51 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    environment: release
     steps:
+      - name: Verify release ref
+        run: |
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "Releases must be dispatched from main; got ${GITHUB_REF}." >&2
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install release tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,cargo-deny
+
       - name: Install taskit
-        run: cargo install taskit
+        run: cargo +stable install --locked taskit
 
       - name: Install git-cliff
-        run: cargo install git-cliff
+        run: cargo +stable install --locked git-cliff
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Lint workspace
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Test workspace
+        run: cargo nextest run --workspace
+
+      - name: Audit dependencies and licenses
+        run: cargo deny check
 
       - name: Bump workspace version
         run: taskit release ${{ github.event.inputs.bump }}
@@ -47,7 +81,7 @@ jobs:
 
       - name: Resolve release version
         id: version
-        run: echo "tag=$(taskit version | head -1 | awk '{print $NF}')" >> $GITHUB_OUTPUT
+        run: echo "tag=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == \"looprs\") | .version')" >> "$GITHUB_OUTPUT"
 
       - name: Commit and tag release
         id: tag_release
@@ -57,22 +91,45 @@ jobs:
           NEW_VERSION="${{ steps.version.outputs.tag }}"
 
           if git rev-parse "v${NEW_VERSION}" >/dev/null 2>&1; then
-            echo "Tag v${NEW_VERSION} already exists, skipping commit/tag"
-            echo "created_tag=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "Tag v${NEW_VERSION} already exists locally." >&2
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/v${NEW_VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${NEW_VERSION} already exists on origin." >&2
+            exit 1
           fi
 
           git add Cargo.toml Cargo.lock CHANGELOG.md
           git commit -m "chore(release): bump version to ${NEW_VERSION} and regenerate changelog"
           git tag "v${NEW_VERSION}"
-          git push origin main --tags
+          git push origin HEAD:main "v${NEW_VERSION}"
           echo "created_tag=true" >> "$GITHUB_OUTPUT"
 
       - name: Publish workspace crates
         if: steps.tag_release.outputs.created_tag == 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: taskit release publish
+        run: |
+          publish_crate() {
+            local package="$1"
+            for attempt in 1 2 3; do
+              if cargo publish --locked -p "$package"; then
+                return 0
+              fi
+              if [[ "$attempt" -eq 3 ]]; then
+                echo "Publishing $package failed after 3 attempts." >&2
+                return 1
+              fi
+              sleep 20
+            done
+          }
+
+          publish_crate looprs-macros
+          publish_crate looprs-core
+          publish_crate looprs
+          publish_crate looprs-tui
+          publish_crate looprs-cli
 
       - name: Create GitHub release
         if: steps.tag_release.outputs.created_tag == 'true'
