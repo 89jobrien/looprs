@@ -400,6 +400,8 @@ impl Agent {
         }
     }
 
+    // TODO(feature-idea-6): Preserve structured streaming deltas, including
+    // tool calls and usage, then route the result through the normal tool loop.
     /// Single-turn streaming inference.
     ///
     /// Drives `provider.infer_stream()`, emitting each text chunk via
@@ -459,7 +461,7 @@ impl Agent {
         Ok(())
     }
 
-    // TODO(parallel-dispatch): implement parallel agent dispatch (idea #7).
+    // TODO(feature-idea-11): Implement bounded parallel agent dispatch.
     // AgentsConfig.max_parallel is loaded but the orchestration strategy is
     // hardcoded "sequential" here. To support parallel dispatch:
     //   1. Collect independent sub-tasks from the current turn (tool calls with

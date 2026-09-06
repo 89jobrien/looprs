@@ -45,6 +45,8 @@ impl HookExecutor {
             .ok()
             .and_then(|c| c.defaults.timeout_seconds);
 
+        // TODO(feature-idea-7): Seed condition evaluation with typed event fields
+        // such as `tool_name` so lifecycle hooks can use event-aware predicates.
         let mut results = Vec::new();
         let mut local_ctx: HashMap<String, String> = HashMap::new();
 

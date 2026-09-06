@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Chores
+- Update provider fallback metadata and record the remaining automation protocol work
+- Anchor the prioritized feature backlog at the relevant implementation seams
+
+### Documentation
+- Synchronize runtime documentation with current behavior
+
 ## [0.5.3] - 2026-08-26
 
 ### Chores

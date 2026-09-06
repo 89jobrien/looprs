@@ -17,6 +17,8 @@ pub struct McpToolExecutor {
     fallback: Option<Box<dyn ToolExecutor>>,
 }
 
+// TODO(feature-idea-10): Compose MCP configuration and tool discovery into the
+// production runtime so remote definitions are included in inference requests.
 impl McpToolExecutor {
     /// Route all tool calls to `server_url`. No fallback.
     pub fn new(server_url: impl Into<String>) -> Self {

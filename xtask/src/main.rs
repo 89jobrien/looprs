@@ -6,6 +6,9 @@
 //! via `cargo install taskit`.
 
 use std::process::{Command, exit};
+
+// TODO(feature-idea-14): Add cross-platform binary packaging, checksums, and
+// release artifacts to the canonical taskit/xtask release path.
 const CLI_BIN_TEST_ARGS: &[&str] = &[
     "nextest",
     "run",

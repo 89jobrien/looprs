@@ -731,6 +731,8 @@ fn models_gist_url() -> String {
 /// `local` also pick an installed Ollama model, then persist the choice
 /// to `.looprs/provider.json`.
 fn run_provider_menu() -> Result<()> {
+    // TODO(feature-idea-4): Offer every provider supported by the runtime and
+    // collect any provider-specific model settings before persisting a choice.
     let providers = vec![
         "anthropic".to_string(),
         "openai".to_string(),
@@ -1183,6 +1185,8 @@ fn prepare_user_prompt(
         metadata.insert("orchestration.plugin".to_string(), plugin_name);
     }
 
+    // TODO(feature-idea-5): Resolve `agent.skills` into delegated context and
+    // enforce `agent.tools` when defining and executing tools for this turn.
     let role = agent
         .role
         .clone()

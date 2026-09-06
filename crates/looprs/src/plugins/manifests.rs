@@ -166,6 +166,8 @@ impl KindSupervisor {
         self.statuses
             .retain(|name, _| new_map.contains_key(name.as_str()));
 
+        // TODO(feature-idea-12): Supervise tool and runtime plugin processes,
+        // replacing synthetic health with launch, probe, and restart state.
         for (name, manifest) in new_map {
             if manifest.mode != PluginExecutionMode::Daemon {
                 self.statuses.remove(name);
