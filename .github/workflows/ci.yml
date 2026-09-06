@@ -37,7 +37,7 @@ jobs:
         run: cargo +stable install --locked taskit
 
       - name: Run CI
-        run: taskit ci --fail-fast
+        run: taskit check ci --fail-fast
 
       # IDEA(M5) implemented: named integration-test gate for tests/ (309 LOC)
       - name: Integration tests
@@ -89,7 +89,7 @@ jobs:
         run: cargo +stable install --locked taskit
 
       - name: Generate coverage
-        run: taskit coverage
+        run: taskit test coverage
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v4
@@ -122,21 +122,21 @@ jobs:
         run: cargo +nightly install --locked cargo-fuzz
 
       - name: Fuzz fuzz_parse_skill
-        run: taskit fuzz fuzz_parse_skill --duration 30
+        run: taskit test fuzz fuzz_parse_skill --duration 30
         working-directory: fuzz
 
       - name: Fuzz fuzz_strip_ansi
-        run: taskit fuzz fuzz_strip_ansi --duration 30
+        run: taskit test fuzz fuzz_strip_ansi --duration 30
         working-directory: fuzz
 
       - name: Fuzz fuzz_parse_hook
-        run: taskit fuzz fuzz_parse_hook --duration 30
+        run: taskit test fuzz fuzz_parse_hook --duration 30
         working-directory: fuzz
 
       - name: Fuzz fuzz_parse_session_event
-        run: taskit fuzz fuzz_parse_session_event --duration 30
+        run: taskit test fuzz fuzz_parse_session_event --duration 30
         working-directory: fuzz
 
       - name: Fuzz fuzz_parse_content_block
-        run: taskit fuzz fuzz_parse_content_block --duration 30
+        run: taskit test fuzz fuzz_parse_content_block --duration 30
         working-directory: fuzz
