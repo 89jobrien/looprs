@@ -98,10 +98,7 @@ pub fn collect(project: &str, limit: usize) -> Option<DoobStatus> {
                 None
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                eprintln!(
-                    "doob: command timed out after {}s; skipping",
-                    DOOB_TIMEOUT_SECS
-                );
+                eprintln!("doob: command timed out after {DOOB_TIMEOUT_SECS}s; skipping");
                 None
             }
             Err(e) => {
@@ -215,7 +212,7 @@ mod tests {
     #[test]
     fn test_content_truncation_and_sanitize() {
         let long = "a".repeat(MAX_TODO_CONTENT + 50);
-        let bad = format!(r#"{{"todos":[{{"content":"{}"}}]}}"#, long);
+        let bad = format!(r#"{{"todos":[{{"content":"{long}"}}]}}"#);
         let result = parse_doob_list(&bad).expect("parse should succeed");
         assert_eq!(result.todos.len(), 1);
         assert!(result.todos[0].content.chars().count() <= MAX_TODO_CONTENT);
