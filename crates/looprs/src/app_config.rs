@@ -50,6 +50,16 @@ impl AppConfig {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn cwd_test_lock() -> std::sync::MutexGuard<'static, ()> {
+    use std::sync::{Mutex, OnceLock};
+
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+        .lock()
+        .expect("lock process environment for test")
+}
+
 /// Defaults for model/runtime behavior.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -282,6 +292,7 @@ mod tests {
 
     #[test]
     fn load_overlays_onboarding_from_state_file() {
+        let _lock = cwd_test_lock();
         let tmp = TempDir::new().unwrap();
         let looprs = tmp.path().join(".looprs");
         std::fs::create_dir_all(&looprs).unwrap();
