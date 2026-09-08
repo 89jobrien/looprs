@@ -48,7 +48,7 @@ jobs:
           key: stable-clippy
       - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
-          tool: protoc@35.1
+          tool: protoc@3.35.1
           fallback: none
       - run: cargo +stable clippy --locked --workspace --all-targets --all-features -- -D warnings
 
@@ -68,7 +68,7 @@ jobs:
           key: msrv-test
       - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
-          tool: protoc@35.1,cargo-nextest@0.9.137
+          tool: protoc@3.35.1,cargo-nextest@0.9.137
           fallback: none
       - run: cargo +1.88.0 nextest run --locked --workspace --all-targets --all-features --profile ci
 
@@ -86,7 +86,7 @@ jobs:
           key: latest-stable-check
       - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
-          tool: protoc@35.1
+          tool: protoc@3.35.1
           fallback: none
       - run: cargo +stable check --locked --workspace --all-targets --all-features
 
@@ -102,7 +102,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
-          tool: protoc@35.1,cargo-deny@0.20.2,cargo-machete@0.9.1
+          tool: protoc@3.35.1,cargo-deny@0.20.2,cargo-machete@0.9.1
           fallback: none
       - name: Install taskit
         run: cargo +stable install --locked taskit --version 0.9.0
@@ -124,7 +124,7 @@ jobs:
           key: stable-coverage
       - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
-          tool: protoc@35.1,cargo-nextest@0.9.137,cargo-llvm-cov@0.8.7
+          tool: protoc@3.35.1,cargo-nextest@0.9.137,cargo-llvm-cov@0.8.7
           fallback: none
       - name: Generate workspace coverage
         run: cargo +stable llvm-cov nextest --locked --workspace --all-features --lcov --output-path lcov.info

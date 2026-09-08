@@ -55,7 +55,7 @@ jobs:
           key: release-validation
       - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
-          tool: protoc@35.1,cargo-nextest@0.9.137,cargo-deny@0.20.2,git-cliff@2.12.0
+          tool: protoc@3.35.1,cargo-nextest@0.9.137,cargo-deny@0.20.2,git-cliff@2.12.0
           fallback: none
       - name: Install taskit
         run: cargo +1.88.0 install --locked taskit --version 0.9.0
@@ -146,7 +146,7 @@ jobs:
           toolchain: 1.88.0
       - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
-          tool: protoc@35.1
+          tool: protoc@3.35.1
           fallback: none
       - name: Authenticate to crates.io
         id: crates-io
@@ -233,7 +233,7 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
-          tool: protoc@35.1
+          tool: protoc@3.35.1
           fallback: none
       - name: Build CLI
         run: cargo +1.88.0 build --locked --release -p looprs-cli --target "${{ matrix.target }}"
