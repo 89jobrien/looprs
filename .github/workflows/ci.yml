@@ -1,142 +1,157 @@
 name: CI
 
 on:
-  pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
 jobs:
-  ci:
-    name: CI
-    runs-on: ubuntu-latest
+  fmt:
+    name: fmt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: rustfmt
+      - run: cargo +stable fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: stable-clippy
+      - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
+        with:
+          tool: protoc@35.1
+          fallback: none
+      - run: cargo +stable clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+  msrv:
+    name: msrv
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable action
+        with:
+          toolchain: 1.88.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: msrv-test
+      - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
+        with:
+          tool: protoc@35.1,cargo-nextest@0.9.137
+          fallback: none
+      - run: cargo +1.88.0 nextest run --locked --workspace --all-targets --all-features --profile ci
+
+  stable:
+    name: latest-stable
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: latest-stable-check
+      - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
+        with:
+          tool: protoc@35.1
+          fallback: none
+      - run: cargo +stable check --locked --workspace --all-targets --all-features
+
+  dependency-policy:
+    name: dependency-policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-
-      - uses: dtolnay/rust-toolchain@stable
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
-          toolchain: stable
-          components: clippy, rustfmt
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install protoc
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-      - name: Install tools
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest,cargo-llvm-cov,cargo-deny,cargo-machete
-
+          tool: protoc@35.1,cargo-deny@0.20.2,cargo-machete@0.9.1
+          fallback: none
       - name: Install taskit
-        run: cargo +stable install --locked taskit
-
-      - name: Run CI
-        run: taskit check ci --fail-fast
-
-      # IDEA(M5) implemented: named integration-test gate for tests/ (309 LOC)
-      - name: Integration tests
-        run: cargo nextest run --workspace --test-threads=1
-
-      - name: Security & license audit
-        run: cargo deny check
-
-  # IDEA(Q3) implemented: verifies rust-version = "1.88" declared in Cargo.toml
-  msrv:
-    name: MSRV (1.88)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@1.88
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install protoc
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-      - name: Check MSRV
-        run: cargo check --workspace
+        run: cargo +stable install --locked taskit --version 0.9.0
+      - run: cargo deny check
+      - run: taskit check deps
+      - run: taskit protocol drift
 
   coverage:
-    name: Coverage
-    runs-on: ubuntu-latest
+    name: coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-
-      - uses: dtolnay/rust-toolchain@stable
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          toolchain: stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install protoc
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2
+          key: stable-coverage
+      - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
-          tool: cargo-llvm-cov
-
-      - name: Install taskit
-        run: cargo +stable install --locked taskit
-
-      - name: Generate coverage
-        run: taskit test coverage
-
-      - name: Upload to codecov.io
-        uses: codecov/codecov-action@v4
+          tool: protoc@35.1,cargo-nextest@0.9.137,cargo-llvm-cov@0.8.7
+          fallback: none
+      - name: Generate workspace coverage
+        run: cargo +stable llvm-cov nextest --locked --workspace --all-features --lcov --output-path lcov.info
+      - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: lcov.info
-          fail_ci_if_error: false
+          fail_ci_if_error: true
 
-  fuzz:
-    name: Fuzz (30s)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    env:
-      RUSTUP_TOOLCHAIN: nightly
+  required:
+    name: required
+    if: always()
+    needs: [fmt, clippy, msrv, stable, dependency-policy, coverage]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: nightly
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install protoc
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-      - name: Install taskit
-        run: cargo install --locked taskit
-
-      - name: Install cargo-fuzz
-        run: cargo +nightly install --locked cargo-fuzz
-
-      - name: Fuzz fuzz_parse_skill
-        run: taskit test fuzz fuzz_parse_skill --duration 30
-        working-directory: fuzz
-
-      - name: Fuzz fuzz_strip_ansi
-        run: taskit test fuzz fuzz_strip_ansi --duration 30
-        working-directory: fuzz
-
-      - name: Fuzz fuzz_parse_hook
-        run: taskit test fuzz fuzz_parse_hook --duration 30
-        working-directory: fuzz
-
-      - name: Fuzz fuzz_parse_session_event
-        run: taskit test fuzz fuzz_parse_session_event --duration 30
-        working-directory: fuzz
-
-      - name: Fuzz fuzz_parse_content_block
-        run: taskit test fuzz fuzz_parse_content_block --duration 30
-        working-directory: fuzz
+      - name: Require every CI job
+        env:
+          FMT_RESULT: ${{ needs.fmt.result }}
+          CLIPPY_RESULT: ${{ needs.clippy.result }}
+          MSRV_RESULT: ${{ needs.msrv.result }}
+          STABLE_RESULT: ${{ needs.stable.result }}
+          DEPENDENCY_RESULT: ${{ needs.dependency-policy.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+        run: |
+          for result in "$FMT_RESULT" "$CLIPPY_RESULT" "$MSRV_RESULT" "$STABLE_RESULT" "$DEPENDENCY_RESULT" "$COVERAGE_RESULT"; do
+            if [[ "$result" != "success" ]]; then
+              echo "A required CI job finished with status: $result" >&2
+              exit 1
+            fi
+          done

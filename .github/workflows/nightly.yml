@@ -5,9 +5,6 @@ on:
     - cron: "17 6 * * *"
   workflow_dispatch:
 
-env:
-  RUST_BACKTRACE: 1
-
 permissions:
   contents: read
 
@@ -15,37 +12,113 @@ concurrency:
   group: nightly-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
 jobs:
-  nightly:
-    name: Nightly Checks
-    runs-on: ubuntu-latest
+  deep-checks:
+    name: deep-checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-
-      - uses: dtolnay/rust-toolchain@stable
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           components: clippy, rustfmt
-
-      - uses: Swatinem/rust-cache@v2
-
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: nightly-deep-checks
+      - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
+        with:
+          tool: protoc@35.1,cargo-nextest@0.9.137,cargo-deny@0.20.2,cargo-machete@0.9.1,git-cliff@2.12.0
+          fallback: none
       - name: Install taskit
-        run: cargo install taskit
-
-      - name: Install git-cliff
-        run: cargo install git-cliff
-
-      - name: Quality gates
-        run: taskit check pre-push
-
-      - name: Release dry run
-        run: cargo publish --workspace --dry-run
-
+        run: cargo +stable install --locked taskit --version 0.9.0
+      - name: Latest-stable quality gates
+        run: |
+          cargo +stable fmt --all --check
+          cargo +stable clippy --locked --workspace --all-targets --all-features -- -D warnings
+          cargo +stable nextest run --locked --workspace --all-targets --all-features --profile ci
+      - run: cargo deny check
+      - run: taskit check deps
+      - run: taskit protocol drift
       - name: Validate changelog style
         run: |
-          git cliff --config cliff.toml --unreleased --strip all > /tmp/changelog.md
+          git cliff --config cliff.toml --unreleased --strip all --output /tmp/changelog.md
           if grep -Pq '[\x{1F1E6}-\x{1F1FF}\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]' /tmp/changelog.md; then
-            echo "emoji found in changelog output"
+            echo "emoji found in changelog output" >&2
             exit 1
           fi
+
+  package:
+    name: package-${{ matrix.package }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [looprs-macros, looprs-core, looprs, looprs-tui, looprs-cli]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
+        with:
+          tool: protoc@35.1
+          fallback: none
+      - name: Verify publication package
+        env:
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          patches=(
+            --config 'patch.crates-io.looprs-macros.path="crates/looprs-macros"'
+            --config 'patch.crates-io.looprs-core.path="crates/looprs-core"'
+            --config 'patch.crates-io.looprs.path="crates/looprs"'
+            --config 'patch.crates-io.looprs-tui.path="crates/looprs-tui"'
+          )
+          cargo +stable "${patches[@]}" publish --locked --dry-run -p "$PACKAGE"
+
+  fuzz:
+    name: fuzz-${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - fuzz_parse_skill
+          - fuzz_strip_ansi
+          - fuzz_parse_hook
+          - fuzz_parse_session_event
+          - fuzz_parse_content_block
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable action
+        with:
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: nightly-fuzz-${{ matrix.target }}
+      - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
+        with:
+          tool: protoc@35.1,cargo-fuzz@0.13.1
+          fallback: none
+      - name: Run fuzz target
+        working-directory: fuzz
+        run: cargo +nightly fuzz run "${{ matrix.target }}" -- -max_total_time=120
+      - name: Upload fuzz failures
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-${{ matrix.target }}-failures
+          path: fuzz/artifacts/${{ matrix.target }}/
+          if-no-files-found: ignore
+          retention-days: 14
