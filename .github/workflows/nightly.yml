@@ -112,7 +112,11 @@ jobs:
           key: nightly-fuzz-${{ matrix.target }}
       - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
-          tool: protoc@3.35.1,cargo-fuzz@0.13.1
+          tool: protoc@3.35.1
+          fallback: none
+      - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
+        with:
+          tool: cargo-fuzz@0.13.1
       - name: Run fuzz target
         working-directory: fuzz
         run: cargo +nightly fuzz run "${{ matrix.target }}" -- -max_total_time=120
