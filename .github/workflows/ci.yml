@@ -70,6 +70,9 @@ jobs:
         with:
           tool: protoc@3.35.1,cargo-nextest@0.9.137
           fallback: none
+      - uses: hustcer/setup-nu@9215c80adb545a85c419d5085b76eb6d082f49e7 # v3.27
+        with:
+          version: 0.108.0
       - run: cargo +1.88.0 nextest run --locked --workspace --all-targets --all-features --profile ci
 
   stable:
@@ -126,6 +129,9 @@ jobs:
         with:
           tool: protoc@3.35.1,cargo-nextest@0.9.137,cargo-llvm-cov@0.8.7
           fallback: none
+      - uses: hustcer/setup-nu@9215c80adb545a85c419d5085b76eb6d082f49e7 # v3.27
+        with:
+          version: 0.108.0
       - name: Generate workspace coverage
         run: cargo +stable llvm-cov nextest --locked --workspace --all-features --lcov --output-path lcov.info
       - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0

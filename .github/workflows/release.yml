@@ -57,6 +57,9 @@ jobs:
         with:
           tool: protoc@3.35.1,cargo-nextest@0.9.137,cargo-deny@0.20.2,git-cliff@2.12.0
           fallback: none
+      - uses: hustcer/setup-nu@9215c80adb545a85c419d5085b76eb6d082f49e7 # v3.27
+        with:
+          version: 0.108.0
       - name: Install taskit
         run: cargo +1.88.0 install --locked taskit --version 0.9.0
       - name: Capture immutable release identity

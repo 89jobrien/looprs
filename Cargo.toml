@@ -21,7 +21,7 @@ homepage = "https://github.com/89jobrien/looprs"
 documentation = "https://docs.rs/looprs"
 
 [workspace.dependencies]
-anyhow = "^1.0.101" #unified
+anyhow = "^1.0.103" #unified
 chrono = { version = "^0.4.44", features = ["serde"] } #unified
 colored = "^2.2.0" #unified
 dirs = "^5.0.1" #unified
