@@ -51,13 +51,14 @@ impl AppConfig {
 }
 
 #[cfg(test)]
+/// Serializes tests that read or mutate process-wide environment and working-directory state.
 pub(crate) fn cwd_test_lock() -> std::sync::MutexGuard<'static, ()> {
     use std::sync::{Mutex, OnceLock};
 
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
         .lock()
-        .expect("lock process environment for test")
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Defaults for model/runtime behavior.

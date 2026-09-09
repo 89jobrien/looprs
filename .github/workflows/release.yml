@@ -246,7 +246,40 @@ jobs:
           mkdir -p dist/package
           cp "target/${TARGET}/release/looprs" dist/package/looprs
           cp README.md LICENSE dist/package/
-          tar -C dist/package -czf "dist/${ASSET}.tar.gz" .
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
+          export SOURCE_DATE_EPOCH
+          python3 - <<'PY'
+          import gzip
+          import os
+          import tarfile
+          from pathlib import Path
+
+          root = Path("dist/package")
+          output = Path("dist") / f"{os.environ['ASSET']}.tar.gz"
+          verification = output.with_suffix(output.suffix + ".verify")
+          epoch = int(os.environ["SOURCE_DATE_EPOCH"])
+
+          def write_archive(destination: Path) -> None:
+              with destination.open("wb") as raw:
+                  with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=epoch, compresslevel=9) as compressed:
+                      with tarfile.open(fileobj=compressed, mode="w", format=tarfile.USTAR_FORMAT) as archive:
+                          for path in sorted(root.iterdir(), key=lambda entry: entry.name):
+                              info = archive.gettarinfo(str(path), arcname=path.name)
+                              info.uid = 0
+                              info.gid = 0
+                              info.uname = ""
+                              info.gname = ""
+                              info.mtime = epoch
+                              info.mode = 0o755 if path.name == "looprs" else 0o644
+                              with path.open("rb") as source:
+                                  archive.addfile(info, source)
+
+          write_archive(output)
+          write_archive(verification)
+          if output.read_bytes() != verification.read_bytes():
+              raise SystemExit("same-commit archive reproducibility check failed")
+          verification.unlink()
+          PY
           if [[ "${RUNNER_OS}" == "macOS" ]]; then
             (cd dist && shasum -a 256 "${ASSET}.tar.gz" > "${ASSET}.tar.gz.sha256")
           else
