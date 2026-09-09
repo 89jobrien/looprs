@@ -15,5 +15,5 @@ anyhow = { workspace = true } #unified
 crossterm = { version = "0.28", features = ["event-stream"] }
 futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
 looprs = { workspace = true } #unified
-ratatui = "0.29"
+ratatui = { version = "0.30.0", default-features = false, features = ["crossterm_0_28", "layout-cache", "underline-color"] }
 tokio = { workspace = true, features = ["sync", "rt", "macros"] } #unified

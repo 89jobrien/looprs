@@ -1061,6 +1061,7 @@ mod tests {
         use std::io::Write;
         use tempfile::TempDir;
 
+        let _lock = crate::app_config::cwd_test_lock();
         let provider = MockProvider::simple_text("test");
 
         // Create a temporary hook file with inject_as

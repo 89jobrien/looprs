@@ -8,15 +8,16 @@ changes and what we expect in pull requests.
 1. Fork the repo and create a feature branch.
 2. Make your changes with tests where appropriate.
 3. Run the quality gates:
-   - `make fmt`
-   - `make lint`
-   - `make test`
-   - `make build`
+   - `cargo fmt --all --check`
+   - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+   - `cargo nextest run --workspace`
+   - `cargo xtask check pre-push`
 4. Open a pull request with a clear description.
 
 ## Development Setup
 
 - Rust 1.88+ is required.
+- `cargo-nextest` is required to run the test suite.
 - Optional tools:
   - `bacon` for watch mode
   - `prek` for pre-commit hooks
@@ -39,7 +40,7 @@ See `README.md` for setup and usage details.
 ## Pull Request Checklist
 
 - [ ] Tests added/updated
-- [ ] `make fmt`, `make lint`, `make test`, `make build` all pass
+- [ ] Formatting, clippy, nextest, and `cargo xtask check pre-push` pass
 - [ ] Docs updated if behavior changes
 - [ ] No secrets committed
 
@@ -47,19 +48,21 @@ See `README.md` for setup and usage details.
 
 For maintainers creating releases:
 
-1. Use conventional commit messages (`feat:`, `fix:`, `docs:`, etc.) for automatic changelog generation
-2. Run version bump script:
-   - `make version-patch` for bug fixes (0.1.11 → 0.1.12)
-   - `make version-minor` for new features (0.1.11 → 0.2.0)
-   - `make version-major` for breaking changes (0.1.11 → 1.0.0)
-3. The script automatically:
-   - Updates `Cargo.toml`, `Cargo.lock`, and `CHANGELOG.md`
-   - Categorizes commits into changelog sections
-   - Creates git commit and tag
-4. Push changes and tag: `git push origin main && git push origin vX.Y.Z`
-5. Create GitHub release (optional)
+1. Verify a clean release branch and run the full local gates listed above.
+2. Review changes since the latest `v*` tag and confirm the semantic version bump.
+3. Run `taskit release patch`, `taskit release minor`, or `taskit release major`.
+4. Regenerate `CHANGELOG.md` with `git cliff --config cliff.toml --output CHANGELOG.md`.
+5. Re-run the full gates, commit the manifests, lockfile, and changelog with a signed
+   `chore(release): prepare X.Y.Z` commit, then merge it to `main` through a pull request.
+6. Dispatch `gh workflow run release.yml --ref main -f version=X.Y.Z`.
+7. Verify all five crates, the `vX.Y.Z` tag, provenance attestations, checksums, SBOMs,
+   and GitHub release assets.
 
-See `scripts/README.md` for detailed documentation.
+The release workflow never changes versions. It validates the merged release commit,
+publishes crates with a temporary OIDC credential, waits for registry propagation, and
+only then creates the tag and GitHub release. Configure a crates.io trusted publisher for
+each publishable crate with repository `89jobrien/looprs`, workflow `release.yml`, and
+environment `release`; no long-lived crates.io token is stored in GitHub.
 
 ## License
 
