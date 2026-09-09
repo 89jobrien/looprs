@@ -2,14 +2,33 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [0.5.4] - 2026-09-09
+
+### CI
+- Sync main into develop
+- Harden workspace publication
+- Harden validation and releases
 
 ### Chores
-- Update provider fallback metadata and record the remaining automation protocol work
-- Anchor the prioritized feature backlog at the relevant implementation seams
+- Update provider fallback and automation TODOs
 
 ### Documentation
-- Synchronize runtime documentation with current behavior
+- Sync runtime documentation with current behavior
+- Record prioritized feature backlog
+- Capture post-release handoff
+- Refresh release handoff state
+
+### Fixes
+- Use current taskit command groups
+- Satisfy MSRV clippy formatting
+- Serialize process-wide cwd tests
+- Use supported protoc version
+- Install runtime tools and resolve dependency audit
+- Use immutable release checkout ref
+- Harden release and test resilience
+- Allow cargo fuzz binary fallback
+- Scope cargo fuzz fallback
+- Target glibc for address sanitizer fuzzing
 
 ## [0.5.3] - 2026-08-26
 
