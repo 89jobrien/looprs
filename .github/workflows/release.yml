@@ -361,7 +361,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if [[ -z "$remote_commit" ]]; then
             git tag -a "v${VERSION}" "${{ github.sha }}" -m "Release v${VERSION}"
-            git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64)" \
+            auth_header=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')
+            git -c http.extraheader="AUTHORIZATION: basic ${auth_header}" \
               push "https://github.com/${GITHUB_REPOSITORY}.git" "v${VERSION}"
           fi
 
