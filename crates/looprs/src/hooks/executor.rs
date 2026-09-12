@@ -45,10 +45,8 @@ impl HookExecutor {
             .ok()
             .and_then(|c| c.defaults.timeout_seconds);
 
-        // TODO(feature-idea-7): Seed condition evaluation with typed event fields
-        // such as `tool_name` so lifecycle hooks can use event-aware predicates.
         let mut results = Vec::new();
-        let mut local_ctx: HashMap<String, String> = HashMap::new();
+        let mut local_ctx = Self::event_context_values(context);
 
         // Check condition if present
         if let Some(condition) = &hook.condition
@@ -78,6 +76,23 @@ impl HookExecutor {
         }
 
         Ok(results)
+    }
+
+    fn event_context_values(context: &EventContext) -> HashMap<String, String> {
+        let mut values = context.metadata.clone();
+        for (key, value) in [
+            ("session_context", context.session_context.as_ref()),
+            ("user_message", context.user_message.as_ref()),
+            ("tool_name", context.tool_name.as_ref()),
+            ("tool_output", context.tool_output.as_ref()),
+            ("error", context.error.as_ref()),
+            ("warning", context.warning.as_ref()),
+        ] {
+            if let Some(value) = value {
+                values.insert(key.to_string(), value.clone());
+            }
+        }
+        values
     }
 
     /// Execute a single action and return (output, inject_key)
@@ -465,6 +480,24 @@ actions:
         let results =
             HookExecutor::execute_hook_with_approval(&hook, &context, Some(&approve)).unwrap();
         assert!(results.iter().any(|r| r.output == "ok"));
+    }
+
+    #[test]
+    fn post_tool_use_condition_reads_event_tool_name() {
+        let yaml = r#"name: post_read
+trigger: PostToolUse
+condition: equals:tool_name:read
+actions:
+  - type: message
+    text: "matched"
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new().with_tool_name("read".to_string());
+
+        let results = HookExecutor::execute_hook(&hook, &context).unwrap();
+
+        assert!(results.iter().any(|result| result.output == "matched"));
     }
 
     #[test]
