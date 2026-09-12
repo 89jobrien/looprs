@@ -8,9 +8,7 @@ use super::SkillRegistry;
 use super::discovery::find_skills_in_dir;
 
 impl SkillRegistry {
-    // TODO(feature-idea-1): Reconcile repo-root YAML skills with the canonical
-    // `name/SKILL.md` discovery format, then cover both sources end to end.
-    /// Load skills from a directory (recursively finds SKILL.md files)
+    /// Load canonical nested `SKILL.md` files and root YAML skill definitions.
     // qual:allow(iosp) reason: "I/O boundary — loads skill files from directory"
     pub fn load_from_directory(&mut self, dir: &Path) -> Result<usize> {
         if !dir.exists() {
@@ -29,6 +27,28 @@ impl SkillRegistry {
                         e
                     );
                 }
+            }
+        }
+
+        let mut yaml_files = fs::read_dir(dir)?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.is_file()
+                    && matches!(
+                        path.extension().and_then(|extension| extension.to_str()),
+                        Some("yaml" | "yml")
+                    )
+            })
+            .collect::<Vec<_>>();
+        yaml_files.sort();
+        for path in yaml_files {
+            match self.load_yaml_skill(&path) {
+                Ok(()) => count += 1,
+                Err(error) => eprintln!(
+                    "Warning: Failed to load skill from {}: {error}",
+                    path.display()
+                ),
             }
         }
 
@@ -58,6 +78,15 @@ impl SkillRegistry {
         let skill = super::parser::parse_skill_file(path, &content)
             .with_context(|| format!("Failed to parse skill file: {}", path.display()))?;
 
+        self.register(skill);
+        Ok(())
+    }
+
+    fn load_yaml_skill(&mut self, path: &Path) -> Result<()> {
+        let content = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read skill file: {}", path.display()))?;
+        let skill = super::parser::parse_yaml_skill(path, &content)
+            .with_context(|| format!("Failed to parse skill file: {}", path.display()))?;
         self.register(skill);
         Ok(())
     }
@@ -103,6 +132,27 @@ Content here.
         let skill = registry.get("test-skill").unwrap();
         assert_eq!(skill.name, "test-skill");
         assert_eq!(skill.triggers, vec!["test"]);
+    }
+
+    #[test]
+    fn repository_root_yaml_skill_is_discovered() {
+        let temp = TempDir::new().unwrap();
+        fs::write(
+            temp.path().join("repository-skill.yaml"),
+            "name: repository-skill\ndescription: Repo skill\ntriggers: [repo]\ncontent: Repository guidance.\n",
+        )
+        .unwrap();
+
+        let mut registry = SkillRegistry::new();
+        let count = registry.load_from_directory(temp.path()).unwrap();
+
+        assert_eq!(count, 1);
+        assert_eq!(
+            registry
+                .get("repository-skill")
+                .map(|skill| skill.content.as_str()),
+            Some("Repository guidance.")
+        );
     }
 
     #[test]
