@@ -66,6 +66,35 @@ pub fn session_trace_path(base_dir: &Path, session_id: &str) -> PathBuf {
     base_dir.join(format!("{session_id}.jsonl"))
 }
 
+/// Returns whether no trace record is as recent as repository activity.
+pub fn trace_stream_is_stale(base_dir: &Path, repository_activity: SystemTime) -> Result<bool> {
+    let activity_timestamp = repository_activity.duration_since(UNIX_EPOCH)?.as_secs();
+    let entries = match fs::read_dir(base_dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
+        Err(error) => return Err(error.into()),
+    };
+    let mut latest_timestamp = None;
+
+    for entry in entries {
+        let path = entry?.path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("jsonl") {
+            continue;
+        }
+        for line in fs::read_to_string(path)?.lines() {
+            let timestamp = serde_json::from_str::<serde_json::Value>(line)
+                .ok()
+                .and_then(|record| record.get("timestamp").and_then(serde_json::Value::as_u64));
+            if let Some(timestamp) = timestamp {
+                latest_timestamp =
+                    Some(latest_timestamp.map_or(timestamp, |latest: u64| latest.max(timestamp)));
+            }
+        }
+    }
+
+    Ok(latest_timestamp.is_none_or(|timestamp| timestamp < activity_timestamp))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,5 +141,40 @@ mod tests {
         assert_eq!(parsed["session_id"], "sess-42");
         assert_eq!(parsed["turn"]["request"]["model"], "mock-model");
         assert_eq!(parsed["turn"]["response"]["stop_reason"], "tool_use");
+    }
+
+    #[test]
+    fn trace_stream_without_records_is_stale() {
+        let temp = TempDir::new().expect("tempdir");
+
+        assert!(
+            trace_stream_is_stale(temp.path(), UNIX_EPOCH + std::time::Duration::from_secs(10))
+                .expect("staleness check")
+        );
+    }
+
+    #[test]
+    fn trace_stream_detects_activity_newer_than_latest_record() {
+        let temp = TempDir::new().expect("tempdir");
+        std::fs::write(
+            session_trace_path(temp.path(), "session"),
+            "{\"timestamp\":100}\n{\"timestamp\":200}\n",
+        )
+        .expect("trace fixture");
+
+        assert!(
+            trace_stream_is_stale(
+                temp.path(),
+                UNIX_EPOCH + std::time::Duration::from_secs(201)
+            )
+            .expect("staleness check")
+        );
+        assert!(
+            !trace_stream_is_stale(
+                temp.path(),
+                UNIX_EPOCH + std::time::Duration::from_secs(200)
+            )
+            .expect("freshness check")
+        );
     }
 }
