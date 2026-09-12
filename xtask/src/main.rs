@@ -7,8 +7,6 @@
 
 use std::process::{Command, exit};
 
-// TODO(feature-idea-14): Add cross-platform binary packaging, checksums, and
-// release artifacts to the canonical taskit/xtask release path.
 const CLI_BIN_TEST_ARGS: &[&str] = &[
     "nextest",
     "run",
@@ -108,6 +106,8 @@ fn run_install() -> i32 {
 mod tests {
     use super::*;
 
+    const RELEASE_WORKFLOW: &str = include_str!("../../.github/workflows/release.yml");
+
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_string()).collect()
     }
@@ -149,5 +149,29 @@ mod tests {
         assert!(CLI_BIN_TEST_ARGS.contains(&"looprs-cli"));
         assert!(CLI_BIN_TEST_ARGS.contains(&"--bin"));
         assert!(CLI_BIN_TEST_ARGS.contains(&"looprs"));
+    }
+
+    #[test]
+    fn release_workflow_builds_all_supported_platforms() {
+        for target in [
+            "x86_64-unknown-linux-gnu",
+            "aarch64-apple-darwin",
+            "x86_64-pc-windows-msvc",
+        ] {
+            assert!(
+                RELEASE_WORKFLOW.contains(target),
+                "release workflow is missing {target}"
+            );
+        }
+    }
+
+    #[test]
+    fn release_workflow_uploads_archives_and_checksums() {
+        for pattern in ["*.tar.gz", "*.tar.gz.sha256", "*.zip", "*.zip.sha256"] {
+            assert!(
+                RELEASE_WORKFLOW.contains(pattern),
+                "release workflow does not upload {pattern}"
+            );
+        }
     }
 }

@@ -246,6 +246,9 @@ jobs:
           - os: macos-14
             target: aarch64-apple-darwin
             asset: macos-aarch64
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+            asset: windows-x86_64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     permissions:
@@ -265,7 +268,9 @@ jobs:
           fallback: none
       - name: Build CLI
         run: cargo +1.88.0 build --locked --release -p looprs-cli --target "${{ matrix.target }}"
-      - name: Package CLI
+      - name: Package CLI for Unix
+        if: runner.os != 'Windows'
+        shell: bash
         env:
           ASSET: looprs-v${{ needs.validate.outputs.version }}-${{ matrix.asset }}
           TARGET: ${{ matrix.target }}
@@ -312,10 +317,24 @@ jobs:
           else
             (cd dist && sha256sum "${ASSET}.tar.gz" > "${ASSET}.tar.gz.sha256")
           fi
+      - name: Package CLI for Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ASSET: looprs-v${{ needs.validate.outputs.version }}-${{ matrix.asset }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          New-Item -ItemType Directory -Force dist/package | Out-Null
+          Copy-Item "target/$env:TARGET/release/looprs.exe" dist/package/looprs.exe
+          Copy-Item README.md, LICENSE dist/package/
+          Compress-Archive -Path dist/package/* -DestinationPath "dist/$env:ASSET.zip" -CompressionLevel Optimal
+          $archive = "dist/$env:ASSET.zip"
+          $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          "$hash  $env:ASSET.zip" | Set-Content -Encoding ascii "$archive.sha256"
       - name: Generate binary SBOM
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
-          file: target/${{ matrix.target }}/release/looprs
+          file: target/${{ matrix.target }}/release/${{ runner.os == 'Windows' && 'looprs.exe' || 'looprs' }}
           format: spdx-json
           output-file: dist/looprs-v${{ needs.validate.outputs.version }}-${{ matrix.asset }}.spdx.json
           artifact-name: sbom-${{ matrix.target }}.spdx.json
@@ -400,12 +419,14 @@ jobs:
             prerelease_args+=(--prerelease)
           fi
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
-            gh release upload "v${VERSION}" release-assets/*.tar.gz release-assets/*.tar.gz.sha256 release-assets/*.spdx.json release-assets/release-health.json release-assets/release-health-history.jsonl --clobber
+            gh release upload "v${VERSION}" release-assets/*.tar.gz release-assets/*.tar.gz.sha256 release-assets/*.zip release-assets/*.zip.sha256 release-assets/*.spdx.json release-assets/release-health.json release-assets/release-health-history.jsonl --clobber
             gh release edit "v${VERSION}" --title "looprs v${VERSION}" --notes-file release-assets/RELEASE_NOTES.md "${prerelease_args[@]}"
           else
             gh release create "v${VERSION}" \
               release-assets/*.tar.gz \
               release-assets/*.tar.gz.sha256 \
+              release-assets/*.zip \
+              release-assets/*.zip.sha256 \
               release-assets/*.spdx.json \
               release-assets/release-health.json \
               release-assets/release-health-history.jsonl \
