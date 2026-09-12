@@ -727,14 +727,14 @@ impl Agent {
                 && app_cfg.pipeline.enabled
             {
                 let snapshot = self.messages.clone();
-                let report = crate::pipeline::PipelineRunner::run_checks(&app_cfg.pipeline.checks);
+                let report = crate::pipeline::PipelineRunner::run(&app_cfg.pipeline);
                 let failures: Vec<String> = report
                     .steps
                     .iter()
                     .filter(|s| !s.success)
                     .map(|s| s.step.clone())
                     .collect();
-                if !failures.is_empty() {
+                if crate::pipeline::PipelineRunner::should_block(&app_cfg.pipeline, &report) {
                     if app_cfg.pipeline.auto_revert {
                         self.messages = snapshot;
                     }

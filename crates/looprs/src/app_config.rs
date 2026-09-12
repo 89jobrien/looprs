@@ -124,17 +124,17 @@ pub struct OnboardingConfig {
 pub struct PipelineConfig {
     /// Enable pipeline execution.
     pub enabled: bool,
-    /// Directory where JSONL pipeline logs are written.
+    /// Directory where each check and final report are appended to `events.jsonl`.
     pub log_dir: String,
-    /// Minimum score required for pipeline success.
+    /// Minimum successful-check ratio required for pipeline success, clamped to 0..=1.
     pub reward_threshold: f32,
-    /// Require external tools to be present.
+    /// Fail preflight when `cargo`, the tool required by enabled checks, is unavailable.
     pub require_tools: bool,
     /// Revert worktree changes on pipeline failure.
     pub auto_revert: bool,
-    /// Stop pipeline at first failing step.
+    /// Stop the ordered build, test, lint, typecheck, benchmark suite at its first failure.
     pub fail_fast: bool,
-    /// Block normal turn completion if pipeline fails.
+    /// Return a pipeline error instead of allowing normal turn completion on failure.
     pub block_on_failure: bool,
     /// Build/test/lint gate toggles.
     pub checks: PipelineChecksConfig,
