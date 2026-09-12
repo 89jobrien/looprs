@@ -11,6 +11,14 @@ struct SkillFrontmatter {
     triggers: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct YamlSkill {
+    name: String,
+    description: Option<String>,
+    triggers: Vec<String>,
+    content: String,
+}
+
 /// Parse SKILL.md file with YAML frontmatter  
 pub fn parse_skill_file(path: &Path, content: &str) -> Result<super::Skill> {
     // Split frontmatter from content
@@ -37,6 +45,24 @@ pub fn parse_skill_file(path: &Path, content: &str) -> Result<super::Skill> {
         description: frontmatter.description,
         triggers: frontmatter.triggers,
         content: parts[2].trim().to_string(),
+        source_path: path.to_path_buf(),
+    })
+}
+
+/// Parse a repository YAML skill definition.
+pub fn parse_yaml_skill(path: &Path, content: &str) -> Result<super::Skill> {
+    let skill: YamlSkill = serde_yaml::from_str(content).context("Failed to parse YAML skill")?;
+    if skill.name.is_empty() {
+        anyhow::bail!("Skill name cannot be empty");
+    }
+    if skill.triggers.is_empty() {
+        anyhow::bail!("Skill must have at least one trigger");
+    }
+    Ok(super::Skill {
+        name: skill.name,
+        description: skill.description,
+        triggers: skill.triggers,
+        content: skill.content.trim().to_string(),
         source_path: path.to_path_buf(),
     })
 }

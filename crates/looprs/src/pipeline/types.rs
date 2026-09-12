@@ -29,6 +29,17 @@ pub struct PipelineReport {
     pub reward: Option<RewardReport>,
 }
 
+impl PipelineReport {
+    /// Return whether all checks pass and the computed reward reaches `threshold`.
+    pub fn succeeds(&self, threshold: f32) -> bool {
+        self.steps.iter().all(|step| step.success)
+            && self
+                .reward
+                .as_ref()
+                .is_none_or(|report| report.reward >= f64::from(threshold))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
