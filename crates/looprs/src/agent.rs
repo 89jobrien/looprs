@@ -727,20 +727,25 @@ impl Agent {
                 && app_cfg.pipeline.enabled
             {
                 let snapshot = self.messages.clone();
-                let report = crate::pipeline::PipelineRunner::run_checks(&app_cfg.pipeline.checks);
+                let report = crate::pipeline::PipelineRunner::run(&app_cfg.pipeline);
                 let failures: Vec<String> = report
                     .steps
                     .iter()
                     .filter(|s| !s.success)
                     .map(|s| s.step.clone())
                     .collect();
-                if !failures.is_empty() {
+                if !report.succeeds(app_cfg.pipeline.reward_threshold) {
                     if app_cfg.pipeline.auto_revert {
                         self.messages = snapshot;
                     }
-                    return Err(crate::errors::AgentError::PipelineFailure(
-                        failures.join(", "),
-                    ));
+                    if app_cfg.pipeline.block_on_failure {
+                        let reason = if failures.is_empty() {
+                            "reward threshold not met".to_string()
+                        } else {
+                            failures.join(", ")
+                        };
+                        return Err(crate::errors::AgentError::PipelineFailure(reason));
+                    }
                 }
             }
         }
