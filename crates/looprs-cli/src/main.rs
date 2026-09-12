@@ -5,6 +5,7 @@ use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
 use std::collections::HashMap;
 use std::env;
+use std::io::{self, Write};
 
 use looprs::ModelId;
 use looprs::app_config::AppConfig;
@@ -731,13 +732,7 @@ fn models_gist_url() -> String {
 /// `local` also pick an installed Ollama model, then persist the choice
 /// to `.looprs/provider.json`.
 fn run_provider_menu() -> Result<()> {
-    // TODO(feature-idea-4): Offer every provider supported by the runtime and
-    // collect any provider-specific model settings before persisting a choice.
-    let providers = vec![
-        "anthropic".to_string(),
-        "openai".to_string(),
-        "local (Ollama)".to_string(),
-    ];
+    let providers = provider_menu_options();
 
     let Some(index) = looprs_tui::select("Select a provider", &providers)? else {
         println!("Cancelled.");
@@ -746,10 +741,14 @@ fn run_provider_menu() -> Result<()> {
 
     let mut config = ProviderConfig::load().unwrap_or_default();
 
-    match index {
-        0 => config.provider = Some("anthropic".to_string()),
-        1 => config.provider = Some("openai".to_string()),
-        2 => {
+    let provider = match index {
+        0 => "anthropic",
+        1 => "anthropic-sdk",
+        2 => "openai",
+        3 => "openai-sdk",
+        4 => "gemini",
+        5 => "baml",
+        6 => {
             let models = list_ollama_models();
             if models.is_empty() {
                 ui::error(
@@ -761,13 +760,14 @@ fn run_provider_menu() -> Result<()> {
                 println!("Cancelled.");
                 return Ok(());
             };
-            config.provider = Some("local".to_string());
-            config.local = Some(ProviderSettings {
-                model: Some(models[model_index].clone()),
-                ..Default::default()
-            });
+            configure_provider(&mut config, "local", Some(models[model_index].clone()));
+            "local"
         }
         _ => unreachable!("select() returned an out-of-range index"),
+    };
+    if provider != "local" {
+        let model = prompt_optional_model(provider)?;
+        configure_provider(&mut config, provider, model);
     }
 
     config.save()?;
@@ -776,6 +776,34 @@ fn run_provider_menu() -> Result<()> {
         config.provider.as_deref().unwrap_or("?")
     );
     Ok(())
+}
+
+fn provider_menu_options() -> Vec<String> {
+    vec![
+        "anthropic".to_string(),
+        "anthropic-sdk".to_string(),
+        "openai".to_string(),
+        "openai-sdk".to_string(),
+        "gemini".to_string(),
+        "baml".to_string(),
+        "local (Ollama)".to_string(),
+    ]
+}
+
+fn prompt_optional_model(provider: &str) -> Result<Option<String>> {
+    print!("Model for {provider} (leave blank for provider default): ");
+    io::stdout().flush()?;
+    let mut model = String::new();
+    io::stdin().read_line(&mut model)?;
+    let model = model.trim();
+    Ok((!model.is_empty()).then(|| model.to_string()))
+}
+
+fn configure_provider(config: &mut ProviderConfig, provider: &str, model: Option<String>) {
+    config.provider = Some(provider.to_string());
+    if let Some(model) = model {
+        provider_settings_mut(config, provider).model = Some(model);
+    }
 }
 
 fn build_command_items(command_registry: &CommandRegistry) -> Vec<String> {
@@ -823,11 +851,13 @@ fn provider_settings_mut<'a>(
     provider: &str,
 ) -> &'a mut ProviderSettings {
     match provider {
-        "anthropic" => config
+        "anthropic" | "anthropic-sdk" | "claude-sdk" => config
             .anthropic
             .get_or_insert_with(ProviderSettings::default),
-        "openai" => config.openai.get_or_insert_with(ProviderSettings::default),
+        "openai" | "openai-sdk" => config.openai.get_or_insert_with(ProviderSettings::default),
         "local" | "ollama" => config.local.get_or_insert_with(ProviderSettings::default),
+        "gemini" | "google" => config.gemini.get_or_insert_with(ProviderSettings::default),
+        "baml" => config.baml.get_or_insert_with(ProviderSettings::default),
         _ => config.openai.get_or_insert_with(ProviderSettings::default),
     }
 }
@@ -837,9 +867,11 @@ fn provider_settings_ref<'a>(
     provider: &str,
 ) -> Option<&'a ProviderSettings> {
     match provider {
-        "anthropic" => config.anthropic.as_ref(),
-        "openai" => config.openai.as_ref(),
+        "anthropic" | "anthropic-sdk" | "claude-sdk" => config.anthropic.as_ref(),
+        "openai" | "openai-sdk" => config.openai.as_ref(),
         "local" | "ollama" => config.local.as_ref(),
+        "gemini" | "google" => config.gemini.as_ref(),
+        "baml" => config.baml.as_ref(),
         _ => None,
     }
 }
@@ -1445,11 +1477,46 @@ async fn execute_command(
 
 #[cfg(test)]
 mod provider_menu_tests {
+    use super::ProviderConfig;
+    use super::configure_provider;
     use super::parse_explicit_agent_tag;
     use super::parse_ollama_list_output;
+    use super::provider_menu_options;
 
     // Captured from a real `ollama list` invocation.
     const REAL_OLLAMA_LIST_OUTPUT: &str = "NAME                                             ID              SIZE      MODIFIED\nfunctiongemma:latest                             7c19b650567a    300 MB    2 months ago\ngemma-lg:latest                                  e6349aa91a78    24 GB     2 months ago\nhf.co/unsloth/gemma-4-26B-A4B-it-GGUF:UD-Q6_K    e6349aa91a78    24 GB     2 months ago\nnomic-embed-text:latest                          0a109f422b47    274 MB    2 months ago\nllama3.2:latest                                  a80c4f17acd5    2.0 GB    4 months ago\n";
+
+    #[test]
+    fn menu_exposes_every_runtime_provider() {
+        assert_eq!(
+            provider_menu_options(),
+            [
+                "anthropic",
+                "anthropic-sdk",
+                "openai",
+                "openai-sdk",
+                "gemini",
+                "baml",
+                "local (Ollama)",
+            ]
+        );
+    }
+
+    #[test]
+    fn provider_selection_persists_provider_specific_model() {
+        let mut config = ProviderConfig::default();
+
+        configure_provider(&mut config, "gemini", Some("gemini-2.0-flash".to_string()));
+
+        assert_eq!(config.provider.as_deref(), Some("gemini"));
+        assert_eq!(
+            config
+                .gemini
+                .as_ref()
+                .and_then(|settings| settings.model.as_deref()),
+            Some("gemini-2.0-flash")
+        );
+    }
 
     #[test]
     fn parses_model_names_from_real_output() {

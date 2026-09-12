@@ -46,6 +46,14 @@ pub struct ProviderConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local: Option<ProviderSettings>,
 
+    /// Gemini-specific settings
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gemini: Option<ProviderSettings>,
+
+    /// BAML-specific settings
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub baml: Option<ProviderSettings>,
+
     /// Default settings applied to all providers
     #[serde(skip_serializing_if = "Option::is_none")]
     pub defaults: Option<ProviderSettings>,
@@ -79,6 +87,8 @@ impl ProviderConfig {
             "anthropic" | "anthropic-sdk" | "claude-sdk" => self.anthropic.as_ref(),
             "openai" | "openai-sdk" => self.openai.as_ref(),
             "local" | "ollama" => self.local.as_ref(),
+            "gemini" | "google" => self.gemini.as_ref(),
+            "baml" => self.baml.as_ref(),
             _ => None,
         }
     }
