@@ -134,6 +134,31 @@ jobs:
           version: 0.108.0
       - name: Generate workspace coverage
         run: cargo +stable llvm-cov nextest --locked --workspace --all-features --lcov --output-path lcov.info
+      - name: Record comparable workspace coverage
+        run: |
+          lines_found=$(awk -F: '/^LF:/{sum += $2} END {print sum + 0}' lcov.info)
+          lines_hit=$(awk -F: '/^LH:/{sum += $2} END {print sum + 0}' lcov.info)
+          if [[ "$lines_found" -eq 0 ]]; then
+            echo "lcov.info contains no instrumented lines" >&2
+            exit 1
+          fi
+          percentage=$(awk -v hit="$lines_hit" -v found="$lines_found" 'BEGIN {printf "%.4f", hit * 100 / found}')
+          jq -n \
+            --arg commit "$GITHUB_SHA" \
+            --arg ref "$GITHUB_REF" \
+            --argjson lines_found "$lines_found" \
+            --argjson lines_hit "$lines_hit" \
+            --argjson percentage "$percentage" \
+            '{schema_version: 1, commit: $commit, ref: $ref, lines_found: $lines_found, lines_hit: $lines_hit, percentage: $percentage}' \
+            > workspace-coverage.json
+          jq -e '.schema_version == 1 and .lines_found > 0 and .lines_hit >= 0 and .lines_hit <= .lines_found and .percentage >= 0 and .percentage <= 100' workspace-coverage.json
+          echo "### Workspace coverage: ${percentage}% (${lines_hit}/${lines_found} lines)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: workspace-coverage-${{ github.sha }}
+          path: workspace-coverage.json
+          if-no-files-found: error
+          retention-days: 90
       - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: lcov.info
