@@ -452,13 +452,36 @@ impl Agent {
         // Push accumulated text as an assistant message, then let run_turn()
         // handle any tool-use follow-up on the next call.
         if !accumulated.is_empty() {
-            self.messages
-                .push(Message::assistant(vec![ContentBlock::Text {
-                    text: accumulated,
-                }]));
+            let response = Self::streamed_response(accumulated);
+            self.log_inference(&response);
+
+            #[cfg(not(test))]
+            if let Err(error) =
+                crate::trace::append_turn_trace(self.observations.session_id(), &req, &response)
+            {
+                self.output.warn(&format!(
+                    "Warning: Failed to append streaming turn trace: {error}"
+                ));
+            }
+
+            let event_ctx = EventContext::new();
+            self.events.fire(Event::InferenceComplete, &event_ctx);
+            self.execute_hooks_for_event(&Event::InferenceComplete, &event_ctx);
+            self.messages.push(Message::assistant(response.content));
         }
 
         Ok(())
+    }
+
+    fn streamed_response(content: String) -> InferenceResponse {
+        InferenceResponse {
+            content: vec![ContentBlock::Text { text: content }],
+            stop_reason: "end_turn".to_string(),
+            usage: crate::providers::Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+            },
+        }
     }
 
     // TODO(feature-idea-11): Implement bounded parallel agent dispatch.
@@ -727,14 +750,14 @@ impl Agent {
                 && app_cfg.pipeline.enabled
             {
                 let snapshot = self.messages.clone();
-                let report = crate::pipeline::PipelineRunner::run_checks(&app_cfg.pipeline.checks);
+                let report = crate::pipeline::PipelineRunner::run(&app_cfg.pipeline);
                 let failures: Vec<String> = report
                     .steps
                     .iter()
                     .filter(|s| !s.success)
                     .map(|s| s.step.clone())
                     .collect();
-                if !failures.is_empty() {
+                if crate::pipeline::PipelineRunner::should_block(&app_cfg.pipeline, &report) {
                     if app_cfg.pipeline.auto_revert {
                         self.messages = snapshot;
                     }
@@ -1192,6 +1215,17 @@ actions:
             other => panic!("expected Text block, got {other:?}"),
         };
         assert_eq!(text, "streamed response");
+    }
+
+    #[test]
+    fn streamed_response_preserves_trace_content() {
+        let response = Agent::streamed_response("streamed response".to_string());
+
+        assert!(matches!(
+            response.content.as_slice(),
+            [ContentBlock::Text { text }] if text == "streamed response"
+        ));
+        assert_eq!(response.stop_reason, "end_turn");
     }
 
     #[test]
