@@ -431,8 +431,6 @@ impl Agent {
         }
     }
 
-    // IDEA(feature-idea-6): Preserve structured streaming deltas, including
-    // tool calls and usage, then route the result through the normal tool loop.
     /// Single-turn streaming inference.
     ///
     /// Drives `provider.infer_stream()`, emitting each text chunk via
@@ -481,39 +479,96 @@ impl Agent {
             }
         }
 
-        // Push accumulated text as an assistant message, then let run_turn()
-        // handle any tool-use follow-up on the next call.
-        if !accumulated.is_empty() {
-            let response = Self::streamed_response(accumulated);
-            self.log_inference(&response);
+        // Recover the provider's structured response so streamed turns preserve
+        // tool calls and usage accounting.
+        let response = if let Some(timeout_secs) = self.runtime.defaults.timeout_seconds {
+            match timeout(Duration::from_secs(timeout_secs), self.provider.infer(&req)).await {
+                Ok(res) => res.map_err(|e| AgentError::Inference(e.to_string()))?,
+                Err(_) => return Err(AgentError::Timeout),
+            }
+        } else {
+            self.provider
+                .infer(&req)
+                .await
+                .map_err(|e| AgentError::Inference(e.to_string()))?
+        };
 
-            #[cfg(not(test))]
-            if let Err(error) =
-                crate::trace::append_turn_trace(self.observations.session_id(), &req, &response)
-            {
-                self.output.warn(&format!(
-                    "Warning: Failed to append streaming turn trace: {error}"
-                ));
+        self.session_input_tokens += response.usage.input_tokens;
+        self.session_output_tokens += response.usage.output_tokens;
+        self.log_inference(&response);
+
+        if response.content.is_empty() {
+            if !accumulated.is_empty() {
+                self.messages
+                    .push(Message::assistant(vec![ContentBlock::Text {
+                        text: accumulated,
+                    }]));
+            }
+            return Ok(());
+        }
+
+        let has_tool_use = response
+            .content
+            .iter()
+            .any(|block| matches!(block, ContentBlock::ToolUse { .. }));
+        self.messages.push(Message::assistant(response.content));
+
+        if has_tool_use {
+            let mut tool_results = Vec::new();
+            let assistant_message = self.messages.last().expect("assistant message just pushed");
+
+            for block in &assistant_message.content {
+                let ContentBlock::ToolUse { id, name, input } = block else {
+                    continue;
+                };
+
+                let event_ctx = EventContext::new().with_tool_name(name.as_str().to_string());
+                self.events.fire(Event::PreToolUse, &event_ctx);
+                self.execute_hooks_for_event(&Event::PreToolUse, &event_ctx);
+
+                let result = self
+                    .tool_executor
+                    .execute(name.as_str(), input, &self.tool_ctx);
+                let raw_content = match result {
+                    Ok(ref output) => {
+                        self.output.tool_ok();
+                        self.observations.capture(
+                            name.as_str().to_string(),
+                            input.clone(),
+                            output.clone(),
+                            Some(id.clone()),
+                        );
+                        let event_ctx = EventContext::new()
+                            .with_tool_name(name.as_str().to_string())
+                            .with_tool_output(output.clone());
+                        self.events.fire(Event::PostToolUse, &event_ctx);
+                        self.execute_hooks_for_event(&Event::PostToolUse, &event_ctx);
+                        output.clone()
+                    }
+                    Err(e) => {
+                        let err_msg = format!("error: {e}");
+                        self.output.tool_err(&err_msg);
+                        let event_ctx = EventContext::new()
+                            .with_tool_name(name.as_str().to_string())
+                            .with_error(err_msg.clone());
+                        self.events.fire(Event::OnError, &event_ctx);
+                        self.execute_hooks_for_event(&Event::OnError, &event_ctx);
+                        err_msg
+                    }
+                };
+
+                tool_results.push(ContentBlock::ToolResult {
+                    tool_use_id: id.clone(),
+                    content: truncate_tool_result_for_context(&raw_content),
+                });
             }
 
-            let event_ctx = EventContext::new();
-            self.events.fire(Event::InferenceComplete, &event_ctx);
-            self.execute_hooks_for_event(&Event::InferenceComplete, &event_ctx);
-            self.messages.push(Message::assistant(response.content));
+            if !tool_results.is_empty() {
+                self.messages.push(Message::tool_results(tool_results));
+            }
         }
 
         Ok(())
-    }
-
-    fn streamed_response(content: String) -> InferenceResponse {
-        InferenceResponse {
-            content: vec![ContentBlock::Text { text: content }],
-            stop_reason: "end_turn".to_string(),
-            usage: crate::providers::Usage {
-                input_tokens: 0,
-                output_tokens: 0,
-            },
-        }
     }
 
     /// Run one full agent turn (inference plus any requested tool loop).
@@ -1486,8 +1541,30 @@ actions:
 
     #[tokio::test]
     async fn test_run_turn_streaming_accumulates_chunks() {
-        // MockProvider uses the default infer_stream (wraps infer → single chunk).
-        let provider = MockProvider::simple_text("streamed response");
+        // MockProvider uses default infer_stream; provide two responses because
+        // run_turn_streaming does a recovery infer after streaming.
+        let provider = MockProvider::new(vec![
+            InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "streamed response".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 10,
+                    output_tokens: 20,
+                },
+            },
+            InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "streamed response".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 10,
+                    output_tokens: 20,
+                },
+            },
+        ]);
         let mut agent = agent_for_test(provider);
 
         agent.add_user_message("Hello");
@@ -1575,15 +1652,61 @@ actions:
         );
     }
 
-    #[test]
-    fn streamed_response_preserves_trace_content() {
-        let response = Agent::streamed_response("streamed response".to_string());
+    #[tokio::test]
+    async fn test_run_turn_streaming_executes_tool_use_blocks() {
+        use crate::tools::executor::StubToolExecutor;
+        use crate::types::{ToolId, ToolName};
 
-        assert!(matches!(
-            response.content.as_slice(),
-            [ContentBlock::Text { text }] if text == "streamed response"
-        ));
-        assert_eq!(response.stop_reason, "end_turn");
+        let provider = MockProvider::new(vec![
+            InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "streaming intro".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 1,
+                    output_tokens: 1,
+                },
+            },
+            InferenceResponse {
+                content: vec![ContentBlock::ToolUse {
+                    id: ToolId::new("call_1"),
+                    name: ToolName::new("read"),
+                    input: serde_json::json!({"path": "README.md"}),
+                }],
+                stop_reason: "tool_use".to_string(),
+                usage: Usage {
+                    input_tokens: 2,
+                    output_tokens: 3,
+                },
+            },
+            InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "done".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 1,
+                    output_tokens: 1,
+                },
+            },
+        ]);
+
+        let mut agent = agent_for_test(provider).with_tool_executor(Box::new(StubToolExecutor {
+            response: "tool result".to_string(),
+        }));
+        agent.add_user_message("please run tool");
+
+        let result = agent.run_turn_streaming().await;
+        assert!(result.is_ok(), "streaming turn should succeed: {result:?}");
+        assert!(
+            agent.messages.iter().any(|m| m
+                .content
+                .iter()
+                .any(|b| matches!(b, ContentBlock::ToolResult { .. }))),
+            "expected tool results in conversation history"
+        );
+        assert_eq!(agent.latest_assistant_text(), None);
     }
 
     #[test]
