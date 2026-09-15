@@ -854,6 +854,7 @@ fn build_runtime_settings(
         defaults: app_config.defaults.clone(),
         max_tokens_override,
         fs_mode: app_config.agents.fs_mode,
+        mcp_server_url: std::env::var("LOOPRS_MCP_SERVER_URL").ok(),
     }
 }
 
