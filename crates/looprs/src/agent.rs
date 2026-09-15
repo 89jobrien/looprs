@@ -15,11 +15,12 @@ use crate::rules::RuleRegistry;
 use crate::session_log::SessionEvent;
 use crate::system_monitor::SystemMonitor;
 use crate::tools::{DefaultToolExecutor, ToolContext, ToolExecutor, get_tool_definitions};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tokio::time::{Duration, timeout};
 
 const TOOL_PREVIEW_LEN: usize = 60;
 const ON_REPEAT_THRESHOLD: usize = 3;
+const ORCHESTRATION_TOOLS_METADATA_KEY: &str = "orchestration.tools";
 
 /// A single transcript entry for UI consumption: role plus flattened text.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,6 +48,32 @@ fn truncate_tool_result_for_context(content: &str) -> String {
         truncated,
         original_chars.saturating_sub(MAX_TOOL_RESULT_CHARS_IN_CONTEXT)
     )
+}
+
+fn parse_allowed_tools(metadata: &HashMap<String, String>) -> Option<HashSet<String>> {
+    let raw = metadata.get(ORCHESTRATION_TOOLS_METADATA_KEY)?;
+    let parsed = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|tool| !tool.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<HashSet<_>>();
+
+    if parsed.is_empty() {
+        None
+    } else {
+        Some(parsed)
+    }
+}
+
+fn available_tools_for_turn(
+    allowed_tools: Option<&HashSet<String>>,
+) -> Vec<crate::api::ToolDefinition> {
+    let mut definitions = get_tool_definitions();
+    if let Some(allowed) = allowed_tools {
+        definitions.retain(|tool| allowed.contains(tool.name.as_str()));
+    }
+    definitions
 }
 
 /// Mutable runtime settings applied to each agent turn.
@@ -427,10 +454,11 @@ impl Agent {
         } else {
             self.messages.clone()
         };
+        let allowed_tools = parse_allowed_tools(&self.pending_metadata);
         let req = InferenceRequest {
             model: self.provider.model().clone(),
             messages,
-            tools: get_tool_definitions(),
+            tools: available_tools_for_turn(allowed_tools.as_ref()),
             max_tokens,
             temperature: self.runtime.defaults.temperature,
             system: system_prompt,
@@ -526,6 +554,8 @@ impl Agent {
             enriched_ctx.metadata.insert(key, value);
         }
 
+        let allowed_tools = parse_allowed_tools(&enriched_ctx.metadata);
+
         let system_prompt = self.build_system_prompt(&enriched_ctx);
 
         let mut tool_call_counts: std::collections::HashMap<String, usize> =
@@ -547,7 +577,7 @@ impl Agent {
             let req = InferenceRequest {
                 model: self.provider.model().clone(),
                 messages,
-                tools: get_tool_definitions(),
+                tools: available_tools_for_turn(allowed_tools.as_ref()),
                 max_tokens,
                 temperature: self.runtime.defaults.temperature,
                 system: system_prompt.clone(),
@@ -664,9 +694,18 @@ impl Agent {
                     .await;
                 }
 
-                let result = self
-                    .tool_executor
-                    .execute(name.as_str(), input, &self.tool_ctx);
+                let result = if let Some(allowed) = allowed_tools.as_ref()
+                    && !allowed.contains(name.as_str())
+                {
+                    Err(crate::tools::ToolError::ModeDenied {
+                        tool: name.to_string(),
+                        mode: "delegated".to_string(),
+                        reason: "not in agent tool allowlist".to_string(),
+                    })
+                } else {
+                    self.tool_executor
+                        .execute(name.as_str(), input, &self.tool_ctx)
+                };
                 let tool_is_error = result.is_err();
 
                 let raw_content = match result {
@@ -853,6 +892,7 @@ mod tests {
         model: crate::types::ModelId,
         responses: Vec<InferenceResponse>,
         call_count: std::sync::Arc<std::sync::Mutex<usize>>,
+        captured_tools: std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>>,
     }
 
     /// Convenience wrapper: creates an Agent with NullOutput so tests don't
@@ -869,6 +909,7 @@ mod tests {
                 model: crate::types::ModelId::new("mock-model"),
                 responses,
                 call_count: std::sync::Arc::new(std::sync::Mutex::new(0)),
+                captured_tools: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             }
         }
 
@@ -884,14 +925,25 @@ mod tests {
                 },
             }])
         }
+
+        fn captured_tools_handle(&self) -> std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>> {
+            self.captured_tools.clone()
+        }
     }
 
     #[async_trait::async_trait]
     impl LLMProvider for MockProvider {
         async fn infer(
             &self,
-            _req: &InferenceRequest,
+            req: &InferenceRequest,
         ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
+            self.captured_tools.lock().unwrap().push(
+                req.tools
+                    .iter()
+                    .map(|tool| tool.name.clone())
+                    .collect::<Vec<_>>(),
+            );
+
             let mut count = self.call_count.lock().unwrap();
             let idx = *count;
             *count += 1;
@@ -1170,6 +1222,113 @@ actions:
         // Should have user message + assistant response
         assert_eq!(agent.messages.len(), 2);
         assert_eq!(agent.messages[1].role, "assistant");
+    }
+
+    #[tokio::test]
+    async fn delegated_allowlist_limits_advertised_tools() {
+        let provider = MockProvider::simple_text("done");
+        let captured = provider.captured_tools_handle();
+        let mut agent = agent_for_test(provider);
+
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            ORCHESTRATION_TOOLS_METADATA_KEY.to_string(),
+            "read,grep".to_string(),
+        );
+        agent.set_turn_metadata(metadata);
+        agent.add_user_message("hello");
+        agent.run_turn().await.unwrap();
+
+        let requests = captured.lock().unwrap();
+        assert!(
+            !requests.is_empty(),
+            "expected at least one inference request"
+        );
+        assert_eq!(requests[0], vec!["read".to_string(), "grep".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn delegated_allowlist_blocks_tool_execution() {
+        use crate::tools::ToolExecutor;
+        use serde_json::json;
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Default)]
+        struct RecordingToolExecutor {
+            calls: Arc<Mutex<Vec<String>>>,
+        }
+
+        impl ToolExecutor for RecordingToolExecutor {
+            fn execute(
+                &self,
+                name: &str,
+                _args: &serde_json::Value,
+                _ctx: &ToolContext,
+            ) -> Result<String, crate::tools::ToolError> {
+                self.calls.lock().unwrap().push(name.to_string());
+                Ok("executed".to_string())
+            }
+        }
+
+        let responses = vec![
+            InferenceResponse {
+                content: vec![ContentBlock::ToolUse {
+                    id: crate::types::ToolId::new("tool_1"),
+                    name: crate::types::ToolName::new("bash"),
+                    input: json!({"command": "pwd"}),
+                }],
+                stop_reason: "tool_use".to_string(),
+                usage: Usage {
+                    input_tokens: 1,
+                    output_tokens: 1,
+                },
+            },
+            InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "done".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 1,
+                    output_tokens: 1,
+                },
+            },
+        ];
+
+        let provider = MockProvider::new(responses);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let executor = RecordingToolExecutor {
+            calls: calls.clone(),
+        };
+        let mut agent = agent_for_test(provider).with_tool_executor(Box::new(executor));
+
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            ORCHESTRATION_TOOLS_METADATA_KEY.to_string(),
+            "read".to_string(),
+        );
+        metadata.insert("orchestration.agent".to_string(), "reviewer".to_string());
+        agent.set_turn_metadata(metadata);
+        agent.add_user_message("please inspect");
+        agent.run_turn().await.unwrap();
+
+        assert!(
+            calls.lock().unwrap().is_empty(),
+            "disallowed tool should not execute"
+        );
+
+        let denied = agent
+            .messages
+            .iter()
+            .flat_map(|message| message.content.iter())
+            .any(|block| {
+                matches!(
+                    block,
+                    ContentBlock::ToolResult { content, .. }
+                        if content.contains("not in agent tool allowlist")
+                )
+            });
+        assert!(denied, "expected a denied tool result message");
     }
 
     #[tokio::test]
