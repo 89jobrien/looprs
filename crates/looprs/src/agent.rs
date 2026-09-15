@@ -682,6 +682,9 @@ impl Agent {
                 }
             }
         }
+        if let Some(allowed) = allowed_tools.as_ref() {
+            tools.retain(|tool| allowed.contains(tool.name.as_str()));
+        }
 
         loop {
             let mut max_tokens = self.provider.model().max_tokens();
