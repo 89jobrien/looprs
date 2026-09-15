@@ -273,6 +273,7 @@ async fn main() -> Result<()> {
             &provider_name,
             app_config,
             agent_registry,
+            skill_registry,
             plugin_runtime,
             agent,
         )
@@ -295,12 +296,14 @@ async fn main() -> Result<()> {
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_scriptable(
     cli_args: &CliArgs,
     model: &str,
     provider_name: &str,
     app_config: AppConfig,
     agent_registry: AgentRegistry,
+    skill_registry: SkillRegistry,
     mut plugin_runtime: PluginRuntimeRegistry,
     mut agent: Agent,
 ) -> Result<()> {
@@ -319,8 +322,13 @@ async fn run_scriptable(
         );
     }
 
-    let (prepared_prompt, metadata, selected_agent) =
-        prepare_user_prompt(&prompt, &app_config, &agent_registry, &mut plugin_runtime)?;
+    let (prepared_prompt, metadata, selected_agent) = prepare_user_prompt(
+        &prompt,
+        &app_config,
+        &agent_registry,
+        &skill_registry,
+        &mut plugin_runtime,
+    )?;
     if !metadata.is_empty() {
         agent.set_turn_metadata(metadata);
     }
@@ -490,6 +498,7 @@ async fn run_interactive(
                                 &skill_message,
                                 &app_config,
                                 &agent_registry,
+                                &skill_registry,
                                 &mut plugin_runtime,
                             )?;
                             if !metadata.is_empty() {
@@ -562,6 +571,7 @@ async fn run_interactive(
                                 &mut agent,
                                 &app_config,
                                 &agent_registry,
+                                &skill_registry,
                                 &mut plugin_runtime,
                                 &mut state,
                             )
@@ -621,6 +631,7 @@ async fn run_interactive(
                             &final_message,
                             &app_config,
                             &agent_registry,
+                            &skill_registry,
                             &mut plugin_runtime,
                         )?;
                         if !metadata.is_empty() {
@@ -1095,6 +1106,7 @@ fn prepare_user_prompt(
     raw_prompt: &str,
     app_config: &AppConfig,
     agent_registry: &AgentRegistry,
+    skill_registry: &SkillRegistry,
     plugin_runtime: &mut PluginRuntimeRegistry,
 ) -> Result<(String, HashMap<String, String>, Option<String>)> {
     if agent_registry.is_empty() {
@@ -1190,9 +1202,10 @@ fn prepare_user_prompt(
     if let Some(plugin_name) = routed_by_plugin {
         metadata.insert("orchestration.plugin".to_string(), plugin_name);
     }
+    if !agent.tools.is_empty() {
+        metadata.insert("orchestration.tools".to_string(), agent.tools.join(","));
+    }
 
-    // IDEA(feature-idea-5): Resolve `agent.skills` into delegated context and
-    // enforce `agent.tools` when defining and executing tools for this turn.
     let role = agent
         .role
         .clone()
@@ -1210,9 +1223,25 @@ fn prepare_user_prompt(
             .join("\n")
     };
 
+    let delegated_skills = agent
+        .skills
+        .iter()
+        .filter_map(|skill_name| {
+            skill_registry
+                .get(skill_name)
+                .map(|skill| format!("- {}\n{}", skill.name, skill.content.trim_end_matches('\n')))
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let skills_section = if delegated_skills.is_empty() {
+        String::new()
+    } else {
+        format!("\nSkills:\n{delegated_skills}")
+    };
+
     let rewritten = format!(
-        "[Delegation]\nAgent: {}\nRole: {}\nDescription: {}\nSystem Prompt:\n{}\nConstraints:\n{}\n\nTask:\n{}",
-        agent.name, role, description, system_prompt, constraints, task_prompt
+        "[Delegation]\nAgent: {}\nRole: {}\nDescription: {}\nSystem Prompt:\n{}\nConstraints:\n{}{}\n\nTask:\n{}",
+        agent.name, role, description, system_prompt, constraints, skills_section, task_prompt
     );
 
     Ok((rewritten, metadata, Some(agent.name.clone())))
@@ -1254,12 +1283,14 @@ struct SessionState {
     model: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn execute_command(
     cmd: &Command,
     input: &str,
     agent: &mut Agent,
     app_config: &AppConfig,
     agent_registry: &AgentRegistry,
+    skill_registry: &SkillRegistry,
     plugin_runtime: &mut PluginRuntimeRegistry,
     state: &mut SessionState,
 ) -> Result<()> {
@@ -1270,8 +1301,13 @@ async fn execute_command(
 
     match &cmd.action {
         CommandAction::Prompt { template, .. } => {
-            let (prepared_prompt, metadata, selected_agent) =
-                prepare_user_prompt(template, app_config, agent_registry, plugin_runtime)?;
+            let (prepared_prompt, metadata, selected_agent) = prepare_user_prompt(
+                template,
+                app_config,
+                agent_registry,
+                skill_registry,
+                plugin_runtime,
+            )?;
             if !metadata.is_empty() {
                 agent.set_turn_metadata(metadata);
             }
@@ -1311,6 +1347,7 @@ async fn execute_command(
                     &output_prompt,
                     app_config,
                     agent_registry,
+                    skill_registry,
                     plugin_runtime,
                 )?;
                 if !metadata.is_empty() {
@@ -1454,8 +1491,13 @@ mod provider_menu_tests {
     use super::configure_provider;
     use super::parse_explicit_agent_tag;
     use super::parse_ollama_list_output;
+    use super::prepare_user_prompt;
     use super::provider_menu_options;
     use looprs::ProviderConfig;
+    use looprs::app_config::AppConfig;
+    use looprs::plugins::manifests::PluginRuntimeRegistry;
+    use looprs::{AgentDefinition, AgentRegistry, Skill, SkillRegistry};
+    use std::path::PathBuf;
 
     // Captured from a real `ollama list` invocation.
     const REAL_OLLAMA_LIST_OUTPUT: &str = "NAME                                             ID              SIZE      MODIFIED\nfunctiongemma:latest                             7c19b650567a    300 MB    2 months ago\ngemma-lg:latest                                  e6349aa91a78    24 GB     2 months ago\nhf.co/unsloth/gemma-4-26B-A4B-it-GGUF:UD-Q6_K    e6349aa91a78    24 GB     2 months ago\nnomic-embed-text:latest                          0a109f422b47    274 MB    2 months ago\nllama3.2:latest                                  a80c4f17acd5    2.0 GB    4 months ago\n";
@@ -1536,5 +1578,50 @@ mod provider_menu_tests {
     fn rejects_invalid_hash_agent_tag() {
         assert!(parse_explicit_agent_tag("#taskit/alpha do thing").is_none());
         assert!(parse_explicit_agent_tag("not a tag").is_none());
+    }
+
+    #[test]
+    fn prepare_prompt_injects_agent_tool_allowlist_and_skill_content() {
+        let app_config = AppConfig::default();
+
+        let mut agents = AgentRegistry::new();
+        agents.register(AgentDefinition {
+            name: "reviewer".to_string(),
+            role: Some("Reviewer".to_string()),
+            description: Some("Reviews code".to_string()),
+            system_prompt: Some("Review for issues".to_string()),
+            tools: vec!["read".to_string(), "grep".to_string()],
+            skills: vec!["security-checklist".to_string()],
+            constraints: vec!["read-only".to_string()],
+            triggers: vec!["review".to_string()],
+        });
+
+        let mut skills = SkillRegistry::new();
+        skills.register(Skill {
+            name: "security-checklist".to_string(),
+            description: Some("Security review checklist".to_string()),
+            triggers: vec![],
+            content: "Check auth paths and secret handling.".to_string(),
+            source_path: PathBuf::from("/tmp/security-checklist/SKILL.md"),
+        });
+
+        let mut plugin_runtime = PluginRuntimeRegistry::default();
+        let (rewritten, metadata, selected_agent) = prepare_user_prompt(
+            "please review this change",
+            &app_config,
+            &agents,
+            &skills,
+            &mut plugin_runtime,
+        )
+        .unwrap();
+
+        assert_eq!(selected_agent.as_deref(), Some("reviewer"));
+        assert_eq!(
+            metadata.get("orchestration.tools").map(String::as_str),
+            Some("read,grep")
+        );
+        assert!(rewritten.contains("Skills:"));
+        assert!(rewritten.contains("security-checklist"));
+        assert!(rewritten.contains("Check auth paths and secret handling."));
     }
 }
