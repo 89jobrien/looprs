@@ -952,6 +952,7 @@ fn build_runtime_settings(
         max_tokens_override,
         fs_mode: app_config.agents.fs_mode,
         max_parallel: app_config.agents.max_parallel.max(1),
+        mcp_server_url: std::env::var("LOOPRS_MCP_SERVER_URL").ok(),
     }
 }
 

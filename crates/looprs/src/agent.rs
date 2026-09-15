@@ -68,16 +68,6 @@ fn parse_allowed_tools(metadata: &HashMap<String, String>) -> Option<HashSet<Str
     }
 }
 
-fn available_tools_for_turn(
-    allowed_tools: Option<&HashSet<String>>,
-) -> Vec<crate::api::ToolDefinition> {
-    let mut definitions = get_tool_definitions();
-    if let Some(allowed) = allowed_tools {
-        definitions.retain(|tool| allowed.contains(tool.name.as_str()));
-    }
-    definitions
-}
-
 /// Mutable runtime settings applied to each agent turn.
 #[derive(Debug, Clone, Default)]
 pub struct RuntimeSettings {
@@ -89,6 +79,8 @@ pub struct RuntimeSettings {
     pub fs_mode: FsMode,
     /// Upper bound on parallel tool dispatch fan-out.
     pub max_parallel: usize,
+    /// Optional MCP server URL used for remote tool discovery/execution.
+    pub mcp_server_url: Option<String>,
 }
 
 /// Primary orchestrator for provider inference, tools, rules, and hooks.
@@ -133,6 +125,14 @@ impl Agent {
         session_logger: Option<Box<dyn SessionStore>>,
         output: Box<dyn UserOutput>,
     ) -> Result<Self, AgentError> {
+        let tool_executor: Box<dyn ToolExecutor> = match runtime.mcp_server_url.clone() {
+            Some(server_url) => Box::new(crate::adapters::McpToolExecutor::with_fallback(
+                server_url,
+                Box::new(DefaultToolExecutor),
+            )),
+            None => Box::new(DefaultToolExecutor),
+        };
+
         Ok(Self {
             provider,
             messages: Vec::new(),
@@ -146,12 +146,28 @@ impl Agent {
             pending_metadata: HashMap::new(),
             session_logger,
             output,
-            tool_executor: Arc::new(DefaultToolExecutor),
+            tool_executor: Arc::from(tool_executor),
             models_config: ModelsConfig::load().ok(),
             system_monitor: SystemMonitor::new(),
             session_input_tokens: 0,
             session_output_tokens: 0,
         })
+    }
+
+    fn merge_remote_tool_definitions(
+        mut tools: Vec<looprs_core::api::ToolDefinition>,
+        remote_tools: Vec<looprs_core::api::ToolDefinition>,
+    ) -> Vec<looprs_core::api::ToolDefinition> {
+        let mut known = tools
+            .iter()
+            .map(|tool| tool.name.clone())
+            .collect::<std::collections::HashSet<_>>();
+        for remote_tool in remote_tools {
+            if known.insert(remote_tool.name.clone()) {
+                tools.push(remote_tool);
+            }
+        }
+        tools
     }
 
     /// Replace the output adapter. Useful for tests (inject `NullOutput`) or
@@ -457,10 +473,30 @@ impl Agent {
             self.messages.clone()
         };
         let allowed_tools = parse_allowed_tools(&self.pending_metadata);
+        let mut tools = get_tool_definitions();
+        if let Some(server_url) = self.runtime.mcp_server_url.clone() {
+            match crate::tools::mcp_tool_definitions(&server_url).await {
+                Ok(remote_tools) => {
+                    tools = Self::merge_remote_tool_definitions(tools, remote_tools);
+                }
+                Err(err) => {
+                    self.output.warn(&format!(
+                        "Warning: failed to discover MCP tools from {server_url}: {err}"
+                    ));
+                }
+            }
+        }
+        if let Some(allowed) = allowed_tools.as_ref() {
+            tools.retain(|tool| allowed.contains(tool.name.as_str()));
+        }
+        let allowed_tools = parse_allowed_tools(&self.pending_metadata);
+        if let Some(allowed) = allowed_tools.as_ref() {
+            tools.retain(|tool| allowed.contains(tool.name.as_str()));
+        }
         let req = InferenceRequest {
             model: self.provider.model().clone(),
             messages,
-            tools: available_tools_for_turn(allowed_tools.as_ref()),
+            tools,
             max_tokens,
             temperature: self.runtime.defaults.temperature,
             system: system_prompt,
@@ -633,6 +669,19 @@ impl Agent {
 
         let mut tool_call_counts: std::collections::HashMap<String, usize> =
             std::collections::HashMap::new();
+        let mut tools = get_tool_definitions();
+        if let Some(server_url) = self.runtime.mcp_server_url.clone() {
+            match crate::tools::mcp_tool_definitions(&server_url).await {
+                Ok(remote_tools) => {
+                    tools = Self::merge_remote_tool_definitions(tools, remote_tools);
+                }
+                Err(err) => {
+                    self.output.warn(&format!(
+                        "Warning: failed to discover MCP tools from {server_url}: {err}"
+                    ));
+                }
+            }
+        }
 
         loop {
             let mut max_tokens = self.provider.model().max_tokens();
@@ -650,7 +699,7 @@ impl Agent {
             let req = InferenceRequest {
                 model: self.provider.model().clone(),
                 messages,
-                tools: available_tools_for_turn(allowed_tools.as_ref()),
+                tools: tools.clone(),
                 max_tokens,
                 temperature: self.runtime.defaults.temperature,
                 system: system_prompt.clone(),
@@ -1058,6 +1107,8 @@ mod tests {
 
     use crate::adapters::NullOutput;
     use crate::providers::{InferenceResponse, Usage};
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     // Mock provider for testing
@@ -1137,6 +1188,80 @@ mod tests {
         fn captured_tools_handle(&self) -> std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>> {
             self.captured_tools.clone()
         }
+    }
+
+    struct RecordingProvider {
+        model: crate::types::ModelId,
+        seen_tool_names: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl LLMProvider for RecordingProvider {
+        async fn infer(
+            &self,
+            req: &InferenceRequest,
+        ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
+            let mut seen = self.seen_tool_names.lock().unwrap();
+            *seen = req.tools.iter().map(|t| t.name.clone()).collect();
+            Ok(InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "ok".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 1,
+                    output_tokens: 1,
+                },
+            })
+        }
+
+        fn name(&self) -> &str {
+            "recording"
+        }
+
+        fn model(&self) -> &crate::types::ModelId {
+            &self.model
+        }
+
+        fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
+        }
+    }
+
+    fn start_mcp_tools_server() -> (String, std::thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0_u8; 4096];
+            let _ = stream.read(&mut buf);
+
+            let body = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {
+                    "tools": [
+                        {
+                            "name": "remote_test_tool",
+                            "description": "remote tool",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {}
+                            }
+                        }
+                    ]
+                }
+            })
+            .to_string();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.flush();
+        });
+        (format!("http://{addr}"), handle)
     }
 
     #[async_trait::async_trait]
@@ -1275,6 +1400,40 @@ mod tests {
             agent.latest_assistant_text(),
             Some("First\n\nSecond".to_string())
         );
+    }
+
+    #[tokio::test]
+    async fn run_turn_includes_discovered_mcp_tools_in_request() {
+        let (server_url, server_thread) = start_mcp_tools_server();
+        let seen_tool_names = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let provider = RecordingProvider {
+            model: crate::types::ModelId::new("mock-model"),
+            seen_tool_names: seen_tool_names.clone(),
+        };
+
+        let runtime = RuntimeSettings {
+            defaults: DefaultsConfig::default(),
+            max_tokens_override: None,
+            fs_mode: FsMode::Write,
+            max_parallel: 1,
+            mcp_server_url: Some(server_url),
+        };
+        let mut agent = Agent::new_with_runtime(
+            Box::new(provider),
+            runtime,
+            FileRefPolicy::default(),
+            None,
+            Box::new(NullOutput),
+        )
+        .unwrap();
+        agent.add_user_message("hello");
+
+        agent.run_turn().await.unwrap();
+        let seen = seen_tool_names.lock().unwrap().clone();
+
+        assert!(seen.iter().any(|name| name == "read"));
+        assert!(seen.iter().any(|name| name == "remote_test_tool"));
+        server_thread.join().unwrap();
     }
 
     #[test]
