@@ -8,6 +8,7 @@ use std::env;
 
 use looprs::ModelId;
 use looprs::app_config::AppConfig;
+use looprs::automation_protocol;
 use looprs::file_refs::{AtReference, resolve_at_reference};
 use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
 use looprs::ui;
@@ -123,11 +124,43 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Enable machine-readable logging if requested
-    if cli_args.machine_log {
+    // Enable versioned machine protocol envelope and runtime controls when requested.
+    if cli_args.machine_log || cli_args.machine_protocol.is_some() {
         // SAFETY: process-wide environment mutation for logging mode toggle.
         unsafe {
-            std::env::set_var("LOOPRS_MACHINE_LOG", "1");
+            std::env::set_var(automation_protocol::MACHINE_LOG_ENV, "1");
+        }
+    }
+    if let Some(protocol) = &cli_args.machine_protocol {
+        // SAFETY: process-wide environment mutation for protocol selection.
+        unsafe {
+            std::env::set_var(automation_protocol::MACHINE_PROTOCOL_ENV, protocol);
+        }
+    }
+    if let Some(run_id) = &cli_args.run_id {
+        // SAFETY: process-wide environment mutation for machine run identity.
+        unsafe {
+            std::env::set_var(automation_protocol::MACHINE_RUN_ID_ENV, run_id);
+        }
+    }
+    if let Some(deadline_seconds) = cli_args.deadline_seconds {
+        let deadline_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or_default()
+            + u128::from(deadline_seconds) * 1000;
+        // SAFETY: process-wide environment mutation for deadline control.
+        unsafe {
+            std::env::set_var(
+                automation_protocol::MACHINE_DEADLINE_MS_ENV,
+                deadline_ms.to_string(),
+            );
+        }
+    }
+    if let Some(cancel_file) = &cli_args.cancel_file {
+        // SAFETY: process-wide environment mutation for cancellation file path.
+        unsafe {
+            std::env::set_var(automation_protocol::MACHINE_CANCEL_FILE_ENV, cancel_file);
         }
     }
 
@@ -304,11 +337,35 @@ async fn run_scriptable(
     mut plugin_runtime: PluginRuntimeRegistry,
     mut agent: Agent,
 ) -> Result<()> {
+    if automation_protocol::deadline_exceeded() {
+        ui::machine_event(
+            "run.cancelled",
+            serde_json::json!({ "reason": "deadline_exceeded" }),
+        );
+        anyhow::bail!("Machine deadline exceeded before execution started");
+    }
+    if automation_protocol::cancellation_requested() {
+        ui::machine_event(
+            "run.cancelled",
+            serde_json::json!({ "reason": "cancel_requested" }),
+        );
+        anyhow::bail!("Machine cancellation requested before execution started");
+    }
+
     // Get the prompt
     let Some(prompt) = cli_args.get_prompt()? else {
         ui::error("Error: No prompt provided");
         std::process::exit(1);
     };
+
+    ui::machine_event(
+        "run.started",
+        serde_json::json!({
+            "provider": provider_name,
+            "model": model,
+            "scriptable": true,
+        }),
+    );
 
     // Display header unless quiet mode
     if !cli_args.quiet {
@@ -334,6 +391,14 @@ async fn run_scriptable(
     println!();
 
     if let Err(e) = result {
+        ui::machine_event(
+            "run.failed",
+            serde_json::json!({
+                "error": e.to_string(),
+                "deadline_exceeded": automation_protocol::deadline_exceeded(),
+                "cancel_requested": automation_protocol::cancellation_requested(),
+            }),
+        );
         if cli_args.json_output {
             let error_json = serde_json::json!({
                 "success": false,
@@ -345,6 +410,17 @@ async fn run_scriptable(
         }
         std::process::exit(1);
     }
+
+    let (input_tokens, output_tokens) = agent.session_tokens();
+    ui::machine_event(
+        "run.succeeded",
+        serde_json::json!({
+            "usage": {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            }
+        }),
+    );
 
     Ok(())
 }
@@ -683,6 +759,11 @@ OPTIONS:
   -q, --quiet            Suppress context and observations display
   --no-hooks             Skip loading hooks from ~/.looprs/hooks/
   --json                 Output response as structured JSON
+  --machine-log          Emit machine-readable JSONL events to stderr
+  --machine-protocol <V> Select machine protocol version (looprs-machine/v1)
+  --run-id <ID>          Stable run identifier included in machine events
+  --deadline-seconds <N> Cancel run if deadline has already elapsed
+  --cancel-file <PATH>   Cancel run if this file exists
 
 EXAMPLES:
   looprs                           # Interactive mode

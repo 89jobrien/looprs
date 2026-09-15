@@ -1,10 +1,8 @@
 use colored::*;
 
+use crate::automation_protocol;
 use crate::observability;
 use crate::sanitize;
-
-/// Environment variable that enables machine-readable JSON logs when set to "1" or "true".
-const MACHINE_LOG_ENV: &str = "LOOPRS_MACHINE_LOG";
 
 pub fn init_logging() {
     // C2a: internal logs are opt-in via RUST_LOG. UI output remains separate.
@@ -28,14 +26,7 @@ pub fn init_logging() {
 }
 
 fn machine_log_enabled() -> bool {
-    matches!(
-        std::env::var(MACHINE_LOG_ENV)
-            .ok()
-            .as_deref()
-            .map(str::to_ascii_lowercase)
-            .as_deref(),
-        Some("1") | Some("true")
-    )
+    automation_protocol::machine_logging_enabled()
 }
 
 fn emit_machine_event(kind: &str, data: serde_json::Value) {
@@ -43,15 +34,18 @@ fn emit_machine_event(kind: &str, data: serde_json::Value) {
         return;
     }
 
-    let event = serde_json::json!({
-        "kind": kind,
-        "data": data,
-    });
+    let Some(event) = automation_protocol::next_envelope(kind, data) else {
+        return;
+    };
 
     if let Ok(line) = serde_json::to_string(&event) {
         eprintln!("{line}");
         let _ = observability::append_named_jsonl("ui_events", &event);
     }
+}
+
+pub fn machine_event(kind: &str, data: serde_json::Value) {
+    emit_machine_event(kind, data);
 }
 
 pub fn info(msg: impl AsRef<str>) {
@@ -374,7 +368,8 @@ mod tests {
     fn machine_log_disabled_by_default() {
         // SAFETY: test-only environment mutation.
         unsafe {
-            std::env::remove_var(MACHINE_LOG_ENV);
+            std::env::remove_var(automation_protocol::MACHINE_LOG_ENV);
+            std::env::remove_var(automation_protocol::MACHINE_PROTOCOL_ENV);
         }
         assert!(!machine_log_enabled());
     }
@@ -384,7 +379,8 @@ mod tests {
         for v in &["1", "true", "True", "TRUE"] {
             // SAFETY: test-only environment mutation.
             unsafe {
-                std::env::set_var(MACHINE_LOG_ENV, v);
+                std::env::set_var(automation_protocol::MACHINE_LOG_ENV, v);
+                std::env::remove_var(automation_protocol::MACHINE_PROTOCOL_ENV);
             }
             assert!(machine_log_enabled(), "value {v} should enable machine log");
         }
