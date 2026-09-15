@@ -859,6 +859,7 @@ fn build_runtime_settings(
         defaults: app_config.defaults.clone(),
         max_tokens_override,
         fs_mode: app_config.agents.fs_mode,
+        max_parallel: app_config.agents.max_parallel.max(1),
     }
 }
 

@@ -26,6 +26,7 @@ use crate::errors::ToolContextError;
 
 pub use error::ToolError;
 
+#[derive(Clone)]
 /// Shared execution context for all built-in tools.
 pub struct ToolContext {
     /// Repository-scoped working directory used as a filesystem jail root.

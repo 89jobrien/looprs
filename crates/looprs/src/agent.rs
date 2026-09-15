@@ -15,7 +15,9 @@ use crate::rules::RuleRegistry;
 use crate::session_log::SessionEvent;
 use crate::system_monitor::SystemMonitor;
 use crate::tools::{DefaultToolExecutor, ToolContext, ToolExecutor, get_tool_definitions};
+use futures::StreamExt as _;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::time::{Duration, timeout};
 
 const TOOL_PREVIEW_LEN: usize = 60;
@@ -58,6 +60,8 @@ pub struct RuntimeSettings {
     pub max_tokens_override: Option<u32>,
     /// Filesystem permission mode used by tool execution.
     pub fs_mode: FsMode,
+    /// Upper bound on parallel tool dispatch fan-out.
+    pub max_parallel: usize,
 }
 
 /// Primary orchestrator for provider inference, tools, rules, and hooks.
@@ -74,7 +78,7 @@ pub struct Agent {
     pending_metadata: HashMap<String, String>,
     session_logger: Option<Box<dyn SessionStore>>,
     output: Box<dyn UserOutput>,
-    tool_executor: Box<dyn ToolExecutor>,
+    tool_executor: Arc<dyn ToolExecutor>,
     models_config: Option<ModelsConfig>,
     system_monitor: SystemMonitor,
     session_input_tokens: u32,
@@ -115,7 +119,7 @@ impl Agent {
             pending_metadata: HashMap::new(),
             session_logger,
             output,
-            tool_executor: Box::new(DefaultToolExecutor),
+            tool_executor: Arc::new(DefaultToolExecutor),
             models_config: ModelsConfig::load().ok(),
             system_monitor: SystemMonitor::new(),
             session_input_tokens: 0,
@@ -133,7 +137,7 @@ impl Agent {
     /// Replace the tool executor. Inject a stub in tests to avoid real
     /// filesystem or subprocess side effects.
     pub fn with_tool_executor(mut self, executor: Box<dyn ToolExecutor>) -> Self {
-        self.tool_executor = executor;
+        self.tool_executor = Arc::from(executor);
         self
     }
 
@@ -484,30 +488,21 @@ impl Agent {
         }
     }
 
-    // IDEA(feature-idea-11): Implement bounded parallel agent dispatch.
-    // AgentsConfig.max_parallel is loaded but the orchestration strategy is
-    // hardcoded "sequential" here. To support parallel dispatch:
-    //   1. Collect independent sub-tasks from the current turn (tool calls with
-    //      no data dependency on each other).
-    //   2. Spawn up to `self.runtime.config.agents.max_parallel` tasks via
-    //      `tokio::task::JoinSet`, one per sub-agent.
-    //   3. Collect results and merge into a single `InferenceResponse`.
-    //   4. Guard with `agents.orchestration = "parallel"` config flag so
-    //      sequential remains the default.
-    //
-    // Blocked by: stable AgentBuilder and AgentRuntime Clone impls.
     /// Run one full agent turn (inference plus any requested tool loop).
     pub async fn run_turn(&mut self) -> Result<(), AgentError> {
         let delegated_agent = self.pending_metadata.get("orchestration.agent").cloned();
+        let orchestration_strategy = self
+            .pending_metadata
+            .get("orchestration.strategy")
+            .cloned()
+            .unwrap_or_else(|| "sequential".to_string());
         if let Some(agent_name) = delegated_agent.clone() {
-            let strategy = self
-                .pending_metadata
-                .get("orchestration.strategy")
-                .cloned()
-                .unwrap_or_else(|| "sequential".to_string());
             let event_ctx = EventContext::new()
                 .with_tool_name(agent_name)
-                .with_metadata("orchestration.strategy".to_string(), strategy)
+                .with_metadata(
+                    "orchestration.strategy".to_string(),
+                    orchestration_strategy.clone(),
+                )
                 .with_metadata("orchestration.mode".to_string(), "delegated".to_string());
             self.events.fire(Event::DelegationStart, &event_ctx);
             self.execute_hooks_for_event(&Event::DelegationStart, &event_ctx);
@@ -649,8 +644,24 @@ impl Agent {
                 break;
             }
 
+            struct PendingToolCall {
+                position: usize,
+                id: crate::types::ToolId,
+                name: crate::types::ToolName,
+                input: serde_json::Value,
+            }
+
+            struct ToolCallOutcome {
+                position: usize,
+                id: crate::types::ToolId,
+                name: crate::types::ToolName,
+                input: serde_json::Value,
+                result: Result<String, crate::tools::ToolError>,
+            }
+
             let mut tool_results = Vec::new();
             let assistant_message = self.messages.last().expect("assistant message just pushed");
+            let mut pending_calls = Vec::new();
 
             for idx in tool_indices {
                 let ContentBlock::ToolUse { id, name, input } = &assistant_message.content[idx]
@@ -687,9 +698,80 @@ impl Agent {
                     .await;
                 }
 
-                let result = self
-                    .tool_executor
-                    .execute(name.as_str(), input, &self.tool_ctx);
+                pending_calls.push(PendingToolCall {
+                    position: idx,
+                    id: id.clone(),
+                    name: name.clone(),
+                    input: input.clone(),
+                });
+            }
+
+            let parallel_enabled = orchestration_strategy.eq_ignore_ascii_case("parallel")
+                && self.runtime.max_parallel > 1
+                && pending_calls.len() > 1;
+
+            let mut outcomes = if parallel_enabled {
+                let max_parallel = self.runtime.max_parallel.max(1).min(pending_calls.len());
+                let executor = Arc::clone(&self.tool_executor);
+                let tool_ctx = self.tool_ctx.clone();
+
+                futures::stream::iter(pending_calls.into_iter())
+                    .map(|call| {
+                        let executor = Arc::clone(&executor);
+                        let tool_ctx = tool_ctx.clone();
+                        async move {
+                            let name = call.name.clone();
+                            let input = call.input.clone();
+                            let result = tokio::task::spawn_blocking(move || {
+                                executor.execute(name.as_str(), &input, &tool_ctx)
+                            })
+                            .await
+                            .map_err(|e| crate::tools::ToolError::CommandFailed(e.to_string()))
+                            .and_then(|r| r);
+
+                            ToolCallOutcome {
+                                position: call.position,
+                                id: call.id,
+                                name: call.name,
+                                input: call.input,
+                                result,
+                            }
+                        }
+                    })
+                    .buffer_unordered(max_parallel)
+                    .collect::<Vec<_>>()
+                    .await
+            } else {
+                pending_calls
+                    .into_iter()
+                    .map(|call| {
+                        let result = self.tool_executor.execute(
+                            call.name.as_str(),
+                            &call.input,
+                            &self.tool_ctx,
+                        );
+                        ToolCallOutcome {
+                            position: call.position,
+                            id: call.id,
+                            name: call.name,
+                            input: call.input,
+                            result,
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            };
+
+            outcomes.sort_by_key(|outcome| outcome.position);
+
+            for outcome in outcomes {
+                let ToolCallOutcome {
+                    id,
+                    name,
+                    input,
+                    result,
+                    ..
+                } = outcome;
+
                 let tool_is_error = result.is_err();
 
                 let raw_content = match result {
@@ -870,12 +952,48 @@ mod tests {
 
     use crate::adapters::NullOutput;
     use crate::providers::{InferenceResponse, Usage};
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     // Mock provider for testing
     struct MockProvider {
         model: crate::types::ModelId,
         responses: Vec<InferenceResponse>,
         call_count: std::sync::Arc<std::sync::Mutex<usize>>,
+    }
+
+    struct TrackingExecutor {
+        active: Arc<AtomicUsize>,
+        max_active: Arc<AtomicUsize>,
+        delay_ms: u64,
+    }
+
+    impl ToolExecutor for TrackingExecutor {
+        fn execute(
+            &self,
+            _name: &str,
+            _args: &serde_json::Value,
+            _ctx: &ToolContext,
+        ) -> Result<String, crate::tools::ToolError> {
+            let now = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+
+            loop {
+                let seen = self.max_active.load(Ordering::SeqCst);
+                if now <= seen {
+                    break;
+                }
+                if self
+                    .max_active
+                    .compare_exchange(seen, now, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_ok()
+                {
+                    break;
+                }
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(self.delay_ms));
+            self.active.fetch_sub(1, Ordering::SeqCst);
+            Ok("ok".to_string())
+        }
     }
 
     /// Convenience wrapper: creates an Agent with NullOutput so tests don't
@@ -1215,6 +1333,75 @@ actions:
             other => panic!("expected Text block, got {other:?}"),
         };
         assert_eq!(text, "streamed response");
+    }
+
+    #[tokio::test]
+    async fn run_turn_parallel_orchestration_dispatches_tool_calls_concurrently() {
+        use crate::types::{ToolId, ToolName};
+
+        let provider = MockProvider::new(vec![
+            InferenceResponse {
+                content: vec![
+                    ContentBlock::ToolUse {
+                        id: ToolId::new("call_1"),
+                        name: ToolName::new("read"),
+                        input: serde_json::json!({"path": "a"}),
+                    },
+                    ContentBlock::ToolUse {
+                        id: ToolId::new("call_2"),
+                        name: ToolName::new("read"),
+                        input: serde_json::json!({"path": "b"}),
+                    },
+                ],
+                stop_reason: "tool_use".to_string(),
+                usage: Usage {
+                    input_tokens: 1,
+                    output_tokens: 1,
+                },
+            },
+            InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "done".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 1,
+                    output_tokens: 1,
+                },
+            },
+        ]);
+
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let executor = TrackingExecutor {
+            active: Arc::clone(&active),
+            max_active: Arc::clone(&max_active),
+            delay_ms: 50,
+        };
+
+        let mut agent = Agent::new_with_runtime(
+            Box::new(provider),
+            RuntimeSettings {
+                max_parallel: 2,
+                ..RuntimeSettings::default()
+            },
+            FileRefPolicy::default(),
+            None,
+            Box::new(NullOutput),
+        )
+        .unwrap()
+        .with_tool_executor(Box::new(executor));
+
+        let mut metadata = HashMap::new();
+        metadata.insert("orchestration.strategy".to_string(), "parallel".to_string());
+        agent.set_turn_metadata(metadata);
+        agent.add_user_message("run tools");
+        agent.run_turn().await.unwrap();
+
+        assert!(
+            max_active.load(Ordering::SeqCst) >= 2,
+            "expected concurrent tool dispatch"
+        );
     }
 
     #[test]
