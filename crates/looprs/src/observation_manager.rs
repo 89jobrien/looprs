@@ -13,7 +13,7 @@ pub struct ObservationManager {
 }
 
 impl ObservationManager {
-    // TODO(feature-idea-13): Move persistence behind `ObservationStore` and add
+    // IDEA(feature-idea-13): Move persistence behind `ObservationStore` and add
     // cross-session reload, querying, and replay through that port.
     /// Persist all observations to a SQLite database at `path`.
     pub fn persist(&self, path: &std::path::Path) -> anyhow::Result<()> {

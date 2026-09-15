@@ -139,7 +139,7 @@ impl Default for CommandRegistry {
     }
 }
 
-// TODO(feature-idea-3): Add snapshot tests for command, hook, skill, and agent output.
+// IDEA(feature-idea-3): Add snapshot tests for command, hook, skill, and agent output.
 // `cargo insta` is available. Snapshot the rendered output of each built-in command
 // (help, model-status, score-session, etc.) and each bundled agent's system_prompt
 // so config drift is caught at test time rather than at runtime.

@@ -74,6 +74,7 @@ pub mod skills;
 pub mod state;
 /// System resource monitoring helpers.
 pub mod system_monitor;
+mod text_utils;
 mod tools;
 /// Trace data types for runtime telemetry.
 pub mod trace;
@@ -87,7 +88,7 @@ pub use crate::adapters::{
     ChannelBroker, NullOutput, PluginsAdapter, RetryProvider, SqliteSessionStore,
 };
 /// Primary agent runtime type and chat/runtime models.
-// TODO(automation-2): Keep external automation behind a versioned process protocol so Crux
+// IDEA(automation-2): Keep external automation behind a versioned process protocol so Crux
 // does not couple to looprs release cadence, Tokio runtime choices, or feature graph.
 pub use crate::agent::{Agent, ChatMessage, RuntimeSettings};
 /// Agent definition schema and agent registry.

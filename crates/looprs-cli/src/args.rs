@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use std::env;
 
-// TODO(feature-idea-8): Define a versioned machine contract with stable flags, JSONL output,
+// IDEA(feature-idea-8): Define a versioned machine contract with stable flags, JSONL output,
 // run IDs, usage reporting, deadlines, and cancellation before Crux integration.
 #[derive(Debug, Clone)]
 pub struct CliArgs {

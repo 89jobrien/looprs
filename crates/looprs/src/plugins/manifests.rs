@@ -10,26 +10,36 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PluginEntry {
+    /// Executable and arguments used to launch the plugin process.
     pub command: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PluginManifest {
+    /// Stable plugin identifier.
     pub name: String,
+    /// Plugin category used for routing and policy decisions.
     pub kind: PluginKind,
     #[serde(default)]
+    /// Optional description shown in diagnostics and listings.
     pub description: Option<String>,
     #[serde(default = "enabled_by_default")]
+    /// Whether the plugin is active.
     pub enabled: bool,
     #[serde(default)]
+    /// Whether missing/invalid plugin state should fail closed.
     pub required: bool,
     #[serde(default)]
+    /// Execution mode (`oneshot` or `daemon`).
     pub mode: PluginExecutionMode,
     #[serde(default)]
+    /// Runtime entrypoint details when the plugin is executable.
     pub entry: Option<PluginEntry>,
     #[serde(default)]
+    /// Prompt triggers that activate this plugin.
     pub triggers: Vec<String>,
     #[serde(default)]
+    /// Target agent name for orchestration plugins.
     pub route_to_agent: Option<String>,
 }
 
@@ -43,21 +53,25 @@ pub struct PluginManifestRegistry {
 }
 
 impl PluginManifestRegistry {
+    /// Create an empty manifest registry.
     pub fn new() -> Self {
         Self {
             manifests: HashMap::new(),
         }
     }
 
+    /// Insert or replace one manifest keyed by `(kind, name)`.
     pub fn register(&mut self, manifest: PluginManifest) {
         self.manifests
             .insert((manifest.kind, manifest.name.clone()), manifest);
     }
 
+    /// Fetch a manifest by kind and name.
     pub fn get(&self, kind: PluginKind, name: &str) -> Option<&PluginManifest> {
         self.manifests.get(&(kind, name.to_string()))
     }
 
+    /// List manifests for a specific kind, sorted by name.
     pub fn list_by_kind(&self, kind: PluginKind) -> Vec<&PluginManifest> {
         let mut items: Vec<&PluginManifest> = self
             .manifests
@@ -68,6 +82,7 @@ impl PluginManifestRegistry {
         items
     }
 
+    /// Load all YAML manifests from one directory.
     pub fn load_from_directory(dir: &PathBuf) -> anyhow::Result<Self> {
         let mut registry = Self::new();
         if !dir.exists() {
@@ -95,6 +110,7 @@ impl PluginManifestRegistry {
         Ok(registry)
     }
 
+    /// Merge user and repo manifest sources with repo precedence.
     pub fn load_dual_source(
         user_dir: Option<&PathBuf>,
         repo_dir: Option<&PathBuf>,
@@ -166,7 +182,7 @@ impl KindSupervisor {
         self.statuses
             .retain(|name, _| new_map.contains_key(name.as_str()));
 
-        // TODO(feature-idea-12): Supervise tool and runtime plugin processes,
+        // IDEA(feature-idea-12): Supervise tool and runtime plugin processes,
         // replacing synthetic health with launch, probe, and restart state.
         for (name, manifest) in new_map {
             if manifest.mode != PluginExecutionMode::Daemon {
@@ -215,6 +231,7 @@ pub struct PluginRuntimeRegistry {
 }
 
 impl PluginRuntimeRegistry {
+    /// Build runtime registry from optional user and repository manifest directories.
     pub fn load_dual_source(
         user_dir: Option<PathBuf>,
         repo_dir: Option<PathBuf>,
@@ -228,14 +245,17 @@ impl PluginRuntimeRegistry {
         Ok(runtime)
     }
 
+    /// List orchestration manifests visible to the runtime.
     pub fn list_orchestration_plugins(&self) -> Vec<&PluginManifest> {
         self.registry.list_by_kind(PluginKind::Orchestration)
     }
 
+    /// Fetch a single orchestration plugin by name.
     pub fn orchestration_plugin(&self, name: &str) -> Option<&PluginManifest> {
         self.registry.get(PluginKind::Orchestration, name)
     }
 
+    /// Read current supervisor status for one plugin.
     pub fn status_for_kind(&self, kind: PluginKind, name: &str) -> Option<&PluginSupervisorStatus> {
         match kind {
             PluginKind::Tool => self.tool_supervisor.statuses.get(name),
@@ -244,6 +264,7 @@ impl PluginRuntimeRegistry {
         }
     }
 
+    /// Reload manifests when file fingerprints changed.
     pub fn refresh_if_changed(&mut self) -> anyhow::Result<bool> {
         let fingerprint = self.compute_fingerprint()?;
         if self.fingerprint.as_ref() == Some(&fingerprint) {

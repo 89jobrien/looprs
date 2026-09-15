@@ -1190,7 +1190,7 @@ fn prepare_user_prompt(
         metadata.insert("orchestration.plugin".to_string(), plugin_name);
     }
 
-    // TODO(feature-idea-5): Resolve `agent.skills` into delegated context and
+    // IDEA(feature-idea-5): Resolve `agent.skills` into delegated context and
     // enforce `agent.tools` when defining and executing tools for this turn.
     let role = agent
         .role
