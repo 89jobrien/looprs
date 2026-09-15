@@ -263,8 +263,26 @@ impl AgentRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use insta::assert_yaml_snapshot;
+    use serde::Serialize;
     use std::io::Write;
     use tempfile::TempDir;
+
+    #[derive(Debug, Serialize)]
+    struct AgentPromptSnapshot {
+        name: String,
+        system_prompt: String,
+    }
+
+    fn stable_prompt(text: &str) -> String {
+        let home = dirs::home_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        if home.is_empty() {
+            return text.to_string();
+        }
+        text.replace(&home, "$HOME")
+    }
 
     #[test]
     fn select_by_trigger_first() {
@@ -376,5 +394,21 @@ triggers:
         let agents = AgentRegistry::bundled_agents();
         let planner = agents.iter().find(|a| a.name == "planner").unwrap();
         assert!(planner.matches_prompt("plan the refactor for this module"));
+    }
+
+    #[test]
+    fn bundled_agents_system_prompt_snapshot() {
+        let mut snapshots: Vec<AgentPromptSnapshot> = AgentRegistry::bundled_agents()
+            .into_iter()
+            .filter_map(|agent| {
+                agent.system_prompt.map(|prompt| AgentPromptSnapshot {
+                    name: agent.name,
+                    system_prompt: stable_prompt(&prompt),
+                })
+            })
+            .collect();
+        snapshots.sort_by(|a, b| a.name.cmp(&b.name));
+
+        assert_yaml_snapshot!("bundled_agent_system_prompts", snapshots);
     }
 }
