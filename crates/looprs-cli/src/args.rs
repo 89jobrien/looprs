@@ -126,6 +126,15 @@ impl CliArgs {
             ));
         }
 
+        let has_run_controls = result.run_id.is_some()
+            || result.deadline_seconds.is_some()
+            || result.cancel_file.is_some();
+        if has_run_controls && result.machine_protocol.is_none() {
+            return Err(anyhow!(
+                "--machine-protocol is required when using --run-id, --deadline-seconds, or --cancel-file"
+            ));
+        }
+
         if result
             .run_id
             .as_deref()
@@ -293,13 +302,78 @@ mod tests {
 
     #[test]
     fn parse_deadline_rejects_zero() {
-        let result = CliArgs::parse_from(&args(&["--deadline-seconds", "0"]));
+        let result = CliArgs::parse_from(&args(&[
+            "--machine-protocol",
+            MACHINE_PROTOCOL_V1,
+            "--deadline-seconds",
+            "0",
+        ]));
         assert!(result.is_err());
         assert!(
             result
                 .unwrap_err()
                 .to_string()
                 .contains("must be greater than 0")
+        );
+    }
+
+    #[test]
+    fn run_controls_require_machine_protocol() {
+        let run_id_only = CliArgs::parse_from(&args(&["--run-id", "run-123"]));
+        assert!(run_id_only.is_err());
+        assert!(
+            run_id_only
+                .unwrap_err()
+                .to_string()
+                .contains("--machine-protocol")
+        );
+
+        let deadline_only = CliArgs::parse_from(&args(&["--deadline-seconds", "30"]));
+        assert!(deadline_only.is_err());
+        assert!(
+            deadline_only
+                .unwrap_err()
+                .to_string()
+                .contains("--machine-protocol")
+        );
+
+        let cancel_file_only = CliArgs::parse_from(&args(&["--cancel-file", "/tmp/looprs.cancel"]));
+        assert!(cancel_file_only.is_err());
+        assert!(
+            cancel_file_only
+                .unwrap_err()
+                .to_string()
+                .contains("--machine-protocol")
+        );
+    }
+
+    #[test]
+    fn run_controls_with_unknown_protocol_fail_with_protocol_error() {
+        let result =
+            CliArgs::parse_from(&args(&["--machine-protocol", "v2", "--run-id", "run-123"]));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unsupported machine protocol")
+        );
+    }
+
+    #[test]
+    fn run_controls_with_protocol_still_validate_control_values() {
+        let result = CliArgs::parse_from(&args(&[
+            "--machine-protocol",
+            MACHINE_PROTOCOL_V1,
+            "--run-id",
+            "  ",
+        ]));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("--run-id cannot be empty")
         );
     }
 

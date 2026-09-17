@@ -359,12 +359,19 @@ impl Agent {
         secret_prompt_fn: Option<&PromptCallback>,
     ) -> EventContext {
         let mut enriched_context = context.clone();
+        let mut hook_context = enriched_context.clone();
+        hook_context
+            .metadata
+            .insert("event_name".to_string(), event.name().to_string());
+        hook_context
+            .metadata
+            .insert("event".to_string(), event.name().to_string());
 
         if let Some(hooks) = self.hooks.hooks_for_event(event) {
             for hook in hooks {
                 if let Ok(results) = HookExecutor::execute_hook_with_callbacks(
                     hook,
-                    context,
+                    &hook_context,
                     approval_fn,
                     prompt_fn,
                     secret_prompt_fn,
@@ -532,6 +539,18 @@ impl Agent {
         self.session_input_tokens += response.usage.input_tokens;
         self.session_output_tokens += response.usage.output_tokens;
         self.log_inference(&response);
+
+        #[cfg(not(test))]
+        if let Err(e) =
+            crate::trace::append_turn_trace(self.observations.session_id(), &req, &response)
+        {
+            self.output
+                .warn(&format!("Warning: Failed to append turn trace: {e}"));
+        }
+
+        let event_ctx = EventContext::new();
+        self.events.fire(Event::InferenceComplete, &event_ctx);
+        self.execute_hooks_for_event(&Event::InferenceComplete, &event_ctx);
 
         if response.content.is_empty() {
             if !accumulated.is_empty() {
@@ -1562,6 +1581,40 @@ actions:
     }
 
     #[test]
+    fn hook_condition_can_match_event_name() {
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        let _lock = crate::app_config::cwd_test_lock();
+        let provider = MockProvider::simple_text("test");
+        let temp_dir = TempDir::new().unwrap();
+        let hook_file = temp_dir.path().join("event_name_hook.yaml");
+        let mut file = std::fs::File::create(&hook_file).unwrap();
+        writeln!(
+            file,
+            r#"name: event_name_condition
+trigger: SessionStart
+condition: equals:event_name:SessionStart
+actions:
+  - type: command
+    command: "echo 'matched'"
+    inject_as: "event_match""#
+        )
+        .unwrap();
+        drop(file);
+
+        let hooks = HookRegistry::load_from_directory(&temp_dir.path().to_path_buf()).unwrap();
+        let agent = agent_for_test(provider).with_hooks(hooks);
+        let ctx = EventContext::new();
+        let enriched = agent.execute_hooks_for_event(&Event::SessionStart, &ctx);
+
+        assert_eq!(
+            enriched.metadata.get("event_match"),
+            Some(&"matched".to_string())
+        );
+    }
+
+    #[test]
     fn test_context_injection_large_value_truncation() {
         let provider = MockProvider::simple_text("test");
         let mut agent = agent_for_test(provider);
@@ -1869,6 +1922,24 @@ actions:
             "expected tool results in conversation history"
         );
         assert_eq!(agent.latest_assistant_text(), None);
+    }
+
+    #[tokio::test]
+    async fn run_turn_streaming_fires_inference_complete_event() {
+        let provider = MockProvider::simple_text("streamed ok");
+        let mut agent = agent_for_test(provider);
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(0usize));
+        let seen_clone = seen.clone();
+        agent.events.on(Event::InferenceComplete, move |_, _| {
+            let mut count = seen_clone.lock().expect("lock count");
+            *count += 1;
+        });
+
+        agent.add_user_message("hello");
+        let result = agent.run_turn_streaming().await;
+
+        assert!(result.is_ok(), "streaming turn should succeed: {result:?}");
+        assert_eq!(*seen.lock().expect("lock seen"), 1);
     }
 
     #[test]

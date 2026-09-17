@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>looprs - Rust Agent Runtime</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <a class="brand" href="index.html"><span>loop</span>rs</a>
+      <a class="active" href="index.html">Overview</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="state-model.html">State Model</a>
+      <a href="feature-matrix.html">Feature Matrix</a>
+      <a href="crate-inventory.html">Crate Inventory</a>
+      <a href="crate-tiers.html">Crate Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main class="page">
+      <section class="hero">
+        <h1><span>loop</span>rs</h1>
+        <p class="subtitle">
+          A Rust LLM agent loop runtime with multi-turn orchestration, provider abstraction,
+          tool execution, hooks, skills, rules, and TUI support.
+        </p>
+        <div class="terminal">
+          <div class="terminal-bar">
+            <div class="dot r"></div>
+            <div class="dot y"></div>
+            <div class="dot g"></div>
+          </div>
+          <p class="snippet-source">example session transcript inspired by <a href="https://github.com/89jobrien/looprs/blob/main/README.md#L1"><code>README.md</code></a></p>
+          <pre>$ looprs
+> use @README.md to explain provider setup
+
+tool: read(path="README.md")
+tool: grep(pattern="PROVIDER", path=".")
+
+assistant: configured providers include anthropic, openai, gemini,
+local, and sdk-backed variants. want a local-first setup?</pre>
+        </div>
+      </section>
+
+      <section class="stats">
+        <div class="stat"><div class="n">5</div><div class="d">Workspace crates</div></div>
+        <div class="stat"><div class="n">10</div><div class="d">Hook lifecycle events</div></div>
+        <div class="stat"><div class="n">7</div><div class="d">Built-in tools</div></div>
+        <div class="stat"><div class="n">3</div><div class="d">Primary frontends</div></div>
+      </section>
+
+      <section>
+        <h2>What It Ships</h2>
+        <div class="grid-3">
+          <div class="card">
+            <div class="pill stable">Stable</div>
+            <h3>Runtime Core</h3>
+            <p>
+              Session state, tool loops, provider calls, event firing, and transcript handling in
+              <code>crates/looprs/</code>.
+            </p>
+          </div>
+          <div class="card">
+            <div class="pill stable">Stable</div>
+            <h3>Extensibility</h3>
+            <p>
+              Repo and user overlays for <code>.looprs/hooks</code>, <code>commands</code>,
+              <code>skills</code>, <code>agents</code>, and <code>rules</code>.
+            </p>
+          </div>
+          <div class="card">
+            <div class="pill stable">Stable</div>
+            <h3>Tooling Surface</h3>
+            <p>
+              File-aware tools (<code>read</code>, <code>edit</code>, <code>glob</code>,
+              <code>grep</code>) plus <code>nu</code> and <code>bash</code> execution.
+            </p>
+          </div>
+          <div class="card">
+            <div class="pill stable">Stable</div>
+            <h3>Provider Layer</h3>
+            <p>
+              Anthropic, OpenAI, Gemini, local Ollama, and SDK variants selectable by config and
+              environment.
+            </p>
+          </div>
+          <div class="card">
+            <div class="pill stable">Stable</div>
+            <h3>CLI + TUI</h3>
+            <p>
+              REPL and runtime facade in <code>looprs-cli</code>, provider menu and chat TUI in
+              <code>looprs-tui</code>.
+            </p>
+          </div>
+          <div class="card">
+            <div class="pill experimental">Evolving</div>
+            <h3>MCP + Delegation</h3>
+            <p>
+              Remote tool composition, delegated tool allowlists, and parallel orchestration are
+              actively expanding.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Quick Links</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Architecture map</h3>
+            <p>Crate ownership boundaries, request flow, and extension layering.</p>
+            <p><a href="architecture.html">Open architecture page</a></p>
+          </div>
+          <div class="card">
+            <h3>Quality gates</h3>
+            <p>What runs in pre-push checks and where test coverage is concentrated.</p>
+            <p><a href="testing.html">Open testing page</a></p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>How Teams Use looprs</h2>
+        <div class="grid-3">
+          <div class="card">
+            <h3>Daily coding loop</h3>
+            <p>
+              Keep one long-running session for implementation, testing, and small refactors while
+              preserving context between turns.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Repo automation</h3>
+            <p>
+              Use slash commands and hooks to run project checks, gather diagnostics, and attach
+              outputs to the prompt stream.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Specialized helpers</h3>
+            <p>
+              Load targeted skills and delegated agents for focused tasks without changing runtime
+              core code.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Fast Start</h2>
+        <div class="card">
+          <ol>
+            <li>Build once: <code>cargo build --workspace</code></li>
+            <li>Set provider env vars or <code>.looprs/provider.json</code></li>
+            <li>Launch: <code>looprs</code></li>
+            <li>Reference files directly with <code>@path/to/file.rs</code></li>
+            <li>Run workspace checks before push with <code>cargo xtask check pre-push</code></li>
+          </ol>
+        </div>
+      </section>
+
+      <section>
+        <h2>At a Glance</h2>
+        <div class="meta-grid">
+          <div class="meta"><div class="k">Primary language</div><div class="v">Rust</div></div>
+          <div class="meta"><div class="k">Extension model</div><div class="v">YAML + Markdown</div></div>
+          <div class="meta"><div class="k">Execution mode</div><div class="v">Multi-turn tool loop</div></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Grounded Code Snippets</h2>
+        <p class="subtitle">Direct excerpts from this repository.</p>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Built-in tool registry</h3>
+            <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs/src/tools/mod.rs#L205"><code>crates/looprs/src/tools/mod.rs#L205</code></a></p>
+            <pre><code>pub enum Tool {
+    Read,
+    Write,
+    Edit,
+    Glob,
+    Grep,
+    Nu,
+    Bash,
+}</code></pre>
+          </div>
+          <div class="card">
+            <h3>Session context collection</h3>
+            <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs/src/context.rs#L19"><code>crates/looprs/src/context.rs#L19</code></a></p>
+            <pre><code>SessionContext {
+    git: git_info::collect(),
+    doob_status: doob::collect(DOOB_PROJECT, DOOB_ITEM_LIMIT),
+}</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        looprs static site snapshot - <a href="https://github.com/89jobrien/looprs">Source on GitHub</a>
+      </footer>
+    </main>
+  </body>
+</html>

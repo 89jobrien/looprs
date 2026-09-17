@@ -247,7 +247,7 @@ async fn main() -> Result<()> {
 
     let repo_skills_dir = env::current_dir()
         .ok()
-        .map(|d| d.join(".looprs").join("skills"));
+        .map(|d| d.join(&app_config.paths.skills));
 
     let mut skill_registry = SkillRegistry::new();
 
@@ -1305,6 +1305,20 @@ fn prepare_user_prompt(
             .join("\n")
     };
 
+    let missing_skills = agent
+        .skills
+        .iter()
+        .filter(|skill_name| skill_registry.get(skill_name).is_none())
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing_skills.is_empty() {
+        anyhow::bail!(
+            "missing delegated skill(s) for agent '{}': {}",
+            agent.name,
+            missing_skills.join(", ")
+        );
+    }
+
     let delegated_skills = agent
         .skills
         .iter()
@@ -1705,5 +1719,48 @@ mod provider_menu_tests {
         assert!(rewritten.contains("Skills:"));
         assert!(rewritten.contains("security-checklist"));
         assert!(rewritten.contains("Check auth paths and secret handling."));
+    }
+
+    #[test]
+    fn repo_skill_path_uses_configured_app_path() {
+        let source = include_str!("main.rs");
+        assert!(
+            !source.contains("join(\".looprs\").join(\"skills\")"),
+            "repo skills path should not be hardcoded to .looprs/skills"
+        );
+        assert!(
+            source.contains("join(&app_config.paths.skills)"),
+            "expected repo skills path to use app_config.paths.skills"
+        );
+    }
+
+    #[test]
+    fn prepare_prompt_rejects_missing_delegated_skills() {
+        let app_config = AppConfig::default();
+
+        let mut agents = AgentRegistry::new();
+        agents.register(AgentDefinition {
+            name: "reviewer".to_string(),
+            role: Some("Reviewer".to_string()),
+            description: Some("Reviews code".to_string()),
+            system_prompt: Some("Review for issues".to_string()),
+            tools: vec!["read".to_string()],
+            skills: vec!["missing-skill".to_string()],
+            constraints: vec![],
+            triggers: vec!["review".to_string()],
+        });
+
+        let skills = SkillRegistry::new();
+        let mut plugin_runtime = PluginRuntimeRegistry::default();
+        let err = prepare_user_prompt(
+            "please review this change",
+            &app_config,
+            &agents,
+            &skills,
+            &mut plugin_runtime,
+        )
+        .expect_err("missing delegated skill should fail");
+
+        assert!(err.to_string().contains("missing delegated skill"));
     }
 }

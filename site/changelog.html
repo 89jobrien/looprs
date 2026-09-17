@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Changelog - looprs</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <a class="brand" href="index.html"><span>loop</span>rs</a>
+      <a href="index.html">Overview</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="state-model.html">State Model</a>
+      <a href="feature-matrix.html">Feature Matrix</a>
+      <a href="crate-inventory.html">Crate Inventory</a>
+      <a href="crate-tiers.html">Crate Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a class="active" href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main class="page">
+      <h1>Recent Changes</h1>
+      <p class="subtitle">Snapshot of active direction from recent issue integrations.</p>
+
+      <div class="meta-grid">
+        <div class="meta"><div class="k">Release baseline</div><div class="v">v0.5.5</div></div>
+        <div class="meta"><div class="k">Integrated issues</div><div class="v">8</div></div>
+        <div class="meta"><div class="k">Theme</div><div class="v">Runtime hardening</div></div>
+      </div>
+
+      <h2>Feature additions</h2>
+      <ol>
+        <li><strong>#19 parallel dispatch:</strong> implemented bounded parallel tool dispatch for delegated or parallel orchestration.</li>
+        <li><strong>#26 machine protocol:</strong> introduced versioned automation protocol flags for machine-facing CLI operation.</li>
+        <li><strong>#30 MCP tool composition:</strong> composed remote MCP tool definitions into inference-time tool availability.</li>
+        <li><strong>#31 plugin supervision:</strong> improved supervision-state handling for tool and runtime plugin processes.</li>
+        <li><strong>#32 observation query/replay:</strong> expanded observation manager support for cross-session query and replay needs.</li>
+      </ol>
+
+      <h2>Behavior and quality improvements</h2>
+      <ol>
+        <li><strong>#18 commands snapshots:</strong> added rendered output snapshot coverage for built-in command surfaces.</li>
+        <li><strong>#25 delegated capabilities:</strong> enforced delegated tool and skill capability boundaries at runtime.</li>
+        <li><strong>#28 streaming tool continuity:</strong> preserved tool calls and usage behavior across streaming response paths.</li>
+      </ol>
+
+      <h2>Detailed integration list</h2>
+
+      <ol>
+        <li><strong>#18 commands snapshots:</strong> added rendered output snapshot coverage for built-in command surfaces.</li>
+        <li><strong>#19 parallel dispatch:</strong> implemented bounded parallel tool dispatch for delegated/parallel orchestration.</li>
+        <li><strong>#25 delegated capabilities:</strong> enforced delegated tool and skill capability boundaries at runtime.</li>
+        <li><strong>#26 machine protocol:</strong> introduced versioned automation protocol flags for machine-facing CLI operation.</li>
+        <li><strong>#28 streaming tool continuity:</strong> preserved tool calls and usage behavior across streaming response paths.</li>
+        <li><strong>#30 MCP tool composition:</strong> composed remote MCP tool definitions into inference-time tool availability.</li>
+        <li><strong>#31 plugin supervision:</strong> improved supervision-state handling for tool and runtime plugin processes.</li>
+        <li><strong>#32 observation query/replay:</strong> expanded observation manager support for cross-session query and replay needs.</li>
+      </ol>
+
+      <h2>Code anchors for these changes</h2>
+      <ol>
+        <li><code>crates/looprs/src/commands.rs</code> - command surface and snapshots</li>
+        <li><code>crates/looprs/src/agent.rs</code> - orchestration, allowlists, streaming, MCP composition</li>
+        <li><code>crates/looprs-cli/src/args.rs</code> - machine protocol and run controls</li>
+        <li><code>crates/looprs/src/plugins/manifests.rs</code> - plugin runtime supervision updates</li>
+        <li><code>crates/looprs/src/observation_manager.rs</code> - query and replay support</li>
+      </ol>
+
+      <h2>Representative snippet</h2>
+      <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs/src/agent.rs#L25"><code>crates/looprs/src/agent.rs#L25</code></a></p>
+      <pre><code>const ORCHESTRATION_TOOLS_METADATA_KEY: &str = "orchestration.tools";
+
+fn parse_allowed_tools(metadata: &HashMap&lt;String, String&gt;) -> Option&lt;HashSet&lt;String&gt;&gt; {
+    let raw = metadata.get(ORCHESTRATION_TOOLS_METADATA_KEY)?;
+    let parsed = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|tool| !tool.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::&lt;HashSet&lt;_&gt;&gt;();
+    if parsed.is_empty() { None } else { Some(parsed) }
+}</code></pre>
+
+      <div class="callout">
+        These entries reflect issue-merge outcomes for this active integration branch. They are a
+        branch changelog view, not a full historical release ledger.
+      </div>
+
+      <footer>
+        Release baseline in this branch tracks <code>v0.5.5</code>.
+      </footer>
+    </main>
+  </body>
+</html>

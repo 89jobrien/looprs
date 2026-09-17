@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Roadmap - looprs</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <a class="brand" href="index.html"><span>loop</span>rs</a>
+      <a href="index.html">Overview</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="state-model.html">State Model</a>
+      <a href="feature-matrix.html">Feature Matrix</a>
+      <a href="crate-inventory.html">Crate Inventory</a>
+      <a href="crate-tiers.html">Crate Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a class="active" href="roadmap.html">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main class="page">
+      <h1>Roadmap</h1>
+      <p class="subtitle">Implemented foundations, active priorities, and next runway for looprs.</p>
+
+      <div class="meta-grid">
+        <div class="meta"><div class="k">Horizon</div><div class="v">Now to next release</div></div>
+        <div class="meta"><div class="k">Primary focus</div><div class="v">Reliability and orchestration</div></div>
+        <div class="meta"><div class="k">Secondary focus</div><div class="v">MCP and observability depth</div></div>
+      </div>
+
+      <h2>Shipped baseline</h2>
+      <ol>
+        <li><strong>Runtime + extension framework:</strong> core loop, provider adapters, built-in tools, hooks, skills, commands, and rules are in regular use.</li>
+        <li><strong>Multi-surface UX:</strong> CLI REPL, provider menu, and TUI workflows are wired over the same runtime with observability traces.</li>
+      </ol>
+
+      <h2>Active priorities</h2>
+      <ol>
+        <li><strong>P1 - Delegation hardening:</strong> continue tightening delegated capability boundaries and improving explicit policy visibility.</li>
+        <li><strong>P1 - Streaming reliability:</strong> expand streaming/tool-call compatibility tests and reduce edge-case divergence across providers.</li>
+        <li><strong>P2 - MCP integration depth:</strong> improve remote tool composition ergonomics and fallback behavior when remote endpoints degrade.</li>
+        <li><strong>P2 - Observability workflows:</strong> refine diagnostics capture and replay for faster triage during complex multi-turn sessions.</li>
+      </ol>
+
+      <h2>Operational next steps</h2>
+      <ol>
+        <li>Broaden integration tests for CLI + TUI paths under the same runtime conditions.</li>
+        <li>Document capability boundaries and extension ownership with release-level clarity.</li>
+        <li>Add more end-to-end examples for repo-local .looprs composition patterns.</li>
+      </ol>
+
+      <h2>Dependencies and sequencing</h2>
+      <ol>
+        <li><strong>Stabilize streaming and delegation tests first:</strong> this de-risks subsequent MCP and plugin changes.</li>
+        <li><strong>Expand observability schemas second:</strong> enables clear diagnostics while larger integration work lands.</li>
+        <li><strong>Finalize docs and examples third:</strong> ensure extension authors can adopt changes without guesswork.</li>
+      </ol>
+
+      <h2>Exit criteria for this roadmap slice</h2>
+      <ul class="stack-list">
+        <li><span class="check">[ok]</span> delegated capability boundaries verified by tests and runtime behavior.</li>
+        <li><span class="check">[ok]</span> streaming and non-streaming tool paths produce equivalent end-state transcripts.</li>
+        <li><span class="check">[ok]</span> pre-push gate remains green across merged issue branches.</li>
+        <li><span class="check">[ok]</span> docs and examples reflect live command and extension behavior.</li>
+      </ul>
+
+      <h2>Roadmap items mapped to current code</h2>
+      <ol>
+        <li><strong>Delegation hardening:</strong> <code>crates/looprs/src/agent.rs</code> metadata parsing and tool filtering.</li>
+        <li><strong>Streaming reliability:</strong> <code>crates/looprs/src/agent.rs</code> turn loop and tool-result replay behavior.</li>
+        <li><strong>MCP depth:</strong> <code>crates/looprs/src/tools/mod.rs</code> <code>mcp_tool_definitions</code> and <code>mcp_tool_call</code>.</li>
+        <li><strong>Observability depth:</strong> <code>crates/looprs/src/observability.rs</code> and turn trace append paths.</li>
+      </ol>
+
+      <h2>Concrete example snippet</h2>
+      <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs-cli/src/args.rs#L6"><code>crates/looprs-cli/src/args.rs#L6</code></a></p>
+      <pre><code>pub struct CliArgs {
+    pub machine_log: bool,
+    pub machine_protocol: Option&lt;String&gt;,
+    pub run_id: Option&lt;String&gt;,
+    pub deadline_seconds: Option&lt;u64&gt;,
+    pub cancel_file: Option&lt;String&gt;,
+}
+
+if let Some(protocol) = &result.machine_protocol
+    && protocol != MACHINE_PROTOCOL_V1
+{
+    return Err(anyhow!(
+        "Unsupported machine protocol '{protocol}', expected '{MACHINE_PROTOCOL_V1}'"
+    ));
+}</code></pre>
+
+      <footer>Roadmap reflects current branch direction, not a frozen product contract.</footer>
+    </main>
+  </body>
+</html>

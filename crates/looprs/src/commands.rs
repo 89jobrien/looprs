@@ -410,4 +410,23 @@ action:
 
         assert_yaml_snapshot!("built_in_commands_rendered", snapshots);
     }
+
+    #[test]
+    fn built_in_command_names_snapshot() {
+        let commands_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join(".looprs")
+            .join("commands");
+        let registry = CommandRegistry::load_from_directory(&commands_dir).unwrap();
+
+        let mut names: Vec<String> = registry
+            .list()
+            .into_iter()
+            .map(|cmd| cmd.name.clone())
+            .collect();
+        names.sort();
+
+        assert_yaml_snapshot!("built_in_command_names", names);
+    }
 }

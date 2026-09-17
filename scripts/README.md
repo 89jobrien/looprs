@@ -2,6 +2,19 @@
 
 This directory contains automation scripts for the looprs project.
 
+## serve-assets.sh
+
+Serve the local static site in `assets/` for quick preview.
+
+### Usage
+
+```bash
+./scripts/serve-assets.sh
+./scripts/serve-assets.sh 8080
+```
+
+Default port is `4173`.
+
 ## bump-version.sh
 
 Version bumping and changelog organization script for looprs releases.
