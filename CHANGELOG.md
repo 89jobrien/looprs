@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-09-13
+
+### CI
+- Publish Windows binary artifacts in the release workflow
+
+### Features
+- Expose all supported providers in CLI setup
+
+### Fixes
+- Restore streaming trace emission for observability
+- Load repository YAML skill definitions during discovery
+- Expose lifecycle event context to hook conditions
+- Honor configured pipeline execution semantics
+
+### Security
+- Upgrade lockfile dependencies to resolve RustSec advisories through `quinn-proto 0.11.17`
+
+### Tests
+- Add provider inference conformance matrix coverage
+- Attach workspace integration tests to the `looprs` package
+
 ## [0.5.4] - 2026-09-09
 
 ### CI

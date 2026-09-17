@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crate Tiers - looprs</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <a class="brand" href="index.html"><span>loop</span>rs</a>
+      <a href="index.html">Overview</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="state-model.html">State Model</a>
+      <a href="feature-matrix.html">Feature Matrix</a>
+      <a href="crate-inventory.html">Crate Inventory</a>
+      <a class="active" href="crate-tiers.html">Crate Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main class="page">
+      <h1>Crate Tiers</h1>
+      <p class="subtitle">Role-based classification for the looprs workspace.</p>
+
+      <h2>Tier definitions</h2>
+      <table>
+        <thead>
+          <tr><th>Tier</th><th>Meaning</th><th>Examples</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="pill stable">Core</span></td><td>Contract and runtime crates with user-visible behavior</td><td><code>looprs-core</code>, <code>looprs</code></td></tr>
+          <tr><td><span class="pill stable">Surface</span></td><td>User-facing entrypoints and interfaces</td><td><code>looprs-cli</code>, <code>looprs-tui</code></td></tr>
+          <tr><td><span class="pill experimental">Support</span></td><td>Build-time helpers and internal wiring</td><td><code>looprs-macros</code>, <code>xtask</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Current mapping</h2>
+      <div class="grid-3">
+        <div class="card">
+          <div class="pill stable">Core</div>
+          <h3>looprs-core</h3>
+          <p>Public API types and ports with minimal policy coupling.</p>
+        </div>
+        <div class="card">
+          <div class="pill stable">Core</div>
+          <h3>looprs</h3>
+          <p>Runtime orchestration, provider integration, tools, and extension loading.</p>
+        </div>
+        <div class="card">
+          <div class="pill stable">Surface</div>
+          <h3>looprs-cli</h3>
+          <p>Command parsing, REPL behavior, runtime bootstrap, and UX wiring.</p>
+        </div>
+        <div class="card">
+          <div class="pill stable">Surface</div>
+          <h3>looprs-tui</h3>
+          <p>Interactive provider picker and terminal chat client interface.</p>
+        </div>
+        <div class="card">
+          <div class="pill experimental">Support</div>
+          <h3>looprs-macros</h3>
+          <p>Macro helpers and derive support consumed by workspace crates.</p>
+        </div>
+        <div class="card">
+          <div class="pill experimental">Support</div>
+          <h3>xtask</h3>
+          <p>Grouped checks and release quality automation entrypoint.</p>
+        </div>
+      </div>
+
+      <h2>Promotion criteria</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Move</th><th>Criteria</th><th>Evidence expected</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Support -> Surface</td><td>Direct user impact and stable command behavior</td><td>CLI/TUI tests + docs update</td></tr>
+            <tr><td>Surface -> Core</td><td>Shared runtime contract value across frontends</td><td>cross-crate integration tests + review</td></tr>
+            <tr><td>Core change</td><td>Backwards-sensitive behavior or type updates</td><td>migration notes + full gate parity</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Risk profile by tier</h2>
+      <ol>
+        <li><strong>Core:</strong> highest regression blast radius, strongest review and verification needed.</li>
+        <li><strong>Surface:</strong> user-visible behavior shifts quickly but should preserve runtime contracts.</li>
+        <li><strong>Support:</strong> internal evolution is faster, but should not leak unstable contracts outward.</li>
+      </ol>
+
+      <div class="callout">
+        Tiers describe architectural responsibility, not team ownership. A single feature often
+        touches multiple tiers and should still preserve dependency direction.
+      </div>
+
+      <h2>Code-grounded examples</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Core boundary example</h3>
+          <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs-core/src/events.rs#L3"><code>crates/looprs-core/src/events.rs#L3</code></a></p>
+          <pre><code>domain_event!(Event {
+    SessionStart,
+    SessionEnd,
+    UserPromptSubmit,
+    PreToolUse,
+    PostToolUse,
+    InferenceComplete,
+    OnError,
+    OnWarning,
+    DelegationStart,
+    DelegationComplete,
+});</code></pre>
+        </div>
+        <div class="card">
+          <h3>Surface boundary example</h3>
+          <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs-cli/src/runtime/facade.rs#L42"><code>crates/looprs-cli/src/runtime/facade.rs#L42</code></a></p>
+          <pre><code>let agent = Agent::new_with_runtime(
+    provider,
+    runtime,
+    app_config.file_ref_policy(),
+    session_logger,
+    Box::new(looprs::adapters::UiOutput),
+)?;</code></pre>
+        </div>
+      </div>
+
+      <footer>Tiers describe ownership and change risk, not release channel promises.</footer>
+    </main>
+  </body>
+</html>

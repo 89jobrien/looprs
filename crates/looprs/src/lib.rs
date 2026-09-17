@@ -14,6 +14,8 @@ mod api;
 pub mod app_config;
 /// Interactive approval and prompt callback utilities.
 pub mod approval;
+/// Versioned machine-automation protocol envelope and env contract.
+pub mod automation_protocol;
 /// Generated BAML client bindings and wrappers.
 pub mod baml_client;
 /// Slash-command schema and command registry.
@@ -74,6 +76,7 @@ pub mod skills;
 pub mod state;
 /// System resource monitoring helpers.
 pub mod system_monitor;
+mod text_utils;
 mod tools;
 /// Trace data types for runtime telemetry.
 pub mod trace;
@@ -87,8 +90,6 @@ pub use crate::adapters::{
     ChannelBroker, NullOutput, PluginsAdapter, RetryProvider, SqliteSessionStore,
 };
 /// Primary agent runtime type and chat/runtime models.
-// TODO(automation-2): Keep external automation behind a versioned process protocol so Crux
-// does not couple to looprs release cadence, Tokio runtime choices, or feature graph.
 pub use crate::agent::{Agent, ChatMessage, RuntimeSettings};
 /// Agent definition schema and agent registry.
 pub use crate::agents::{AgentDefinition, AgentRegistry};

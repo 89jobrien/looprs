@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crate Inventory - looprs</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <a class="brand" href="index.html"><span>loop</span>rs</a>
+      <a href="index.html">Overview</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="state-model.html">State Model</a>
+      <a href="feature-matrix.html">Feature Matrix</a>
+      <a class="active" href="crate-inventory.html">Crate Inventory</a>
+      <a href="crate-tiers.html">Crate Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main class="page">
+      <h1>Crate Inventory</h1>
+      <p class="subtitle">Current workspace packages under <code>crates/</code> plus automation tooling.</p>
+
+      <table>
+        <thead>
+          <tr><th>Package</th><th>Type</th><th>Role</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>looprs-core</code></td><td>lib</td><td>API types, ports, events, and lightweight adapters</td></tr>
+          <tr><td><code>looprs</code></td><td>lib</td><td>Agent runtime, providers, tools, hooks, skills, rules, and context pipeline</td></tr>
+          <tr><td><code>looprs-cli</code></td><td>bin</td><td>CLI args, REPL loop, runtime startup and command handling</td></tr>
+          <tr><td><code>looprs-tui</code></td><td>lib/bin</td><td>Provider picker and chat TUI frontend</td></tr>
+          <tr><td><code>looprs-macros</code></td><td>proc-macro</td><td>Macro support for project ergonomics</td></tr>
+          <tr><td><code>xtask</code></td><td>bin</td><td>Local quality gates and developer automation wrapper</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Dependency direction</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>From</th><th>Depends on</th><th>Reason</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>looprs</code></td><td><code>looprs-core</code></td><td>Consumes stable API types and ports.</td></tr>
+            <tr><td><code>looprs-cli</code></td><td><code>looprs</code>, <code>looprs-core</code></td><td>Builds UX on runtime and shared contracts.</td></tr>
+            <tr><td><code>looprs-tui</code></td><td><code>looprs</code>, <code>looprs-core</code></td><td>Interactive rendering and provider selection.</td></tr>
+            <tr><td><code>xtask</code></td><td>workspace crates</td><td>Runs grouped quality and release checks.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Boundary notes</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Core contract</h3>
+          <p><code>looprs-core</code> remains the neutral place for stable shared types used by higher layers.</p>
+        </div>
+        <div class="card">
+          <h3>Runtime ownership</h3>
+          <p><code>looprs</code> owns orchestration logic; CLI and TUI should avoid leaking runtime internals into their own layers.</p>
+        </div>
+      </div>
+
+      <h2>Crate ownership quick guide</h2>
+      <ul class="stack-list">
+        <li><strong>looprs-core:</strong> add or evolve shared types, events, and port contracts.</li>
+        <li><strong>looprs:</strong> add runtime behavior, provider wiring, tools, hooks, and policy loops.</li>
+        <li><strong>looprs-cli:</strong> add flags, command UX, and shell-facing integration.</li>
+        <li><strong>looprs-tui:</strong> add terminal interaction flows and display behavior.</li>
+        <li><strong>looprs-macros:</strong> add compile-time ergonomics helpers.</li>
+        <li><strong>xtask:</strong> add project automation and verification commands.</li>
+      </ul>
+
+      <h2>Workspace manifest excerpt</h2>
+      <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/Cargo.toml#L1"><code>Cargo.toml#L1</code></a></p>
+      <pre><code>[workspace]
+members = [
+    "crates/looprs-macros",
+    "crates/looprs-core",
+    "crates/looprs",
+    "crates/looprs-cli",
+    "crates/looprs-tui",
+    "xtask",
+]</code></pre>
+
+      <footer>Use <code>cargo metadata</code> for machine-exact workspace manifests.</footer>
+    </main>
+  </body>
+</html>

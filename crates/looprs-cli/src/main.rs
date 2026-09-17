@@ -8,6 +8,7 @@ use std::env;
 
 use looprs::ModelId;
 use looprs::app_config::AppConfig;
+use looprs::automation_protocol;
 use looprs::file_refs::{AtReference, resolve_at_reference};
 use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
 use looprs::ui;
@@ -123,11 +124,43 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Enable machine-readable logging if requested
-    if cli_args.machine_log {
+    // Enable versioned machine protocol envelope and runtime controls when requested.
+    if cli_args.machine_log || cli_args.machine_protocol.is_some() {
         // SAFETY: process-wide environment mutation for logging mode toggle.
         unsafe {
-            std::env::set_var("LOOPRS_MACHINE_LOG", "1");
+            std::env::set_var(automation_protocol::MACHINE_LOG_ENV, "1");
+        }
+    }
+    if let Some(protocol) = &cli_args.machine_protocol {
+        // SAFETY: process-wide environment mutation for protocol selection.
+        unsafe {
+            std::env::set_var(automation_protocol::MACHINE_PROTOCOL_ENV, protocol);
+        }
+    }
+    if let Some(run_id) = &cli_args.run_id {
+        // SAFETY: process-wide environment mutation for machine run identity.
+        unsafe {
+            std::env::set_var(automation_protocol::MACHINE_RUN_ID_ENV, run_id);
+        }
+    }
+    if let Some(deadline_seconds) = cli_args.deadline_seconds {
+        let deadline_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or_default()
+            + u128::from(deadline_seconds) * 1000;
+        // SAFETY: process-wide environment mutation for deadline control.
+        unsafe {
+            std::env::set_var(
+                automation_protocol::MACHINE_DEADLINE_MS_ENV,
+                deadline_ms.to_string(),
+            );
+        }
+    }
+    if let Some(cancel_file) = &cli_args.cancel_file {
+        // SAFETY: process-wide environment mutation for cancellation file path.
+        unsafe {
+            std::env::set_var(automation_protocol::MACHINE_CANCEL_FILE_ENV, cancel_file);
         }
     }
 
@@ -214,7 +247,7 @@ async fn main() -> Result<()> {
 
     let repo_skills_dir = env::current_dir()
         .ok()
-        .map(|d| d.join(".looprs").join("skills"));
+        .map(|d| d.join(&app_config.paths.skills));
 
     let mut skill_registry = SkillRegistry::new();
 
@@ -273,6 +306,7 @@ async fn main() -> Result<()> {
             &provider_name,
             app_config,
             agent_registry,
+            skill_registry,
             plugin_runtime,
             agent,
         )
@@ -295,20 +329,46 @@ async fn main() -> Result<()> {
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_scriptable(
     cli_args: &CliArgs,
     model: &str,
     provider_name: &str,
     app_config: AppConfig,
     agent_registry: AgentRegistry,
+    skill_registry: SkillRegistry,
     mut plugin_runtime: PluginRuntimeRegistry,
     mut agent: Agent,
 ) -> Result<()> {
+    if automation_protocol::deadline_exceeded() {
+        ui::machine_event(
+            "run.cancelled",
+            serde_json::json!({ "reason": "deadline_exceeded" }),
+        );
+        anyhow::bail!("Machine deadline exceeded before execution started");
+    }
+    if automation_protocol::cancellation_requested() {
+        ui::machine_event(
+            "run.cancelled",
+            serde_json::json!({ "reason": "cancel_requested" }),
+        );
+        anyhow::bail!("Machine cancellation requested before execution started");
+    }
+
     // Get the prompt
     let Some(prompt) = cli_args.get_prompt()? else {
         ui::error("Error: No prompt provided");
         std::process::exit(1);
     };
+
+    ui::machine_event(
+        "run.started",
+        serde_json::json!({
+            "provider": provider_name,
+            "model": model,
+            "scriptable": true,
+        }),
+    );
 
     // Display header unless quiet mode
     if !cli_args.quiet {
@@ -319,8 +379,13 @@ async fn run_scriptable(
         );
     }
 
-    let (prepared_prompt, metadata, selected_agent) =
-        prepare_user_prompt(&prompt, &app_config, &agent_registry, &mut plugin_runtime)?;
+    let (prepared_prompt, metadata, selected_agent) = prepare_user_prompt(
+        &prompt,
+        &app_config,
+        &agent_registry,
+        &skill_registry,
+        &mut plugin_runtime,
+    )?;
     if !metadata.is_empty() {
         agent.set_turn_metadata(metadata);
     }
@@ -334,6 +399,14 @@ async fn run_scriptable(
     println!();
 
     if let Err(e) = result {
+        ui::machine_event(
+            "run.failed",
+            serde_json::json!({
+                "error": e.to_string(),
+                "deadline_exceeded": automation_protocol::deadline_exceeded(),
+                "cancel_requested": automation_protocol::cancellation_requested(),
+            }),
+        );
         if cli_args.json_output {
             let error_json = serde_json::json!({
                 "success": false,
@@ -345,6 +418,17 @@ async fn run_scriptable(
         }
         std::process::exit(1);
     }
+
+    let (input_tokens, output_tokens) = agent.session_tokens();
+    ui::machine_event(
+        "run.succeeded",
+        serde_json::json!({
+            "usage": {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            }
+        }),
+    );
 
     Ok(())
 }
@@ -490,6 +574,7 @@ async fn run_interactive(
                                 &skill_message,
                                 &app_config,
                                 &agent_registry,
+                                &skill_registry,
                                 &mut plugin_runtime,
                             )?;
                             if !metadata.is_empty() {
@@ -562,6 +647,7 @@ async fn run_interactive(
                                 &mut agent,
                                 &app_config,
                                 &agent_registry,
+                                &skill_registry,
                                 &mut plugin_runtime,
                                 &mut state,
                             )
@@ -621,6 +707,7 @@ async fn run_interactive(
                             &final_message,
                             &app_config,
                             &agent_registry,
+                            &skill_registry,
                             &mut plugin_runtime,
                         )?;
                         if !metadata.is_empty() {
@@ -683,6 +770,11 @@ OPTIONS:
   -q, --quiet            Suppress context and observations display
   --no-hooks             Skip loading hooks from ~/.looprs/hooks/
   --json                 Output response as structured JSON
+  --machine-log          Emit machine-readable JSONL events to stderr
+  --machine-protocol <V> Select machine protocol version (looprs-machine/v1)
+  --run-id <ID>          Stable run identifier included in machine events
+  --deadline-seconds <N> Cancel run if deadline has already elapsed
+  --cancel-file <PATH>   Cancel run if this file exists
 
 EXAMPLES:
   looprs                           # Interactive mode
@@ -727,17 +819,24 @@ fn models_gist_url() -> String {
     })
 }
 
-/// Interactive `looprs provider` entrypoint: pick a provider, and for
-/// `local` also pick an installed Ollama model, then persist the choice
-/// to `.looprs/provider.json`.
+fn provider_menu_options() -> &'static [&'static str] {
+    looprs::model_catalog::MODEL_PROVIDERS
+}
+
+fn configure_provider(config: &mut ProviderConfig, provider: &str, model: Option<String>) {
+    config.provider = Some(provider.to_string());
+    if let Some(model) = model {
+        provider_settings_mut(config, provider).model = Some(model);
+    }
+}
+
+/// Interactive `looprs provider` entrypoint: pick a runtime provider,
+/// configure its model, then persist the choice to `.looprs/provider.json`.
 fn run_provider_menu() -> Result<()> {
-    // TODO(feature-idea-4): Offer every provider supported by the runtime and
-    // collect any provider-specific model settings before persisting a choice.
-    let providers = vec![
-        "anthropic".to_string(),
-        "openai".to_string(),
-        "local (Ollama)".to_string(),
-    ];
+    let providers = provider_menu_options()
+        .iter()
+        .map(|provider| (*provider).to_string())
+        .collect::<Vec<_>>();
 
     let Some(index) = looprs_tui::select("Select a provider", &providers)? else {
         println!("Cancelled.");
@@ -745,30 +844,24 @@ fn run_provider_menu() -> Result<()> {
     };
 
     let mut config = ProviderConfig::load().unwrap_or_default();
-
-    match index {
-        0 => config.provider = Some("anthropic".to_string()),
-        1 => config.provider = Some("openai".to_string()),
-        2 => {
-            let models = list_ollama_models();
-            if models.is_empty() {
-                ui::error(
-                    "No Ollama models found. Install Ollama and run `ollama pull <model>` first.",
-                );
-                return Ok(());
-            }
-            let Some(model_index) = looprs_tui::select("Select a local model", &models)? else {
-                println!("Cancelled.");
-                return Ok(());
-            };
-            config.provider = Some("local".to_string());
-            config.local = Some(ProviderSettings {
-                model: Some(models[model_index].clone()),
-                ..Default::default()
-            });
+    let provider = provider_menu_options()[index];
+    let model = if matches!(provider, "local" | "ollama") {
+        let models = list_ollama_models();
+        if models.is_empty() {
+            ui::error(
+                "No Ollama models found. Install Ollama and run `ollama pull <model>` first.",
+            );
+            return Ok(());
         }
-        _ => unreachable!("select() returned an out-of-range index"),
-    }
+        let Some(model_index) = looprs_tui::select("Select a local model", &models)? else {
+            println!("Cancelled.");
+            return Ok(());
+        };
+        Some(models[model_index].clone())
+    } else {
+        console_prompt("Model (leave blank to use the provider default):")
+    };
+    configure_provider(&mut config, provider, model);
 
     config.save()?;
     println!(
@@ -823,11 +916,13 @@ fn provider_settings_mut<'a>(
     provider: &str,
 ) -> &'a mut ProviderSettings {
     match provider {
-        "anthropic" => config
+        "anthropic" | "anthropic-sdk" | "claude-sdk" => config
             .anthropic
             .get_or_insert_with(ProviderSettings::default),
-        "openai" => config.openai.get_or_insert_with(ProviderSettings::default),
+        "openai" | "openai-sdk" => config.openai.get_or_insert_with(ProviderSettings::default),
+        "gemini" | "google" => config.gemini.get_or_insert_with(ProviderSettings::default),
         "local" | "ollama" => config.local.get_or_insert_with(ProviderSettings::default),
+        "baml" => config.baml.get_or_insert_with(ProviderSettings::default),
         _ => config.openai.get_or_insert_with(ProviderSettings::default),
     }
 }
@@ -837,9 +932,11 @@ fn provider_settings_ref<'a>(
     provider: &str,
 ) -> Option<&'a ProviderSettings> {
     match provider {
-        "anthropic" => config.anthropic.as_ref(),
-        "openai" => config.openai.as_ref(),
+        "anthropic" | "anthropic-sdk" | "claude-sdk" => config.anthropic.as_ref(),
+        "openai" | "openai-sdk" => config.openai.as_ref(),
+        "gemini" | "google" => config.gemini.as_ref(),
         "local" | "ollama" => config.local.as_ref(),
+        "baml" => config.baml.as_ref(),
         _ => None,
     }
 }
@@ -854,6 +951,8 @@ fn build_runtime_settings(
         defaults: app_config.defaults.clone(),
         max_tokens_override,
         fs_mode: app_config.agents.fs_mode,
+        max_parallel: app_config.agents.max_parallel.max(1),
+        mcp_server_url: std::env::var("LOOPRS_MCP_SERVER_URL").ok(),
     }
 }
 
@@ -1089,6 +1188,7 @@ fn prepare_user_prompt(
     raw_prompt: &str,
     app_config: &AppConfig,
     agent_registry: &AgentRegistry,
+    skill_registry: &SkillRegistry,
     plugin_runtime: &mut PluginRuntimeRegistry,
 ) -> Result<(String, HashMap<String, String>, Option<String>)> {
     if agent_registry.is_empty() {
@@ -1184,9 +1284,10 @@ fn prepare_user_prompt(
     if let Some(plugin_name) = routed_by_plugin {
         metadata.insert("orchestration.plugin".to_string(), plugin_name);
     }
+    if !agent.tools.is_empty() {
+        metadata.insert("orchestration.tools".to_string(), agent.tools.join(","));
+    }
 
-    // TODO(feature-idea-5): Resolve `agent.skills` into delegated context and
-    // enforce `agent.tools` when defining and executing tools for this turn.
     let role = agent
         .role
         .clone()
@@ -1204,9 +1305,39 @@ fn prepare_user_prompt(
             .join("\n")
     };
 
+    let missing_skills = agent
+        .skills
+        .iter()
+        .filter(|skill_name| skill_registry.get(skill_name).is_none())
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing_skills.is_empty() {
+        anyhow::bail!(
+            "missing delegated skill(s) for agent '{}': {}",
+            agent.name,
+            missing_skills.join(", ")
+        );
+    }
+
+    let delegated_skills = agent
+        .skills
+        .iter()
+        .filter_map(|skill_name| {
+            skill_registry
+                .get(skill_name)
+                .map(|skill| format!("- {}\n{}", skill.name, skill.content.trim_end_matches('\n')))
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let skills_section = if delegated_skills.is_empty() {
+        String::new()
+    } else {
+        format!("\nSkills:\n{delegated_skills}")
+    };
+
     let rewritten = format!(
-        "[Delegation]\nAgent: {}\nRole: {}\nDescription: {}\nSystem Prompt:\n{}\nConstraints:\n{}\n\nTask:\n{}",
-        agent.name, role, description, system_prompt, constraints, task_prompt
+        "[Delegation]\nAgent: {}\nRole: {}\nDescription: {}\nSystem Prompt:\n{}\nConstraints:\n{}{}\n\nTask:\n{}",
+        agent.name, role, description, system_prompt, constraints, skills_section, task_prompt
     );
 
     Ok((rewritten, metadata, Some(agent.name.clone())))
@@ -1248,12 +1379,14 @@ struct SessionState {
     model: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn execute_command(
     cmd: &Command,
     input: &str,
     agent: &mut Agent,
     app_config: &AppConfig,
     agent_registry: &AgentRegistry,
+    skill_registry: &SkillRegistry,
     plugin_runtime: &mut PluginRuntimeRegistry,
     state: &mut SessionState,
 ) -> Result<()> {
@@ -1264,8 +1397,13 @@ async fn execute_command(
 
     match &cmd.action {
         CommandAction::Prompt { template, .. } => {
-            let (prepared_prompt, metadata, selected_agent) =
-                prepare_user_prompt(template, app_config, agent_registry, plugin_runtime)?;
+            let (prepared_prompt, metadata, selected_agent) = prepare_user_prompt(
+                template,
+                app_config,
+                agent_registry,
+                skill_registry,
+                plugin_runtime,
+            )?;
             if !metadata.is_empty() {
                 agent.set_turn_metadata(metadata);
             }
@@ -1305,6 +1443,7 @@ async fn execute_command(
                     &output_prompt,
                     app_config,
                     agent_registry,
+                    skill_registry,
                     plugin_runtime,
                 )?;
                 if !metadata.is_empty() {
@@ -1445,11 +1584,42 @@ async fn execute_command(
 
 #[cfg(test)]
 mod provider_menu_tests {
+    use super::configure_provider;
     use super::parse_explicit_agent_tag;
     use super::parse_ollama_list_output;
+    use super::prepare_user_prompt;
+    use super::provider_menu_options;
+    use looprs::ProviderConfig;
+    use looprs::app_config::AppConfig;
+    use looprs::plugins::manifests::PluginRuntimeRegistry;
+    use looprs::{AgentDefinition, AgentRegistry, Skill, SkillRegistry};
+    use std::path::PathBuf;
 
     // Captured from a real `ollama list` invocation.
     const REAL_OLLAMA_LIST_OUTPUT: &str = "NAME                                             ID              SIZE      MODIFIED\nfunctiongemma:latest                             7c19b650567a    300 MB    2 months ago\ngemma-lg:latest                                  e6349aa91a78    24 GB     2 months ago\nhf.co/unsloth/gemma-4-26B-A4B-it-GGUF:UD-Q6_K    e6349aa91a78    24 GB     2 months ago\nnomic-embed-text:latest                          0a109f422b47    274 MB    2 months ago\nllama3.2:latest                                  a80c4f17acd5    2.0 GB    4 months ago\n";
+
+    #[test]
+    fn setup_offers_every_runtime_provider() {
+        assert_eq!(
+            provider_menu_options(),
+            looprs::model_catalog::MODEL_PROVIDERS
+        );
+    }
+
+    #[test]
+    fn setup_stores_model_for_every_runtime_provider() {
+        for provider in looprs::model_catalog::MODEL_PROVIDERS {
+            let mut config = ProviderConfig::default();
+            configure_provider(&mut config, provider, Some("test-model".to_string()));
+
+            assert_eq!(config.provider.as_deref(), Some(*provider));
+            assert_eq!(
+                config.merged_settings(provider).model.as_deref(),
+                Some("test-model"),
+                "model setting was not stored for {provider}"
+            );
+        }
+    }
 
     #[test]
     fn parses_model_names_from_real_output() {
@@ -1504,5 +1674,93 @@ mod provider_menu_tests {
     fn rejects_invalid_hash_agent_tag() {
         assert!(parse_explicit_agent_tag("#taskit/alpha do thing").is_none());
         assert!(parse_explicit_agent_tag("not a tag").is_none());
+    }
+
+    #[test]
+    fn prepare_prompt_injects_agent_tool_allowlist_and_skill_content() {
+        let app_config = AppConfig::default();
+
+        let mut agents = AgentRegistry::new();
+        agents.register(AgentDefinition {
+            name: "reviewer".to_string(),
+            role: Some("Reviewer".to_string()),
+            description: Some("Reviews code".to_string()),
+            system_prompt: Some("Review for issues".to_string()),
+            tools: vec!["read".to_string(), "grep".to_string()],
+            skills: vec!["security-checklist".to_string()],
+            constraints: vec!["read-only".to_string()],
+            triggers: vec!["review".to_string()],
+        });
+
+        let mut skills = SkillRegistry::new();
+        skills.register(Skill {
+            name: "security-checklist".to_string(),
+            description: Some("Security review checklist".to_string()),
+            triggers: vec![],
+            content: "Check auth paths and secret handling.".to_string(),
+            source_path: PathBuf::from("/tmp/security-checklist/SKILL.md"),
+        });
+
+        let mut plugin_runtime = PluginRuntimeRegistry::default();
+        let (rewritten, metadata, selected_agent) = prepare_user_prompt(
+            "please review this change",
+            &app_config,
+            &agents,
+            &skills,
+            &mut plugin_runtime,
+        )
+        .unwrap();
+
+        assert_eq!(selected_agent.as_deref(), Some("reviewer"));
+        assert_eq!(
+            metadata.get("orchestration.tools").map(String::as_str),
+            Some("read,grep")
+        );
+        assert!(rewritten.contains("Skills:"));
+        assert!(rewritten.contains("security-checklist"));
+        assert!(rewritten.contains("Check auth paths and secret handling."));
+    }
+
+    #[test]
+    fn repo_skill_path_uses_configured_app_path() {
+        let source = include_str!("main.rs");
+        assert!(
+            !source.contains("join(\".looprs\").join(\"skills\")"),
+            "repo skills path should not be hardcoded to .looprs/skills"
+        );
+        assert!(
+            source.contains("join(&app_config.paths.skills)"),
+            "expected repo skills path to use app_config.paths.skills"
+        );
+    }
+
+    #[test]
+    fn prepare_prompt_rejects_missing_delegated_skills() {
+        let app_config = AppConfig::default();
+
+        let mut agents = AgentRegistry::new();
+        agents.register(AgentDefinition {
+            name: "reviewer".to_string(),
+            role: Some("Reviewer".to_string()),
+            description: Some("Reviews code".to_string()),
+            system_prompt: Some("Review for issues".to_string()),
+            tools: vec!["read".to_string()],
+            skills: vec!["missing-skill".to_string()],
+            constraints: vec![],
+            triggers: vec!["review".to_string()],
+        });
+
+        let skills = SkillRegistry::new();
+        let mut plugin_runtime = PluginRuntimeRegistry::default();
+        let err = prepare_user_prompt(
+            "please review this change",
+            &app_config,
+            &agents,
+            &skills,
+            &mut plugin_runtime,
+        )
+        .expect_err("missing delegated skill should fail");
+
+        assert!(err.to_string().contains("missing delegated skill"));
     }
 }

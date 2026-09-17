@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>State Model - looprs</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <a class="brand" href="index.html"><span>loop</span>rs</a>
+      <a href="index.html">Overview</a>
+      <a href="architecture.html">Architecture</a>
+      <a class="active" href="state-model.html">State Model</a>
+      <a href="feature-matrix.html">Feature Matrix</a>
+      <a href="crate-inventory.html">Crate Inventory</a>
+      <a href="crate-tiers.html">Crate Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main class="page">
+      <h1>Runtime State Model</h1>
+      <p class="subtitle">How a looprs session flows from prompt intake through tool execution and persistence.</p>
+
+      <h2>Turn lifecycle</h2>
+      <table>
+        <thead>
+          <tr><th>Stage</th><th>Input</th><th>Output</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>UserPromptSubmit</td><td>Raw message (+ optional @file refs)</td><td>Event context metadata for hooks/rules</td></tr>
+          <tr><td>InferenceComplete</td><td>Provider request with model and tool schemas</td><td>Assistant content blocks and usage accounting</td></tr>
+          <tr><td>PreToolUse/PostToolUse</td><td>Tool call blocks from assistant</td><td>Tool result blocks appended to transcript</td></tr>
+          <tr><td>OnError</td><td>Provider or tool failures</td><td>Warnings, diagnostics, and optional scoring trigger</td></tr>
+          <tr><td>SessionEnd</td><td>Final transcript and observations</td><td>Session store writes + observability events</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Per-turn metadata lifecycle</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Input metadata</h3>
+          <p>
+            User prompt metadata is attached before hook execution so policy and context injectors
+            can branch on user intent.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Enriched metadata</h3>
+          <p>
+            Hook outputs and delegated agent metadata are merged for the active turn, then consumed
+            by inference and tool filtering logic.
+          </p>
+        </div>
+      </div>
+
+      <h2>Agent state transitions</h2>
+      <div class="card">
+        <p class="snippet-source">derived from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs/src/agent.rs#L689"><code>crates/looprs/src/agent.rs#L689</code></a> turn loop</p>
+        <pre>Idle
+  -> MessageAdded
+  -> InferenceRequested
+  -> AssistantResponded
+  -> (ToolUseRequested -> ToolExecuted -> ToolResultRecorded)*
+  -> TurnComplete
+  -> Idle</pre>
+      </div>
+
+      <h2>Persistence surfaces</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Session store</h3>
+          <p>Conversation events can be recorded through configured session store backends for replay and analysis.</p>
+        </div>
+        <div class="card">
+          <h3>Observability</h3>
+          <p>Structured JSONL traces and UI events are emitted to a centralized or project-scoped observability root.</p>
+        </div>
+      </div>
+
+      <h2>Failure paths</h2>
+      <ol>
+        <li><strong>Provider timeout:</strong> turn exits with timeout and emits warning/error events.</li>
+        <li><strong>Tool failure:</strong> tool error content is recorded as tool-result text for model follow-up.</li>
+        <li><strong>Serialization drift:</strong> malformed payloads are surfaced through adapter error contexts.</li>
+        <li><strong>Write failures:</strong> session logging is best effort and should not crash the active turn.</li>
+      </ol>
+
+      <h2>State invariants</h2>
+      <ul class="stack-list">
+        <li><span class="check">[ok]</span> Messages remain append-only during a turn.</li>
+        <li><span class="check">[ok]</span> Tool results always reference the originating tool call id.</li>
+        <li><span class="check">[ok]</span> Usage accounting accumulates per turn and per session.</li>
+        <li><span class="check">[ok]</span> Compaction only trims old context; it never mutates new user input.</li>
+      </ul>
+
+      <h2>Event model excerpt</h2>
+      <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs-core/src/events.rs#L3"><code>crates/looprs-core/src/events.rs#L3</code></a></p>
+      <pre><code>domain_event!(Event {
+    SessionStart,
+    SessionEnd,
+    UserPromptSubmit,
+    PreToolUse,
+    PostToolUse,
+    InferenceComplete,
+    OnError,
+    OnWarning,
+    DelegationStart,
+    DelegationComplete,
+});</code></pre>
+
+      <footer>State model reflects the current loop orchestration design in this branch.</footer>
+    </main>
+  </body>
+</html>

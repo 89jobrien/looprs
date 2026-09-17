@@ -300,7 +300,7 @@ async fn create_provider_by_name(
             Ok(Box::new(local::LocalProvider::new_with_model(model)?))
         }
         "baml" => {
-            let model = resolve_model("anthropic", config_file, &overrides);
+            let model = resolve_model("baml", config_file, &overrides);
             Ok(Box::new(baml_provider::BamlProvider::for_provider(
                 "baml", model,
             )?))

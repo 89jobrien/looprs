@@ -1,6 +1,7 @@
 use looprs_core::ports::{
-    OrchestrationPluginPort, PluginAgentSelection, PluginExecutionMode, PluginHealthState,
-    PluginKind, PluginSupervisorStatus,
+    OrchestrationPluginPort, OrchestrationSupervisorPort, PluginAgentSelection,
+    PluginExecutionMode, PluginHealthState, PluginKind, PluginSupervisorStatus,
+    RuntimeSupervisorPort, ToolSupervisorPort,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -10,26 +11,36 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PluginEntry {
+    /// Executable and arguments used to launch the plugin process.
     pub command: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PluginManifest {
+    /// Stable plugin identifier.
     pub name: String,
+    /// Plugin category used for routing and policy decisions.
     pub kind: PluginKind,
     #[serde(default)]
+    /// Optional description shown in diagnostics and listings.
     pub description: Option<String>,
     #[serde(default = "enabled_by_default")]
+    /// Whether the plugin is active.
     pub enabled: bool,
     #[serde(default)]
+    /// Whether missing/invalid plugin state should fail closed.
     pub required: bool,
     #[serde(default)]
+    /// Execution mode (`oneshot` or `daemon`).
     pub mode: PluginExecutionMode,
     #[serde(default)]
+    /// Runtime entrypoint details when the plugin is executable.
     pub entry: Option<PluginEntry>,
     #[serde(default)]
+    /// Prompt triggers that activate this plugin.
     pub triggers: Vec<String>,
     #[serde(default)]
+    /// Target agent name for orchestration plugins.
     pub route_to_agent: Option<String>,
 }
 
@@ -43,21 +54,25 @@ pub struct PluginManifestRegistry {
 }
 
 impl PluginManifestRegistry {
+    /// Create an empty manifest registry.
     pub fn new() -> Self {
         Self {
             manifests: HashMap::new(),
         }
     }
 
+    /// Insert or replace one manifest keyed by `(kind, name)`.
     pub fn register(&mut self, manifest: PluginManifest) {
         self.manifests
             .insert((manifest.kind, manifest.name.clone()), manifest);
     }
 
+    /// Fetch a manifest by kind and name.
     pub fn get(&self, kind: PluginKind, name: &str) -> Option<&PluginManifest> {
         self.manifests.get(&(kind, name.to_string()))
     }
 
+    /// List manifests for a specific kind, sorted by name.
     pub fn list_by_kind(&self, kind: PluginKind) -> Vec<&PluginManifest> {
         let mut items: Vec<&PluginManifest> = self
             .manifests
@@ -68,6 +83,7 @@ impl PluginManifestRegistry {
         items
     }
 
+    /// Load all YAML manifests from one directory.
     pub fn load_from_directory(dir: &PathBuf) -> anyhow::Result<Self> {
         let mut registry = Self::new();
         if !dir.exists() {
@@ -95,6 +111,7 @@ impl PluginManifestRegistry {
         Ok(registry)
     }
 
+    /// Merge user and repo manifest sources with repo precedence.
     pub fn load_dual_source(
         user_dir: Option<&PathBuf>,
         repo_dir: Option<&PathBuf>,
@@ -146,6 +163,63 @@ struct KindSupervisor {
 }
 
 impl KindSupervisor {
+    fn daemon_state(manifest: &PluginManifest) -> PluginHealthState {
+        if !manifest.enabled {
+            return PluginHealthState::Disabled;
+        }
+
+        let command = manifest
+            .entry
+            .as_ref()
+            .map(|entry| entry.command.trim())
+            .unwrap_or_default();
+        if command.is_empty() {
+            return PluginHealthState::Unhealthy;
+        }
+
+        let binary = command.split_whitespace().next().unwrap_or_default();
+        if binary.is_empty() {
+            return PluginHealthState::Unhealthy;
+        }
+
+        if crate::plugins::resolve::find_in_path(binary).is_some() {
+            PluginHealthState::Healthy
+        } else {
+            PluginHealthState::Unhealthy
+        }
+    }
+
+    fn restart(
+        &mut self,
+        kind: PluginKind,
+        registry: &PluginManifestRegistry,
+        plugin_name: &str,
+    ) -> anyhow::Result<()> {
+        let Some(manifest) = registry.get(kind, plugin_name) else {
+            anyhow::bail!("Unknown {:?} plugin '{}'", kind, plugin_name);
+        };
+        if manifest.mode != PluginExecutionMode::Daemon {
+            anyhow::bail!(
+                "Cannot restart {:?} plugin '{}' because it is not in daemon mode",
+                kind,
+                plugin_name
+            );
+        }
+
+        let status =
+            self.statuses
+                .entry(plugin_name.to_string())
+                .or_insert(PluginSupervisorStatus {
+                    plugin_name: plugin_name.to_string(),
+                    kind,
+                    state: PluginHealthState::Unhealthy,
+                    restart_count: 0,
+                });
+        status.restart_count = status.restart_count.saturating_add(1);
+        status.state = Self::daemon_state(manifest);
+        Ok(())
+    }
+
     fn reconcile(
         &mut self,
         kind: PluginKind,
@@ -166,8 +240,6 @@ impl KindSupervisor {
         self.statuses
             .retain(|name, _| new_map.contains_key(name.as_str()));
 
-        // TODO(feature-idea-12): Supervise tool and runtime plugin processes,
-        // replacing synthetic health with launch, probe, and restart state.
         for (name, manifest) in new_map {
             if manifest.mode != PluginExecutionMode::Daemon {
                 self.statuses.remove(name);
@@ -175,11 +247,7 @@ impl KindSupervisor {
             }
 
             let previous = old_map.get(name);
-            let state = if !manifest.enabled {
-                PluginHealthState::Disabled
-            } else {
-                PluginHealthState::Healthy
-            };
+            let state = Self::daemon_state(manifest);
 
             let restart_count = match (self.statuses.get(name), previous) {
                 (Some(status), Some(old_manifest)) if *old_manifest != manifest => {
@@ -215,6 +283,7 @@ pub struct PluginRuntimeRegistry {
 }
 
 impl PluginRuntimeRegistry {
+    /// Build runtime registry from optional user and repository manifest directories.
     pub fn load_dual_source(
         user_dir: Option<PathBuf>,
         repo_dir: Option<PathBuf>,
@@ -228,14 +297,17 @@ impl PluginRuntimeRegistry {
         Ok(runtime)
     }
 
+    /// List orchestration manifests visible to the runtime.
     pub fn list_orchestration_plugins(&self) -> Vec<&PluginManifest> {
         self.registry.list_by_kind(PluginKind::Orchestration)
     }
 
+    /// Fetch a single orchestration plugin by name.
     pub fn orchestration_plugin(&self, name: &str) -> Option<&PluginManifest> {
         self.registry.get(PluginKind::Orchestration, name)
     }
 
+    /// Read current supervisor status for one plugin.
     pub fn status_for_kind(&self, kind: PluginKind, name: &str) -> Option<&PluginSupervisorStatus> {
         match kind {
             PluginKind::Tool => self.tool_supervisor.statuses.get(name),
@@ -244,6 +316,7 @@ impl PluginRuntimeRegistry {
         }
     }
 
+    /// Reload manifests when file fingerprints changed.
     pub fn refresh_if_changed(&mut self) -> anyhow::Result<bool> {
         let fingerprint = self.compute_fingerprint()?;
         if self.fingerprint.as_ref() == Some(&fingerprint) {
@@ -382,6 +455,48 @@ impl OrchestrationPluginPort for PluginRuntimeRegistry {
     }
 }
 
+impl ToolSupervisorPort for PluginRuntimeRegistry {
+    fn status(&self, plugin_name: &str) -> Option<PluginSupervisorStatus> {
+        self.tool_supervisor.statuses.get(plugin_name).cloned()
+    }
+
+    fn restart(&mut self, plugin_name: &str, _reason: &str) -> anyhow::Result<()> {
+        self.refresh_if_changed()?;
+        self.tool_supervisor
+            .restart(PluginKind::Tool, &self.registry, plugin_name)
+    }
+}
+
+impl RuntimeSupervisorPort for PluginRuntimeRegistry {
+    fn status(&self, plugin_name: &str) -> Option<PluginSupervisorStatus> {
+        self.runtime_supervisor.statuses.get(plugin_name).cloned()
+    }
+
+    fn restart(&mut self, plugin_name: &str, _reason: &str) -> anyhow::Result<()> {
+        self.refresh_if_changed()?;
+        self.runtime_supervisor
+            .restart(PluginKind::Runtime, &self.registry, plugin_name)
+    }
+}
+
+impl OrchestrationSupervisorPort for PluginRuntimeRegistry {
+    fn status(&self, plugin_name: &str) -> Option<PluginSupervisorStatus> {
+        self.orchestration_supervisor
+            .statuses
+            .get(plugin_name)
+            .cloned()
+    }
+
+    fn restart(&mut self, plugin_name: &str, _reason: &str) -> anyhow::Result<()> {
+        self.refresh_if_changed()?;
+        self.orchestration_supervisor.restart(
+            PluginKind::Orchestration,
+            &self.registry,
+            plugin_name,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -486,6 +601,8 @@ triggers: ["route me"]"#,
 kind: orchestration
 mode: daemon
 enabled: true
+entry:
+  command: sh
 triggers: ["route"]
 route_to_agent: planner"#,
         );
@@ -499,6 +616,52 @@ route_to_agent: planner"#,
 
         assert_eq!(status.state, PluginHealthState::Healthy);
         assert_eq!(status.restart_count, 0);
+    }
+
+    #[test]
+    fn daemon_plugin_without_entry_is_unhealthy() {
+        let repo_dir = TempDir::new().unwrap();
+        write_plugin(
+            repo_dir.path(),
+            "daemon.yaml",
+            r#"name: daemon-runtime
+kind: runtime
+mode: daemon
+enabled: true"#,
+        );
+
+        let runtime =
+            PluginRuntimeRegistry::load_dual_source(None, Some(repo_dir.path().to_path_buf()))
+                .unwrap();
+        let status = runtime
+            .status_for_kind(PluginKind::Runtime, "daemon-runtime")
+            .unwrap();
+
+        assert_eq!(status.state, PluginHealthState::Unhealthy);
+    }
+
+    #[test]
+    fn restart_increments_daemon_restart_count() {
+        let repo_dir = TempDir::new().unwrap();
+        write_plugin(
+            repo_dir.path(),
+            "daemon.yaml",
+            r#"name: daemon-tool
+kind: tool
+mode: daemon
+enabled: true
+entry:
+  command: sh"#,
+        );
+
+        let mut runtime =
+            PluginRuntimeRegistry::load_dual_source(None, Some(repo_dir.path().to_path_buf()))
+                .unwrap();
+        ToolSupervisorPort::restart(&mut runtime, "daemon-tool", "test restart").unwrap();
+        let status = ToolSupervisorPort::status(&runtime, "daemon-tool").unwrap();
+
+        assert_eq!(status.restart_count, 1);
+        assert_eq!(status.state, PluginHealthState::Healthy);
     }
 
     #[test]

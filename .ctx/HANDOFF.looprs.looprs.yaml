@@ -1,8 +1,52 @@
 project: looprs
 id: looprs
-updated: 2026-09-06
-items: []
+updated: 2026-09-16
+items:
+- id: uncommitted-work
+  name: uncommitted-work
+  priority: P1
+  status: open
+  title: Uncommitted changes (5 files)
+  description: |-
+    Working tree has uncommitted changes:
+    .gitignore
+    IDEAS.md
+    scripts/README.md
+    scripts/serve-site.sh
+    site/
+  files:
+  - .gitignore
+  - IDEAS.md
+  - scripts/README.md
+  - scripts/serve-site.sh
+  - site/
 log:
+- date: '20260916.084215'
+  summary: done=22 running=0 pending=12 blocked=0
+  commits:
+  - d93ab287a58c6d2ef8a519d71dbd1c0dbd2f0281
+  - 71d6fed561350a333ac0adc62da1012ffe7e148d
+  - 9054bec42f8699e65e2970144d8d46a79ae8f79a
+  - 25162d6070d62b7294b032281df01dc77455a1e8
+  - 9e1c9e7ef556ae22d4727138f3b2a8f0a71be675
+  - 08b880440127d89d22d4a0a92ccb1e4fbfc3ef19
+  - f81697bafe97b2a78cb46e3d1a5bad8805746ddc
+  - 2d6d9e0c7337cc043aefbc2beb5f46cf63a982c3
+  - c980a3ec4ba7ddb91cef593add21cf6d06e59958
+  - 30704dee4ff1bc1b22b6a477e784ced26605173c
+- date: '20260912.111735'
+  summary: done=22 running=0 pending=12 blocked=0
+  commits:
+  - a733b888dd5f881eb67e25f874c4d853e62de5ed
+  - 5a6a78927aac82c3fe710265f3233b0d683a72da
+  - 7b72a9807b549220ef87186b6a73983732c3222f
+  - f55e2215d07f6850a38ccc19e20a0261e748c758
+  - cccc366dd17dfac066e1f53d235b5552ed459242
+  - 896b3180dc75286189d1977a408af4560bb741b6
+  - 5f4c5081ac37f3166faebaf09a7ee2705b292a4f
+  - 5c6c68641260685c8e65f75ae33325fea0029469
+  - fbdce67f5f026630147ec0bf11225ead5ad006e6
+  - 3c2d7005c29d7580b98937c3a737cd843c8be166
 - date: '20260906.092820'
   summary: done=17 running=0 pending=16 blocked=0
   commits:

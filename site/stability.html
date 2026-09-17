@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stability - looprs</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <a class="brand" href="index.html"><span>loop</span>rs</a>
+      <a href="index.html">Overview</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="state-model.html">State Model</a>
+      <a href="feature-matrix.html">Feature Matrix</a>
+      <a href="crate-inventory.html">Crate Inventory</a>
+      <a href="crate-tiers.html">Crate Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a class="active" href="stability.html">Stability</a>
+    </nav>
+
+    <main class="page">
+      <h1>Stability Checklist</h1>
+      <p class="subtitle">A practical gate list for landing and maintaining reliable looprs changes.</p>
+
+      <table>
+        <thead>
+          <tr><th>Gate</th><th>Status intent</th><th>Verification command</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Formatting</td><td>Consistent Rust formatting</td><td><code>cargo fmt --all</code></td></tr>
+          <tr><td>Lint hygiene</td><td>No clippy warnings in checked scopes</td><td><code>cargo clippy --all-targets --all-features -- -D warnings</code></td></tr>
+          <tr><td>Workspace tests</td><td>Regression coverage across crates</td><td><code>cargo nextest run --workspace</code></td></tr>
+          <tr><td>Pre-push policy</td><td>Project-specific quality + protocol checks</td><td><code>cargo xtask check pre-push</code></td></tr>
+          <tr><td>Protocol drift</td><td>Tracked contract hashes stay intentional</td><td><code>taskit protocol drift --workspace .</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>Operational interpretation</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Green branch means</h3>
+          <ul>
+            <li>Formatting and linting match repository standards.</li>
+            <li>Workspace behavior is validated under nextest.</li>
+            <li>Project-specific drift and policy checks are clean.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Red branch means</h3>
+          <ul>
+            <li>Do not push additional risky changes.</li>
+            <li>Isolate failing scope before widening edits.</li>
+            <li>Recover gate parity before merge or release actions.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h2>Release discipline</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Before merge</h3>
+          <p>Keep branch green with full gate parity and conflict-free integration evidence.</p>
+        </div>
+        <div class="card">
+          <h3>Before push</h3>
+          <p>Run pre-push checks locally and ensure no unresolved OPAVS phase gate transitions.</p>
+        </div>
+      </div>
+
+      <h2>Pre-push readiness checklist</h2>
+      <ol>
+        <li>Run <code>cargo fmt --all</code>.</li>
+        <li>Run <code>cargo clippy --all-targets --all-features -- -D warnings</code>.</li>
+        <li>Run <code>cargo nextest run --workspace</code> for behavior parity.</li>
+        <li>Run <code>cargo xtask check pre-push</code> for project gates.</li>
+        <li>Confirm branch state and intended phase gates before pushing.</li>
+      </ol>
+
+      <div class="callout">
+        Stability is not just test count. It is repeatability: same branch, same inputs, same
+        outcome across local and CI-style gates.
+      </div>
+
+      <h2>Source-backed references</h2>
+      <ol>
+        <li><code>.githooks/pre-push</code> delegates directly to <code>cargo xtask check pre-push</code>.</li>
+        <li><code>README.md</code> documents the same pre-push command and live-test gate.</li>
+        <li><code>crates/looprs-cli/src/runtime/facade.rs</code> builds runtime settings from app and provider config.</li>
+      </ol>
+
+      <h2>Runtime settings snippet</h2>
+      <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs-cli/src/runtime/facade.rs#L34"><code>crates/looprs-cli/src/runtime/facade.rs#L34</code></a></p>
+      <pre><code>let runtime = RuntimeSettings {
+    defaults: app_config.defaults.clone(),
+    max_tokens_override,
+    fs_mode: app_config.agents.fs_mode,
+    max_parallel: app_config.agents.max_parallel.max(1),
+    mcp_server_url: std::env::var("LOOPRS_MCP_SERVER_URL").ok(),
+};</code></pre>
+
+      <footer>Stability here means repeatable checks and clear rollback boundaries.</footer>
+    </main>
+  </body>
+</html>

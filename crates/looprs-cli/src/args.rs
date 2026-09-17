@@ -1,17 +1,20 @@
 use anyhow::{Result, anyhow};
+use looprs::automation_protocol::MACHINE_PROTOCOL_V1;
 use std::env;
 
-// TODO(feature-idea-8): Define a versioned machine contract with stable flags, JSONL output,
-// run IDs, usage reporting, deadlines, and cancellation before Crux integration.
 #[derive(Debug, Clone)]
 pub struct CliArgs {
-    pub prompt: Option<String>, // -p/--prompt
-    pub file: Option<String>,   // -f/--file
-    pub model: Option<String>,  // -m/--model
-    pub quiet: bool,            // -q/--quiet
-    pub no_hooks: bool,         // --no-hooks
-    pub json_output: bool,      // --json
-    pub machine_log: bool,      // --machine-log
+    pub prompt: Option<String>,           // -p/--prompt
+    pub file: Option<String>,             // -f/--file
+    pub model: Option<String>,            // -m/--model
+    pub quiet: bool,                      // -q/--quiet
+    pub no_hooks: bool,                   // --no-hooks
+    pub json_output: bool,                // --json
+    pub machine_log: bool,                // --machine-log
+    pub machine_protocol: Option<String>, // --machine-protocol
+    pub run_id: Option<String>,           // --run-id
+    pub deadline_seconds: Option<u64>,    // --deadline-seconds
+    pub cancel_file: Option<String>,      // --cancel-file
 }
 
 impl CliArgs {
@@ -32,6 +35,10 @@ impl CliArgs {
             no_hooks: false,
             json_output: false,
             machine_log: false,
+            machine_protocol: None,
+            run_id: None,
+            deadline_seconds: None,
+            cancel_file: None,
         };
 
         let mut i = 0;
@@ -72,12 +79,75 @@ impl CliArgs {
                 "--machine-log" => {
                     result.machine_log = true;
                 }
+                "--machine-protocol" => {
+                    i += 1;
+                    if i >= args.len() {
+                        return Err(anyhow!("{arg} requires a value"));
+                    }
+                    result.machine_protocol = Some(args[i].clone());
+                }
+                "--run-id" => {
+                    i += 1;
+                    if i >= args.len() {
+                        return Err(anyhow!("{arg} requires a value"));
+                    }
+                    result.run_id = Some(args[i].clone());
+                }
+                "--deadline-seconds" => {
+                    i += 1;
+                    if i >= args.len() {
+                        return Err(anyhow!("{arg} requires a value"));
+                    }
+                    let parsed = args[i]
+                        .parse::<u64>()
+                        .map_err(|_| anyhow!("{arg} must be an integer number of seconds"))?;
+                    result.deadline_seconds = Some(parsed);
+                }
+                "--cancel-file" => {
+                    i += 1;
+                    if i >= args.len() {
+                        return Err(anyhow!("{arg} requires a value"));
+                    }
+                    result.cancel_file = Some(args[i].clone());
+                }
                 unknown => {
                     return Err(anyhow!("Unknown argument: {unknown}"));
                 }
             }
 
             i += 1;
+        }
+
+        if let Some(protocol) = &result.machine_protocol
+            && protocol != MACHINE_PROTOCOL_V1
+        {
+            return Err(anyhow!(
+                "Unsupported machine protocol '{protocol}', expected '{MACHINE_PROTOCOL_V1}'"
+            ));
+        }
+
+        let has_run_controls = result.run_id.is_some()
+            || result.deadline_seconds.is_some()
+            || result.cancel_file.is_some();
+        if has_run_controls && result.machine_protocol.is_none() {
+            return Err(anyhow!(
+                "--machine-protocol is required when using --run-id, --deadline-seconds, or --cancel-file"
+            ));
+        }
+
+        if result
+            .run_id
+            .as_deref()
+            .is_some_and(|run_id| run_id.trim().is_empty())
+        {
+            return Err(anyhow!("--run-id cannot be empty"));
+        }
+
+        if result
+            .deadline_seconds
+            .is_some_and(|deadline| deadline == 0)
+        {
+            return Err(anyhow!("--deadline-seconds must be greater than 0"));
         }
 
         Ok(result)
@@ -120,6 +190,10 @@ mod tests {
         assert!(!parsed.no_hooks);
         assert!(!parsed.json_output);
         assert!(!parsed.machine_log);
+        assert!(parsed.machine_protocol.is_none());
+        assert!(parsed.run_id.is_none());
+        assert!(parsed.deadline_seconds.is_none());
+        assert!(parsed.cancel_file.is_none());
     }
 
     #[test]
@@ -189,6 +263,118 @@ mod tests {
         let parsed = CliArgs::parse_from(&args(&["--machine-log"])).unwrap();
         assert!(parsed.machine_log);
         assert!(!parsed.json_output);
+    }
+
+    #[test]
+    fn parse_machine_protocol_with_run_controls() {
+        let parsed = CliArgs::parse_from(&args(&[
+            "--machine-protocol",
+            MACHINE_PROTOCOL_V1,
+            "--run-id",
+            "run-123",
+            "--deadline-seconds",
+            "30",
+            "--cancel-file",
+            "/tmp/looprs.cancel",
+        ]))
+        .unwrap();
+
+        assert_eq!(
+            parsed.machine_protocol.as_deref(),
+            Some(MACHINE_PROTOCOL_V1)
+        );
+        assert_eq!(parsed.run_id.as_deref(), Some("run-123"));
+        assert_eq!(parsed.deadline_seconds, Some(30));
+        assert_eq!(parsed.cancel_file.as_deref(), Some("/tmp/looprs.cancel"));
+    }
+
+    #[test]
+    fn parse_machine_protocol_rejects_unknown_version() {
+        let result = CliArgs::parse_from(&args(&["--machine-protocol", "v2"]));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unsupported machine protocol")
+        );
+    }
+
+    #[test]
+    fn parse_deadline_rejects_zero() {
+        let result = CliArgs::parse_from(&args(&[
+            "--machine-protocol",
+            MACHINE_PROTOCOL_V1,
+            "--deadline-seconds",
+            "0",
+        ]));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("must be greater than 0")
+        );
+    }
+
+    #[test]
+    fn run_controls_require_machine_protocol() {
+        let run_id_only = CliArgs::parse_from(&args(&["--run-id", "run-123"]));
+        assert!(run_id_only.is_err());
+        assert!(
+            run_id_only
+                .unwrap_err()
+                .to_string()
+                .contains("--machine-protocol")
+        );
+
+        let deadline_only = CliArgs::parse_from(&args(&["--deadline-seconds", "30"]));
+        assert!(deadline_only.is_err());
+        assert!(
+            deadline_only
+                .unwrap_err()
+                .to_string()
+                .contains("--machine-protocol")
+        );
+
+        let cancel_file_only = CliArgs::parse_from(&args(&["--cancel-file", "/tmp/looprs.cancel"]));
+        assert!(cancel_file_only.is_err());
+        assert!(
+            cancel_file_only
+                .unwrap_err()
+                .to_string()
+                .contains("--machine-protocol")
+        );
+    }
+
+    #[test]
+    fn run_controls_with_unknown_protocol_fail_with_protocol_error() {
+        let result =
+            CliArgs::parse_from(&args(&["--machine-protocol", "v2", "--run-id", "run-123"]));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unsupported machine protocol")
+        );
+    }
+
+    #[test]
+    fn run_controls_with_protocol_still_validate_control_values() {
+        let result = CliArgs::parse_from(&args(&[
+            "--machine-protocol",
+            MACHINE_PROTOCOL_V1,
+            "--run-id",
+            "  ",
+        ]));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("--run-id cannot be empty")
+        );
     }
 
     #[test]

@@ -26,17 +26,22 @@ use crate::errors::ToolContextError;
 
 pub use error::ToolError;
 
+#[derive(Clone)]
+/// Shared execution context for all built-in tools.
 pub struct ToolContext {
+    /// Repository-scoped working directory used as a filesystem jail root.
     pub working_dir: PathBuf,
     fs_mode: Arc<AtomicU8>,
 }
 
 impl ToolContext {
     #[allow(dead_code)]
+    /// Build a context from the process working directory and default mode.
     pub fn new() -> Result<Self, ToolContextError> {
         Self::new_with_mode(FsMode::default())
     }
 
+    /// Build a context from the process working directory and explicit mode.
     pub fn new_with_mode(mode: FsMode) -> Result<Self, ToolContextError> {
         Ok(Self {
             working_dir: env::current_dir().map_err(ToolContextError::WorkingDirUnavailable)?,
@@ -45,6 +50,7 @@ impl ToolContext {
     }
 
     #[allow(dead_code)]
+    /// Build a context with an explicit working directory.
     pub fn from_working_dir(working_dir: PathBuf, mode: FsMode) -> Self {
         Self {
             working_dir,
@@ -52,14 +58,17 @@ impl ToolContext {
         }
     }
 
+    /// Return the current filesystem mode snapshot.
     pub fn fs_mode(&self) -> FsMode {
         FsMode::from_u8(self.fs_mode.load(Ordering::Relaxed))
     }
 
+    /// Update the active filesystem mode for future tool calls.
     pub fn set_fs_mode(&self, mode: FsMode) {
         self.fs_mode.store(mode.to_u8(), Ordering::Relaxed);
     }
 
+    /// Return a shared mode handle for components that coordinate mode changes.
     pub fn fs_mode_handle(&self) -> Arc<AtomicU8> {
         self.fs_mode.clone()
     }
@@ -104,6 +113,7 @@ pub(crate) struct ToolArgs<'a> {
 }
 
 impl<'a> ToolArgs<'a> {
+    /// Wrap raw JSON tool arguments.
     pub fn new(args: &'a Value) -> Self {
         Self { args }
     }
@@ -123,6 +133,7 @@ impl<'a> ToolArgs<'a> {
             .ok_or_else(|| ToolError::MissingParameter(key.to_string()))
     }
 
+    /// Read a required string argument.
     pub fn get_str(&self, key: &str) -> Result<&str, ToolError> {
         let value = self.get_value(key)?;
         value
@@ -153,6 +164,7 @@ impl<'a> ToolArgs<'a> {
         }
     }
 
+    /// Read an optional string argument.
     pub fn get_str_optional(&self, key: &str) -> Result<Option<&str>, ToolError> {
         // Can't use get_optional due to lifetime constraints on as_str()
         let map = self.object()?;
@@ -170,6 +182,7 @@ impl<'a> ToolArgs<'a> {
         }
     }
 
+    /// Read an optional boolean argument with a default fallback.
     pub fn get_bool(&self, key: &str, default: bool) -> bool {
         let map = match self.args.as_object() {
             Some(map) => map,
@@ -181,12 +194,14 @@ impl<'a> ToolArgs<'a> {
         }
     }
 
+    /// Read an optional `u64` argument.
     pub fn get_u64(&self, key: &str) -> Result<Option<u64>, ToolError> {
         self.get_optional(key, Value::as_u64, "u64")
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Built-in tool identifiers exposed to providers.
 pub enum Tool {
     Read,
     Write,
@@ -209,6 +224,7 @@ impl Tool {
     ];
 
     #[allow(dead_code)]
+    /// Return the canonical wire name for this tool.
     pub fn name(&self) -> &'static str {
         match self {
             Tool::Read => "read",
@@ -221,6 +237,7 @@ impl Tool {
         }
     }
 
+    /// Parse a tool from its wire name.
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "read" => Some(Tool::Read),
@@ -234,6 +251,7 @@ impl Tool {
         }
     }
 
+    /// Return this tool's JSON schema and prompt description.
     pub fn definition(&self) -> ToolDefinition {
         match self {
             Tool::Read => ToolDefinition {

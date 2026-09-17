@@ -3,11 +3,6 @@
 //! Each function asserts the semantic contract a trait promises. Call these
 //! from any adapter's `#[cfg(test)]` module to prove the impl is correct.
 
-// IDEA(M2): run assert_inference_provider_contract() against all 7 provider
-// implementations (anthropic, openai, gemini, local, anthropic-sdk, openai-sdk, baml).
-// The function skeleton exists in this file but only covers MessageBroker and SessionStore.
-// Add a parallel suite for InferenceProvider (single-turn, tool-call, multi-turn).
-
 use crate::observation::Observation;
 use crate::ports::message_broker::{Message, MessageBroker};
 use crate::ports::model_catalog::RemoteModelCatalogPort;
@@ -250,8 +245,8 @@ pub async fn assert_remote_model_catalog_contract(catalog: &dyn RemoteModelCatal
 /// Assert the full InferenceProvider live contract.
 ///
 /// Gated behind `LOOPRS_RUN_LIVE_LLM_TESTS=1` — requires a real API key.
-/// Tests a single-turn round-trip: send a minimal text request, assert a
-/// non-empty assistant text response is returned.
+/// Runs the shared provider matrix: single-turn text, multi-turn history, and
+/// a tool-use/result round-trip when the provider advertises tool support.
 ///
 /// Call from each provider's test module:
 /// ```ignore
@@ -266,9 +261,9 @@ pub async fn assert_remote_model_catalog_contract(catalog: &dyn RemoteModelCatal
 pub async fn assert_inference_provider_live_contract(
     provider: &dyn crate::ports::InferenceProvider,
 ) {
-    use crate::api::{ContentBlock, Message};
+    use crate::api::{ContentBlock, Message, ToolDefinition};
 
-    let req = crate::ports::InferenceRequest {
+    let single_turn = crate::ports::InferenceRequest {
         model: provider.model().clone(),
         messages: vec![Message::user("Reply with the single word: pong")],
         tools: vec![],
@@ -276,38 +271,211 @@ pub async fn assert_inference_provider_live_contract(
         temperature: Some(0.0),
         system: String::new(),
     };
-
-    let resp = provider
-        .infer(&req)
+    let response = provider
+        .infer(&single_turn)
         .await
-        .expect("live contract: infer() must not error on a valid request");
+        .expect("live contract single-turn inference must succeed");
+    assert_valid_inference_response(&response, "single-turn");
 
-    assert!(
-        !resp.content.is_empty(),
-        "live contract: response must contain at least one content block"
-    );
-    let has_text = resp
+    let multi_turn = crate::ports::InferenceRequest {
+        model: provider.model().clone(),
+        messages: vec![
+            Message::user("What is the capital of France?"),
+            Message::assistant(vec![ContentBlock::Text {
+                text: "Paris".to_string(),
+            }]),
+            Message::user("Which country is that city in?"),
+        ],
+        tools: vec![],
+        max_tokens: 64,
+        temperature: Some(0.0),
+        system: String::new(),
+    };
+    let response = provider
+        .infer(&multi_turn)
+        .await
+        .expect("live contract multi-turn inference must succeed");
+    assert_valid_inference_response(&response, "multi-turn");
+
+    if !provider.supports_tool_use() {
+        return;
+    }
+
+    let tool_request = crate::ports::InferenceRequest {
+        model: provider.model().clone(),
+        messages: vec![Message::user(
+            "Use get_weather to get the weather in Paris. Do not answer without calling it.",
+        )],
+        tools: vec![ToolDefinition {
+            name: "get_weather".to_string(),
+            description: "Get the current weather for a city".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {"city": {"type": "string"}},
+                "required": ["city"]
+            }),
+        }],
+        max_tokens: 128,
+        temperature: Some(0.0),
+        system: "Always use an available tool when asked.".to_string(),
+    };
+    let tool_response = provider
+        .infer(&tool_request)
+        .await
+        .expect("live contract tool-use inference must succeed");
+    assert_valid_usage(&tool_response, "tool-use");
+
+    let tool_ids = tool_response
         .content
         .iter()
-        .any(|b| matches!(b, ContentBlock::Text { text } if !text.is_empty()));
+        .filter_map(|block| match block {
+            ContentBlock::ToolUse { id, .. } => Some(id.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
     assert!(
-        has_text,
-        "live contract: response must contain non-empty assistant text"
+        !tool_ids.is_empty(),
+        "live contract tool-use response must contain a tool call"
+    );
+
+    let tool_results = tool_ids
+        .into_iter()
+        .map(|tool_use_id| ContentBlock::ToolResult {
+            tool_use_id,
+            content: "sunny".to_string(),
+        })
+        .collect();
+    let follow_up = crate::ports::InferenceRequest {
+        model: provider.model().clone(),
+        messages: vec![
+            tool_request.messages[0].clone(),
+            Message::assistant(tool_response.content),
+            Message::tool_results(tool_results),
+        ],
+        tools: tool_request.tools,
+        max_tokens: 128,
+        temperature: Some(0.0),
+        system: tool_request.system,
+    };
+    let response = provider
+        .infer(&follow_up)
+        .await
+        .expect("live contract tool-result follow-up must succeed");
+    assert_valid_inference_response(&response, "tool-result follow-up");
+}
+
+fn assert_valid_inference_response(response: &crate::ports::InferenceResponse, scenario: &str) {
+    use crate::api::ContentBlock;
+
+    assert!(
+        response
+            .content
+            .iter()
+            .any(|block| matches!(block, ContentBlock::Text { text } if !text.is_empty())),
+        "live contract {scenario} response must contain non-empty assistant text"
+    );
+    assert_valid_usage(response, scenario);
+}
+
+fn assert_valid_usage(response: &crate::ports::InferenceResponse, scenario: &str) {
+    assert!(
+        response.usage.input_tokens > 0,
+        "live contract {scenario} usage.input_tokens must be > 0"
     );
     assert!(
-        resp.usage.input_tokens > 0,
-        "live contract: usage.input_tokens must be > 0"
-    );
-    assert!(
-        resp.usage.output_tokens > 0,
-        "live contract: usage.output_tokens must be > 0"
+        response.usage.output_tokens > 0,
+        "live contract {scenario} usage.output_tokens must be > 0"
     );
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::ContentBlock;
     use crate::ports::model_catalog::{CatalogSource, RemoteCatalogError, RemoteModel};
+    use crate::ports::{InferenceProvider, InferenceRequest, InferenceResponse, Usage};
+    use crate::types::{ModelId, ToolId, ToolName};
+    use std::collections::VecDeque;
+    use std::sync::Mutex;
+
+    struct ScriptedInferenceProvider {
+        model: ModelId,
+        requests: Mutex<Vec<InferenceRequest>>,
+        responses: Mutex<VecDeque<InferenceResponse>>,
+        supports_tools: bool,
+    }
+
+    impl ScriptedInferenceProvider {
+        fn new(supports_tools: bool) -> Self {
+            let mut responses =
+                VecDeque::from([text_response("pong"), text_response("Paris is in France")]);
+            if supports_tools {
+                responses.push_back(InferenceResponse {
+                    content: vec![ContentBlock::ToolUse {
+                        id: ToolId::new("call-1"),
+                        name: ToolName::new("get_weather"),
+                        input: serde_json::json!({"city": "Paris"}),
+                    }],
+                    stop_reason: "tool_use".to_string(),
+                    usage: Usage {
+                        input_tokens: 3,
+                        output_tokens: 2,
+                    },
+                });
+                responses.push_back(text_response("sunny"));
+            }
+            Self {
+                model: ModelId::new("contract-model"),
+                requests: Mutex::new(Vec::new()),
+                responses: Mutex::new(responses),
+                supports_tools,
+            }
+        }
+    }
+
+    fn text_response(text: &str) -> InferenceResponse {
+        InferenceResponse {
+            content: vec![ContentBlock::Text {
+                text: text.to_string(),
+            }],
+            stop_reason: "end_turn".to_string(),
+            usage: Usage {
+                input_tokens: 3,
+                output_tokens: 2,
+            },
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for ScriptedInferenceProvider {
+        async fn infer(
+            &self,
+            req: &InferenceRequest,
+        ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
+            self.requests.lock().unwrap().push(req.clone());
+            self.responses
+                .lock()
+                .unwrap()
+                .pop_front()
+                .ok_or_else(|| "contract made an unexpected inference call".into())
+        }
+
+        fn name(&self) -> &str {
+            "scripted"
+        }
+
+        fn model(&self) -> &ModelId {
+            &self.model
+        }
+
+        fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
+        }
+
+        fn supports_tool_use(&self) -> bool {
+            self.supports_tools
+        }
+    }
 
     /// Reference in-memory ObservationStore used to validate the contract
     /// suite itself. Also serves as a reusable test double for other tests.
@@ -377,5 +545,35 @@ mod tests {
     #[tokio::test]
     async fn remote_model_catalog_contract_holds_for_reference_fake() {
         assert_remote_model_catalog_contract(&FakeCatalog).await;
+    }
+
+    #[tokio::test]
+    async fn inference_live_contract_exercises_shared_scenario_matrix() {
+        let provider = ScriptedInferenceProvider::new(true);
+
+        assert_inference_provider_live_contract(&provider).await;
+
+        let requests = provider.requests.lock().unwrap();
+        assert_eq!(requests.len(), 4, "all inference scenarios must run");
+        assert_eq!(requests[0].messages.len(), 1, "single-turn scenario");
+        assert_eq!(requests[1].messages.len(), 3, "multi-turn scenario");
+        assert_eq!(requests[2].tools.len(), 1, "tool-use scenario");
+        assert!(
+            requests[3]
+                .messages
+                .iter()
+                .flat_map(|message| &message.content)
+                .any(|block| matches!(block, ContentBlock::ToolResult { .. })),
+            "tool result must round-trip into the follow-up request"
+        );
+    }
+
+    #[tokio::test]
+    async fn inference_live_contract_skips_tools_when_unsupported() {
+        let provider = ScriptedInferenceProvider::new(false);
+
+        assert_inference_provider_live_contract(&provider).await;
+
+        assert_eq!(provider.requests.lock().unwrap().len(), 2);
     }
 }

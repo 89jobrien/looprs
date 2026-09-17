@@ -73,3 +73,6 @@ third_party/**/target/
 # handoff-end
 .worktrees/
 .ctx/opavs/phase
+local/
+patches/
+IDEAS.md

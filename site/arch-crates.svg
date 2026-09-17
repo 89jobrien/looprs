@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560" role="img" aria-label="looprs crate ownership rings">
+  <defs>
+    <style>
+      .ring1 { fill: #132737; stroke: #2b3948; stroke-width: 2; }
+      .ring2 { fill: #1a2230; stroke: #2b3948; stroke-width: 2; }
+      .ring3 { fill: #231f2d; stroke: #2b3948; stroke-width: 2; }
+      .node { fill: #18212b; stroke: #48d3b3; stroke-width: 1.5; rx: 10; }
+      .title { fill: #ecf3fb; font: 600 18px 'IBM Plex Sans', sans-serif; }
+      .label { fill: #ecf3fb; font: 600 14px 'IBM Plex Sans', sans-serif; }
+      .muted { fill: #9eb0c2; font: 13px 'IBM Plex Sans', sans-serif; }
+      .edge { stroke: #48d3b3; stroke-width: 1.5; }
+    </style>
+  </defs>
+
+  <rect width="980" height="560" fill="#0f141a" />
+  <circle cx="490" cy="280" r="220" class="ring3" />
+  <circle cx="490" cy="280" r="160" class="ring2" />
+  <circle cx="490" cy="280" r="98" class="ring1" />
+
+  <text x="400" y="42" class="title">looprs Workspace Rings</text>
+
+  <rect x="425" y="238" width="130" height="84" class="node" />
+  <text x="448" y="267" class="label">looprs-core</text>
+  <text x="440" y="289" class="muted">types - ports - API</text>
+
+  <rect x="360" y="140" width="130" height="76" class="node" />
+  <text x="396" y="168" class="label">looprs</text>
+  <text x="378" y="190" class="muted">runtime engine</text>
+
+  <rect x="520" y="140" width="130" height="76" class="node" />
+  <text x="543" y="168" class="label">looprs-macros</text>
+  <text x="549" y="190" class="muted">derive helpers</text>
+
+  <rect x="200" y="300" width="150" height="76" class="node" />
+  <text x="238" y="328" class="label">looprs-cli</text>
+  <text x="224" y="350" class="muted">REPL - startup</text>
+
+  <rect x="640" y="300" width="150" height="76" class="node" />
+  <text x="675" y="328" class="label">looprs-tui</text>
+  <text x="670" y="350" class="muted">provider UI</text>
+
+  <rect x="410" y="420" width="160" height="76" class="node" />
+  <text x="464" y="448" class="label">xtask</text>
+  <text x="430" y="470" class="muted">checks - automation</text>
+
+  <line x1="490" y1="238" x2="425" y2="216" class="edge" />
+  <line x1="490" y1="238" x2="555" y2="216" class="edge" />
+  <line x1="360" y1="178" x2="260" y2="300" class="edge" />
+  <line x1="490" y1="216" x2="275" y2="300" class="edge" />
+  <line x1="620" y1="178" x2="725" y2="300" class="edge" />
+  <line x1="490" y1="216" x2="715" y2="300" class="edge" />
+  <line x1="490" y1="322" x2="490" y2="420" class="edge" />
+
+  <text x="60" y="510" class="muted">Inner ring: shared API and ports - Middle ring: runtime implementation - Outer ring: UI surfaces and automation tooling</text>
+</svg>

@@ -35,6 +35,8 @@ pub async fn bootstrap_runtime(
         defaults: app_config.defaults.clone(),
         max_tokens_override,
         fs_mode: app_config.agents.fs_mode,
+        max_parallel: app_config.agents.max_parallel.max(1),
+        mcp_server_url: std::env::var("LOOPRS_MCP_SERVER_URL").ok(),
     };
     let session_logger = looprs::adapters::default_session_store();
     let agent = Agent::new_with_runtime(

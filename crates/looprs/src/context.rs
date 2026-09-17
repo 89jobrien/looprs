@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// Project name doob todos are queried under. Matches the `--project`
 /// scoping convention used across this workspace's doob usage.
 const DOOB_PROJECT: &str = "looprs";
-const DOOB_TODO_LIMIT: usize = 5;
+const DOOB_ITEM_LIMIT: usize = 5;
 
 /// Context available at session start
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,7 +18,7 @@ impl SessionContext {
     pub fn collect() -> Self {
         SessionContext {
             git: git_info::collect(),
-            doob_status: doob::collect(DOOB_PROJECT, DOOB_TODO_LIMIT),
+            doob_status: doob::collect(DOOB_PROJECT, DOOB_ITEM_LIMIT),
         }
     }
 

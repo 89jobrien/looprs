@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="380" viewBox="0 0 980 380" role="img" aria-label="looprs request flow">
+  <defs>
+    <style>
+      .box { fill: #18212b; stroke: #2b3948; stroke-width: 2; rx: 10; }
+      .title { fill: #ecf3fb; font: 600 16px 'IBM Plex Sans', sans-serif; }
+      .text { fill: #9eb0c2; font: 13px 'IBM Plex Sans', sans-serif; }
+      .edge { stroke: #48d3b3; stroke-width: 2; marker-end: url(#arrow); }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#48d3b3" />
+    </marker>
+  </defs>
+
+  <rect x="20" y="30" width="170" height="84" class="box" />
+  <text x="38" y="58" class="title">Prompt Input</text>
+  <text x="38" y="82" class="text">CLI or TUI message</text>
+  <text x="38" y="100" class="text">@file resolution</text>
+
+  <rect x="220" y="30" width="190" height="84" class="box" />
+  <text x="238" y="58" class="title">Policy Layer</text>
+  <text x="238" y="82" class="text">rules + fs mode</text>
+  <text x="238" y="100" class="text">hook metadata injection</text>
+
+  <rect x="440" y="30" width="190" height="84" class="box" />
+  <text x="458" y="58" class="title">Provider Inference</text>
+  <text x="458" y="82" class="text">model + tools schema</text>
+  <text x="458" y="100" class="text">assistant blocks</text>
+
+  <rect x="660" y="30" width="160" height="84" class="box" />
+  <text x="678" y="58" class="title">Tool Loop</text>
+  <text x="678" y="82" class="text">read/edit/glob</text>
+  <text x="678" y="100" class="text">nu/bash + results</text>
+
+  <rect x="840" y="30" width="120" height="84" class="box" />
+  <text x="858" y="58" class="title">Output</text>
+  <text x="858" y="82" class="text">response</text>
+
+  <line x1="190" y1="72" x2="220" y2="72" class="edge" />
+  <line x1="410" y1="72" x2="440" y2="72" class="edge" />
+  <line x1="630" y1="72" x2="660" y2="72" class="edge" />
+  <line x1="820" y1="72" x2="840" y2="72" class="edge" />
+
+  <rect x="120" y="190" width="740" height="140" class="box" />
+  <text x="150" y="220" class="title">Extension and Observability Plane</text>
+  <text x="150" y="248" class="text">.looprs/hooks, .looprs/commands, .looprs/skills, .looprs/agents, .looprs/rules</text>
+  <text x="150" y="270" class="text">session store + JSONL traces/events + observation capture</text>
+  <text x="150" y="292" class="text">delegation metadata and runtime settings influence every turn</text>
+
+  <line x1="300" y1="114" x2="300" y2="190" class="edge" />
+  <line x1="540" y1="114" x2="540" y2="190" class="edge" />
+  <line x1="740" y1="114" x2="740" y2="190" class="edge" />
+</svg>
