@@ -7,8 +7,93 @@ use crate::observation::Observation;
 use crate::ports::message_broker::{Message, MessageBroker};
 use crate::ports::model_catalog::RemoteModelCatalogPort;
 use crate::ports::observation_store::ObservationStore;
+use crate::ports::plugin_runtime::{
+    PluginHealthState, PluginKind, PluginSupervisorError, PluginSupervisorPort,
+};
 use crate::ports::session_store::{SessionEvent, SessionStore};
 use crate::ports::user_output::UserOutput;
+
+// ── PluginSupervisorPort ────────────────────────────────────────────────
+
+/// Assert that a managed daemon satisfies the shared supervision contract.
+///
+/// The same contract applies to tool, runtime, and orchestration plugins:
+/// status reports a live process, probe preserves health, restart replaces the
+/// process and increments its bounded counter, and shutdown is observable.
+pub fn assert_plugin_supervisor_contract(
+    supervisor: &mut dyn PluginSupervisorPort,
+    kind: PluginKind,
+    plugin_name: &str,
+) {
+    let initial = supervisor
+        .status(kind, plugin_name)
+        .expect("managed daemon status must be available");
+    assert_eq!(initial.kind, kind);
+    assert_eq!(initial.plugin_name, plugin_name);
+    assert_eq!(initial.state, PluginHealthState::Healthy);
+    assert!(initial.pid.is_some(), "healthy daemon must expose its pid");
+
+    let probed = supervisor
+        .probe(kind, plugin_name)
+        .expect("managed daemon probe must succeed");
+    assert_eq!(probed.state, PluginHealthState::Healthy);
+
+    supervisor
+        .restart(kind, plugin_name, "conformance restart")
+        .expect("managed daemon restart must succeed");
+    let restarted = supervisor
+        .status(kind, plugin_name)
+        .expect("restarted daemon status must be available");
+    assert_eq!(restarted.restart_count, initial.restart_count + 1);
+    assert_eq!(
+        restarted.last_restart_reason.as_deref(),
+        Some("conformance restart")
+    );
+    assert_ne!(
+        restarted.pid, initial.pid,
+        "restart must replace the process"
+    );
+
+    supervisor
+        .shutdown(kind, plugin_name)
+        .expect("managed daemon shutdown must succeed");
+    let stopped = supervisor
+        .status(kind, plugin_name)
+        .expect("stopped daemon status must remain observable");
+    assert_eq!(stopped.state, PluginHealthState::Stopped);
+    assert!(stopped.pid.is_none());
+}
+
+/// Assert shared unknown, one-shot, and disabled supervision errors.
+pub fn assert_plugin_supervisor_error_contract(
+    supervisor: &mut dyn PluginSupervisorPort,
+    kind: PluginKind,
+    one_shot_name: &str,
+    disabled_name: &str,
+) {
+    let unknown = supervisor
+        .restart(kind, "missing-conformance-plugin", "conformance")
+        .expect_err("unknown plugin restart must fail");
+    assert!(matches!(
+        unknown,
+        PluginSupervisorError::UnknownPlugin { .. }
+    ));
+
+    let one_shot = supervisor
+        .restart(kind, one_shot_name, "conformance")
+        .expect_err("one-shot plugin restart must fail");
+    assert!(matches!(one_shot, PluginSupervisorError::NotDaemon { .. }));
+
+    let disabled = supervisor
+        .restart(kind, disabled_name, "conformance")
+        .expect_err("disabled plugin restart must fail");
+    assert!(matches!(disabled, PluginSupervisorError::Disabled { .. }));
+    let disabled_status = supervisor
+        .status(kind, disabled_name)
+        .expect("disabled daemon status must remain observable");
+    assert_eq!(disabled_status.state, PluginHealthState::Disabled);
+    assert!(disabled_status.pid.is_none());
+}
 
 // ── MessageBroker ───────────────────────────────────────────────────────
 

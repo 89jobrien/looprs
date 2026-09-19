@@ -3,7 +3,7 @@ kind: orchestration
 description: Route health-gate and baseline regression prompts to taskit.
 enabled: true
 required: false
-mode: daemon
+mode: one_shot
 triggers:
   - "taskit health"
   - "--gate"
