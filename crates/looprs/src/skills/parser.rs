@@ -49,7 +49,7 @@ impl SkillDefinition {
     }
 }
 
-/// Parse SKILL.md file with YAML frontmatter  
+/// Parse a `SKILL.md` file with YAML frontmatter.
 pub fn parse_skill_file(path: &Path, content: &str) -> Result<super::Skill> {
     let after_opening = content
         .strip_prefix("---\n")
@@ -72,7 +72,32 @@ pub fn parse_skill_file(path: &Path, content: &str) -> Result<super::Skill> {
     frontmatter.into_skill(path, Some(body))
 }
 
-/// Parse a repository YAML skill definition.
+/// Parse an inline YAML skill definition.
+///
+/// The schema requires non-empty `name`, `triggers`, and `content` fields.
+/// `triggers` must be a YAML sequence containing only non-empty strings;
+/// `description` is optional. Scalar types are validated by `serde_yaml`, then
+/// strings are trimmed and semantic emptiness is rejected.
+///
+/// ```
+/// use std::path::Path;
+/// use looprs::skills::parser::parse_yaml_skill;
+///
+/// let yaml = r#"
+/// name: rust-review
+/// description: Review Rust changes
+/// triggers: ["review rust", "cargo clippy"]
+/// content: |
+///   Check correctness before style.
+/// "#;
+/// let skill = parse_yaml_skill(Path::new("rust-review.yaml"), yaml)?;
+/// assert_eq!(skill.name, "rust-review");
+/// assert_eq!(skill.triggers.len(), 2);
+///
+/// let invalid = "name: rust-review\ntriggers: []\ncontent: review\n";
+/// assert!(parse_yaml_skill(Path::new("invalid.yaml"), invalid).is_err());
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub fn parse_yaml_skill(path: &Path, content: &str) -> Result<super::Skill> {
     let skill: SkillDefinition =
         serde_yaml::from_str(content).context("Failed to parse YAML skill")?;

@@ -9,6 +9,12 @@ use super::discovery::find_skills_in_dir;
 
 impl SkillRegistry {
     /// Load canonical nested `SKILL.md` files and root YAML skill definitions.
+    ///
+    /// Nested Markdown skills are loaded first, followed by lexically sorted
+    /// root-level `.yaml` and `.yml` definitions. A later definition with the
+    /// same `name` replaces the earlier one, so root YAML overrides nested
+    /// Markdown within one directory. Invalid individual definitions are
+    /// reported to stderr and skipped; directory I/O failures are returned.
     // qual:allow(iosp) reason: "I/O boundary — loads skill files from directory"
     pub fn load_from_directory(&mut self, dir: &Path) -> Result<usize> {
         if !dir.exists() {
@@ -56,7 +62,37 @@ impl SkillRegistry {
         Ok(count)
     }
 
-    /// Load skills from two directories with precedence (repo overrides user)
+    /// Load skills from two directories with repo-over-user precedence.
+    ///
+    /// Each directory uses [`SkillRegistry::load_from_directory`] validation
+    /// and within-directory ordering. The user directory is loaded first and
+    /// the repository directory second, so a valid repository skill replaces a
+    /// user skill with the same `name`. Missing directories are ignored, while
+    /// an existing path that cannot be read as a directory returns an error.
+    ///
+    /// ```no_run
+    /// use std::{fs, path::Path};
+    /// use looprs::SkillRegistry;
+    ///
+    /// let user = Path::new("user-skills");
+    /// let repo = Path::new("repo-skills");
+    /// fs::create_dir_all(user)?;
+    /// fs::create_dir_all(repo)?;
+    /// fs::write(
+    ///     user.join("review.yaml"),
+    ///     "name: review\ntriggers: [review]\ncontent: User policy\n",
+    /// )?;
+    /// fs::write(
+    ///     repo.join("review.yaml"),
+    ///     "name: review\ntriggers: [review]\ncontent: Repository policy\n",
+    /// )?;
+    ///
+    /// let mut registry = SkillRegistry::new();
+    /// registry.load_with_precedence(user, repo)?;
+    /// assert_eq!(registry.get("review").map(|skill| skill.content.as_str()),
+    ///            Some("Repository policy"));
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
     pub fn load_with_precedence(&mut self, user_dir: &Path, repo_dir: &Path) -> Result<usize> {
         // Load user skills first (if directory exists)
         if user_dir.exists() {
