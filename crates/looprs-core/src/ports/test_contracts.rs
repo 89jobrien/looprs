@@ -395,6 +395,7 @@ mod tests {
     use crate::ports::model_catalog::{CatalogSource, RemoteCatalogError, RemoteModel};
     use crate::ports::{InferenceProvider, InferenceRequest, InferenceResponse, Usage};
     use crate::types::{ModelId, ToolId, ToolName};
+    use futures::StreamExt;
     use std::collections::VecDeque;
     use std::sync::Mutex;
 
@@ -403,6 +404,32 @@ mod tests {
         requests: Mutex<Vec<InferenceRequest>>,
         responses: Mutex<VecDeque<InferenceResponse>>,
         supports_tools: bool,
+    }
+
+    struct FailingInferenceProvider {
+        model: ModelId,
+    }
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for FailingInferenceProvider {
+        async fn infer(
+            &self,
+            _req: &InferenceRequest,
+        ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
+            Err("scripted inference failure".into())
+        }
+
+        fn name(&self) -> &str {
+            "failing-scripted"
+        }
+
+        fn model(&self) -> &ModelId {
+            &self.model
+        }
+
+        fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
+        }
     }
 
     impl ScriptedInferenceProvider {
@@ -575,5 +602,64 @@ mod tests {
         assert_inference_provider_live_contract(&provider).await;
 
         assert_eq!(provider.requests.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn default_stream_emits_typed_delta_and_authoritative_final_response() {
+        let provider = ScriptedInferenceProvider::new(false);
+        let request = InferenceRequest {
+            model: provider.model().clone(),
+            messages: vec![crate::api::Message::user("stream")],
+            tools: Vec::new(),
+            max_tokens: 32,
+            temperature: Some(0.0),
+            system: "stream".to_string(),
+        };
+
+        let events = provider
+            .infer_stream(&request)
+            .await
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(provider.requests.lock().unwrap().len(), 1);
+        assert!(matches!(
+            events.first(),
+            Some(Ok(crate::ports::InferenceStreamEvent::Delta(
+                crate::ports::InferenceDelta::Text(text)
+            ))) if text == "pong"
+        ));
+        assert!(matches!(
+            events.last(),
+            Some(Ok(crate::ports::InferenceStreamEvent::Final(response)))
+                if response.usage.input_tokens == 3 && response.usage.output_tokens == 2
+        ));
+    }
+
+    #[tokio::test]
+    async fn default_stream_preserves_inference_errors_without_a_final_response() {
+        let provider = FailingInferenceProvider {
+            model: ModelId::new("failing-model"),
+        };
+        let request = InferenceRequest {
+            model: provider.model().clone(),
+            messages: vec![crate::api::Message::user("stream")],
+            tools: Vec::new(),
+            max_tokens: 32,
+            temperature: None,
+            system: String::new(),
+        };
+
+        let events = provider
+            .infer_stream(&request)
+            .await
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].as_ref().unwrap_err().to_string(),
+            "scripted inference failure"
+        );
     }
 }

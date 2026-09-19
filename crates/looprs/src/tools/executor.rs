@@ -6,16 +6,33 @@ use crate::tools::{ToolContext, ToolError, execute_tool};
 ///
 /// Abstracts the free `execute_tool` function so the Agent can be tested
 /// with a stub executor instead of a real subprocess/filesystem backend.
+#[async_trait::async_trait]
 pub trait ToolExecutor: Send + Sync {
-    fn execute(&self, name: &str, args: &Value, ctx: &ToolContext) -> Result<String, ToolError>;
+    async fn execute(
+        &self,
+        name: &str,
+        args: &Value,
+        ctx: &ToolContext,
+    ) -> Result<String, ToolError>;
 }
 
 /// Production adapter: delegates to `tools::execute_tool`.
 pub struct DefaultToolExecutor;
 
+#[async_trait::async_trait]
 impl ToolExecutor for DefaultToolExecutor {
-    fn execute(&self, name: &str, args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
-        execute_tool(name, args, ctx)
+    async fn execute(
+        &self,
+        name: &str,
+        args: &Value,
+        ctx: &ToolContext,
+    ) -> Result<String, ToolError> {
+        let name = name.to_string();
+        let args = args.clone();
+        let ctx = ctx.clone();
+        tokio::task::spawn_blocking(move || execute_tool(&name, &args, &ctx))
+            .await
+            .map_err(|error| ToolError::CommandFailed(error.to_string()))?
     }
 }
 
@@ -35,8 +52,14 @@ impl Default for StubToolExecutor {
 }
 
 #[cfg(test)]
+#[async_trait::async_trait]
 impl ToolExecutor for StubToolExecutor {
-    fn execute(&self, _name: &str, _args: &Value, _ctx: &ToolContext) -> Result<String, ToolError> {
+    async fn execute(
+        &self,
+        _name: &str,
+        _args: &Value,
+        _ctx: &ToolContext,
+    ) -> Result<String, ToolError> {
         Ok(self.response.clone())
     }
 }
@@ -50,12 +73,14 @@ impl ToolExecutor for StubToolExecutor {
 ///
 /// Call from each impl's `#[cfg(test)]` module.
 #[cfg(test)]
-pub fn assert_tool_executor_contract(executor: &dyn ToolExecutor, ctx: &ToolContext) {
-    let result = executor.execute(
-        "definitely_not_a_real_tool_xyz",
-        &serde_json::json!({}),
-        ctx,
-    );
+pub async fn assert_tool_executor_contract(executor: &dyn ToolExecutor, ctx: &ToolContext) {
+    let result = executor
+        .execute(
+            "definitely_not_a_real_tool_xyz",
+            &serde_json::json!({}),
+            ctx,
+        )
+        .await;
     match result {
         Err(ToolError::UnknownTool(name)) => {
             assert_eq!(name, "definitely_not_a_real_tool_xyz");
@@ -63,7 +88,9 @@ pub fn assert_tool_executor_contract(executor: &dyn ToolExecutor, ctx: &ToolCont
         other => panic!("unknown tool must yield Err(ToolError::UnknownTool), got {other:?}"),
     }
 
-    let _ = executor.execute("read", &serde_json::json!({"weird": [1, 2, 3]}), ctx);
+    let _ = executor
+        .execute("read", &serde_json::json!({"weird": [1, 2, 3]}), ctx)
+        .await;
 }
 
 #[cfg(test)]
@@ -75,22 +102,23 @@ mod executor_tests {
         ToolContext::from_working_dir(std::env::current_dir().unwrap(), FsMode::Write)
     }
 
-    #[test]
-    fn default_executor_satisfies_contract() {
-        assert_tool_executor_contract(&DefaultToolExecutor, &test_ctx());
+    #[tokio::test]
+    async fn default_executor_satisfies_contract() {
+        assert_tool_executor_contract(&DefaultToolExecutor, &test_ctx()).await;
     }
 
     /// StubToolExecutor is a canned-response double, not a dispatcher: it
     /// deliberately does NOT satisfy clause 1 of the port contract (unknown
     /// tool → UnknownTool), so only its own documented behaviour is asserted.
-    #[test]
-    fn stub_executor_returns_response_verbatim() {
+    #[tokio::test]
+    async fn stub_executor_returns_response_verbatim() {
         let stub = StubToolExecutor {
             response: "canned".to_string(),
         };
 
         let out = stub
             .execute("anything", &serde_json::json!({"x": 1}), &test_ctx())
+            .await
             .expect("stub must always succeed");
         assert_eq!(out, "canned");
     }

@@ -3,6 +3,7 @@ use async_openai::config::OpenAIConfig;
 use futures::{StreamExt, stream};
 use serde_json::{Value, json};
 
+use super::streaming::OpenAiStreamState;
 use crate::api::ContentBlock;
 use crate::errors::ProviderError;
 use crate::types::ModelId;
@@ -77,6 +78,7 @@ impl OpenAISdkProvider {
         })
     }
 
+    #[cfg(test)]
     fn extract_stream_text(payload: &Value) -> Option<String> {
         let choices = payload.get("choices")?.as_array()?;
         let first = choices.first()?;
@@ -254,6 +256,7 @@ impl LLMProvider for OpenAISdkProvider {
             "tools": tools,
             "tool_choice": if tools.is_empty() { "none" } else { "auto" },
             "stream": true,
+            "stream_options": {"include_usage": true},
         });
 
         if uses_completion_tokens {
@@ -287,16 +290,36 @@ impl LLMProvider for OpenAISdkProvider {
             }
         };
 
-        let text_stream = response_stream.flat_map(|item| {
-            let maybe_text: Option<Result<String, Box<dyn std::error::Error + Send + Sync>>> =
-                match item {
-                    Ok(payload) => Self::extract_stream_text(&payload).map(Ok),
-                    Err(e) => Some(Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)),
+        let output = async_stream::stream! {
+            let mut response_stream = response_stream;
+            let mut state = OpenAiStreamState::default();
+            while let Some(item) = response_stream.next().await {
+                let payload = match item {
+                    Ok(payload) => payload,
+                    Err(error) => {
+                        yield Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>);
+                        return;
+                    }
                 };
-            stream::iter(maybe_text)
-        });
+                match state.ingest(&payload) {
+                    Ok(events) => {
+                        for event in events {
+                            yield Ok(event);
+                        }
+                    }
+                    Err(error) => {
+                        yield Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>);
+                        return;
+                    }
+                }
+            }
+            match state.finish() {
+                Ok(response) => yield Ok(looprs_core::ports::InferenceStreamEvent::Final(response)),
+                Err(error) => yield Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>),
+            }
+        };
 
-        Box::pin(text_stream)
+        Box::pin(output)
     }
 
     fn model(&self) -> &ModelId {
