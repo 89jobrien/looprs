@@ -143,26 +143,17 @@ async fn main() -> Result<()> {
             std::env::set_var(automation_protocol::MACHINE_RUN_ID_ENV, run_id);
         }
     }
-    if let Some(deadline_seconds) = cli_args.deadline_seconds {
-        let deadline_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or_default()
-            + u128::from(deadline_seconds) * 1000;
-        // SAFETY: process-wide environment mutation for deadline control.
-        unsafe {
-            std::env::set_var(
-                automation_protocol::MACHINE_DEADLINE_MS_ENV,
-                deadline_ms.to_string(),
-            );
-        }
-    }
-    if let Some(cancel_file) = &cli_args.cancel_file {
-        // SAFETY: process-wide environment mutation for cancellation file path.
-        unsafe {
-            std::env::set_var(automation_protocol::MACHINE_CANCEL_FILE_ENV, cancel_file);
-        }
-    }
+    let run_controls = if cli_args.deadline_seconds.is_some() || cli_args.cancel_file.is_some() {
+        automation_protocol::RunControls::try_from_timeout(
+            cli_args.deadline_seconds,
+            cli_args
+                .cancel_file
+                .as_deref()
+                .map(std::path::PathBuf::from),
+        )?
+    } else {
+        automation_protocol::RunControls::from_env()
+    };
 
     ui::init_logging();
 
@@ -309,6 +300,7 @@ async fn main() -> Result<()> {
             skill_registry,
             plugin_runtime,
             agent,
+            run_controls,
         )
         .await;
     }
@@ -339,20 +331,17 @@ async fn run_scriptable(
     skill_registry: SkillRegistry,
     mut plugin_runtime: PluginRuntimeRegistry,
     mut agent: Agent,
+    run_controls: automation_protocol::RunControls,
 ) -> Result<()> {
-    if automation_protocol::deadline_exceeded() {
+    if let Some(reason) = run_controls.cancellation() {
         ui::machine_event(
             "run.cancelled",
-            serde_json::json!({ "reason": "deadline_exceeded" }),
+            serde_json::json!({ "reason": reason.as_str() }),
         );
-        anyhow::bail!("Machine deadline exceeded before execution started");
-    }
-    if automation_protocol::cancellation_requested() {
-        ui::machine_event(
-            "run.cancelled",
-            serde_json::json!({ "reason": "cancel_requested" }),
+        anyhow::bail!(
+            "Machine run cancelled before execution: {}",
+            reason.as_str()
         );
-        anyhow::bail!("Machine cancellation requested before execution started");
     }
 
     // Get the prompt
@@ -395,8 +384,23 @@ async fn run_scriptable(
     agent.add_user_message(prepared_prompt);
 
     ui::assistant_lead_in();
-    let result = agent.run_turn_streaming().await;
+    let result = tokio::select! {
+        biased;
+        reason = run_controls.cancelled() => Err(reason),
+        result = agent.run_turn_streaming() => Ok(result),
+    };
     println!();
+
+    let result = match result {
+        Ok(result) => result,
+        Err(reason) => {
+            ui::machine_event(
+                "run.cancelled",
+                serde_json::json!({ "reason": reason.as_str() }),
+            );
+            anyhow::bail!("Machine run cancelled: {}", reason.as_str());
+        }
+    };
 
     if let Err(e) = result {
         ui::machine_event(
@@ -414,7 +418,7 @@ async fn run_scriptable(
             });
             ui::info_full(serde_json::to_string_pretty(&error_json)?);
         } else {
-            ui::error(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));
+            ui::error_full(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));
         }
         std::process::exit(1);
     }
@@ -773,8 +777,8 @@ OPTIONS:
   --machine-log          Emit machine-readable JSONL events to stderr
   --machine-protocol <V> Select machine protocol version (looprs-machine/v1)
   --run-id <ID>          Stable run identifier included in machine events
-  --deadline-seconds <N> Cancel run if deadline has already elapsed
-  --cancel-file <PATH>   Cancel run if this file exists
+  --deadline-seconds <N> Cancel an active run after N seconds
+  --cancel-file <PATH>   Cancel an active run when this file exists
 
 EXAMPLES:
   looprs                           # Interactive mode
