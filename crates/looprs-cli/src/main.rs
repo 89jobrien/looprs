@@ -945,7 +945,7 @@ async fn handle_colon_command(
             unset_setting(key, app_config, provider_config, provider_name)?;
             save_configs(app_config, provider_config)?;
             let runtime = build_runtime_settings(app_config, provider_config, provider_name);
-            agent.set_runtime_settings(runtime);
+            looprs::adapters::apply_runtime_settings(agent, runtime);
             agent.set_file_ref_policy(app_config.file_ref_policy());
             ui::info(format!("Unset {key}"));
         }
@@ -1027,7 +1027,7 @@ async fn handle_colon_command(
             }
 
             let runtime = build_runtime_settings(app_config, provider_config, provider_name);
-            agent.set_runtime_settings(runtime);
+            looprs::adapters::apply_runtime_settings(agent, runtime);
             agent.set_file_ref_policy(app_config.file_ref_policy());
             ui::info(format!("Set {key}"));
         }

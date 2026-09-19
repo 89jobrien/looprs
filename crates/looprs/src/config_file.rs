@@ -83,15 +83,7 @@ impl ProviderConfig {
 
     /// Get settings for a specific provider
     pub fn get_provider_settings(&self, provider_name: &str) -> Option<&ProviderSettings> {
-        let section = crate::providers::provider_descriptor(provider_name)?.settings_section;
-        match section {
-            "anthropic" => self.anthropic.as_ref(),
-            "openai" => self.openai.as_ref(),
-            "gemini" => self.gemini.as_ref(),
-            "local" => self.local.as_ref(),
-            "baml" => self.baml.as_ref(),
-            _ => None,
-        }
+        crate::providers::provider_descriptor(provider_name)?.settings(self)
     }
 
     /// Get mutable settings for a specific provider through the descriptor registry.
@@ -99,15 +91,7 @@ impl ProviderConfig {
         &mut self,
         provider_name: &str,
     ) -> Option<&mut ProviderSettings> {
-        let section = crate::providers::provider_descriptor(provider_name)?.settings_section;
-        match section {
-            "anthropic" => self.anthropic.as_mut(),
-            "openai" => self.openai.as_mut(),
-            "gemini" => self.gemini.as_mut(),
-            "local" => self.local.as_mut(),
-            "baml" => self.baml.as_mut(),
-            _ => None,
-        }
+        crate::providers::provider_descriptor(provider_name)?.settings_mut(self)
     }
 
     /// Get or initialize mutable settings for a registered provider or alias.
@@ -115,15 +99,7 @@ impl ProviderConfig {
         &mut self,
         provider_name: &str,
     ) -> Option<&mut ProviderSettings> {
-        let section = crate::providers::provider_descriptor(provider_name)?.settings_section;
-        match section {
-            "anthropic" => Some(self.anthropic.get_or_insert_with(ProviderSettings::default)),
-            "openai" => Some(self.openai.get_or_insert_with(ProviderSettings::default)),
-            "gemini" => Some(self.gemini.get_or_insert_with(ProviderSettings::default)),
-            "local" => Some(self.local.get_or_insert_with(ProviderSettings::default)),
-            "baml" => Some(self.baml.get_or_insert_with(ProviderSettings::default)),
-            _ => None,
-        }
+        Some(crate::providers::provider_descriptor(provider_name)?.get_or_insert_settings(self))
     }
 
     /// Merge provider-specific settings with defaults
