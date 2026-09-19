@@ -198,6 +198,24 @@ mod tests {
     }
 
     #[test]
+    fn trace_stream_pre_epoch_repository_activity_fails_stale() {
+        let temp = TempDir::new().expect("tempdir");
+        std::fs::write(
+            session_trace_path(temp.path(), "session"),
+            "{\"timestamp\":1}\n",
+        )
+        .expect("trace fixture");
+        let repository_activity = UNIX_EPOCH
+            .checked_sub(std::time::Duration::from_secs(1))
+            .expect("pre-epoch timestamp");
+
+        assert!(
+            trace_stream_is_stale(temp.path(), repository_activity)
+                .expect("pre-epoch repository activity")
+        );
+    }
+
+    #[test]
     fn trace_stream_detects_activity_newer_than_latest_record() {
         let temp = TempDir::new().expect("tempdir");
         std::fs::write(
