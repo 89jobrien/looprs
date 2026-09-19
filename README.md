@@ -99,7 +99,10 @@ The `.looprs/` directory defines repo-local agent configuration. All extension p
 - `defaults`: runtime limits such as context tokens, temperature, and timeout.
 - `file_references`: allowed `@file` reference extensions and maximum file size.
 - `onboarding`: onboarding state, with `.looprs/state.json` taking precedence at runtime.
-- `pipeline`: optional pipeline checks, compaction settings, and log directory.
+- `pipeline`: optional pipeline checks, compaction settings, reward threshold, and JSONL log
+  directory. Expanded runs execute build, tests, lint, typecheck, then benchmarks; the legacy
+  `PipelineRunner::run_checks` API retains build, lint, tests, typecheck ordering and emits no
+  tool metadata, reward, or logs.
 - `agents`: delegation defaults, filesystem mode, parallelism, and orchestration strategy.
 - `paths`: repo-local directories for agents, commands, hooks, rules, and skills.
 - `persistence`: session store backend (`sqlite` or `fs`, default `fs`).
