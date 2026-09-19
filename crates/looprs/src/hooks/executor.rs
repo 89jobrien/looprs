@@ -501,6 +501,69 @@ actions:
     }
 
     #[test]
+    fn event_context_values_include_every_typed_field() {
+        let context = EventContext::new()
+            .with_session_context("session".to_string())
+            .with_user_message("message".to_string())
+            .with_tool_name("tool".to_string())
+            .with_tool_output("output".to_string())
+            .with_error("error".to_string())
+            .with_warning("warning".to_string());
+
+        let values = HookExecutor::event_context_values(&context);
+
+        for (key, value) in [
+            ("session_context", "session"),
+            ("user_message", "message"),
+            ("tool_name", "tool"),
+            ("tool_output", "output"),
+            ("error", "error"),
+            ("warning", "warning"),
+        ] {
+            assert_eq!(values.get(key).map(String::as_str), Some(value));
+        }
+    }
+
+    #[test]
+    fn typed_event_context_fields_override_metadata() {
+        let mut context =
+            EventContext::new().with_metadata("custom".to_string(), "kept".to_string());
+        for key in [
+            "session_context",
+            "user_message",
+            "tool_name",
+            "tool_output",
+            "error",
+            "warning",
+        ] {
+            context
+                .metadata
+                .insert(key.to_string(), format!("metadata-{key}"));
+        }
+        context = context
+            .with_session_context("typed-session".to_string())
+            .with_user_message("typed-message".to_string())
+            .with_tool_name("typed-tool".to_string())
+            .with_tool_output("typed-output".to_string())
+            .with_error("typed-error".to_string())
+            .with_warning("typed-warning".to_string());
+
+        let values = HookExecutor::event_context_values(&context);
+
+        for (key, value) in [
+            ("session_context", "typed-session"),
+            ("user_message", "typed-message"),
+            ("tool_name", "typed-tool"),
+            ("tool_output", "typed-output"),
+            ("error", "typed-error"),
+            ("warning", "typed-warning"),
+        ] {
+            assert_eq!(values.get(key).map(String::as_str), Some(value));
+        }
+        assert_eq!(values.get("custom").map(String::as_str), Some("kept"));
+    }
+
+    #[test]
     fn test_conditional_action_with_unknown_condition_is_skipped() {
         let yaml = r#"name: test_unknown_action_condition
 trigger: SessionStart

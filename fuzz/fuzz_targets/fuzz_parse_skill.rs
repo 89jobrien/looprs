@@ -4,8 +4,9 @@ use std::path::PathBuf;
 
 fuzz_target!(|data: &[u8]| {
     if let Ok(s) = std::str::from_utf8(data) {
-        let path = PathBuf::from("/fuzz/SKILL.md");
-        // parse_skill_file must never panic on arbitrary input.
-        let _ = looprs::skills::parser::parse_skill_file(&path, s);
+        let markdown_path = PathBuf::from("/fuzz/SKILL.md");
+        let yaml_path = PathBuf::from("/fuzz/skill.yml");
+        let _ = looprs::skills::parser::parse_skill_file(&markdown_path, s);
+        let _ = looprs::skills::parser::parse_yaml_skill(&yaml_path, s);
     }
 });

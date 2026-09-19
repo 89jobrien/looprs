@@ -327,11 +327,11 @@ pub async fn assert_remote_model_catalog_contract(catalog: &dyn RemoteModelCatal
     }
 }
 
-/// Assert the full InferenceProvider live contract.
+/// Run the legacy low-cost live provider smoke contract.
 ///
 /// Gated behind `LOOPRS_RUN_LIVE_LLM_TESTS=1` — requires a real API key.
-/// Runs the shared provider matrix: single-turn text, multi-turn history, and
-/// a tool-use/result round-trip when the provider advertises tool support.
+/// This helper intentionally performs one small request so existing provider
+/// tests retain their historical cost and failure surface.
 ///
 /// Call from each provider's test module:
 /// ```ignore
@@ -346,7 +346,7 @@ pub async fn assert_remote_model_catalog_contract(catalog: &dyn RemoteModelCatal
 pub async fn assert_inference_provider_live_contract(
     provider: &dyn crate::ports::InferenceProvider,
 ) {
-    use crate::api::{ContentBlock, Message, ToolDefinition};
+    use crate::api::Message;
 
     let single_turn = crate::ports::InferenceRequest {
         model: provider.model().clone(),
@@ -361,6 +361,19 @@ pub async fn assert_inference_provider_live_contract(
         .await
         .expect("live contract single-turn inference must succeed");
     assert_valid_inference_response(&response, "single-turn");
+}
+
+/// Run the opt-in live provider scenario matrix.
+///
+/// The matrix performs two requests for providers without tool support and
+/// four requests for providers with tool support. Each invocation can incur
+/// provider charges and can fail because of credentials, quotas, networking,
+/// model availability, or nondeterministic model behavior. Keep it ignored by
+/// default and gate it behind `LOOPRS_RUN_LIVE_LLM_TESTS=1`.
+pub async fn assert_inference_provider_live_matrix(provider: &dyn crate::ports::InferenceProvider) {
+    use crate::api::{ContentBlock, Message, ToolDefinition};
+
+    assert_inference_provider_live_contract(provider).await;
 
     let multi_turn = crate::ports::InferenceRequest {
         model: provider.model().clone(),
@@ -663,7 +676,7 @@ mod tests {
     async fn inference_live_contract_exercises_shared_scenario_matrix() {
         let provider = ScriptedInferenceProvider::new(true);
 
-        assert_inference_provider_live_contract(&provider).await;
+        assert_inference_provider_live_matrix(&provider).await;
 
         let requests = provider.requests.lock().unwrap();
         assert_eq!(requests.len(), 4, "all inference scenarios must run");
@@ -684,9 +697,62 @@ mod tests {
     async fn inference_live_contract_skips_tools_when_unsupported() {
         let provider = ScriptedInferenceProvider::new(false);
 
-        assert_inference_provider_live_contract(&provider).await;
+        assert_inference_provider_live_matrix(&provider).await;
 
         assert_eq!(provider.requests.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn legacy_live_contract_remains_a_single_low_cost_request() {
+        let provider = ScriptedInferenceProvider::new(false);
+
+        assert_inference_provider_live_contract(&provider).await;
+
+        assert_eq!(provider.requests.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "single-turn response must contain non-empty assistant text")]
+    async fn inference_live_matrix_rejects_empty_text_deterministically() {
+        let provider = ScriptedInferenceProvider {
+            model: ModelId::new("contract-model"),
+            requests: Mutex::new(Vec::new()),
+            responses: Mutex::new(VecDeque::from([InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: String::new(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 1,
+                    output_tokens: 1,
+                },
+            }])),
+            supports_tools: false,
+        };
+
+        assert_inference_provider_live_matrix(&provider).await;
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "single-turn usage.input_tokens must be > 0")]
+    async fn inference_live_matrix_rejects_zero_usage_deterministically() {
+        let provider = ScriptedInferenceProvider {
+            model: ModelId::new("contract-model"),
+            requests: Mutex::new(Vec::new()),
+            responses: Mutex::new(VecDeque::from([InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "pong".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 0,
+                    output_tokens: 1,
+                },
+            }])),
+            supports_tools: false,
+        };
+
+        assert_inference_provider_live_matrix(&provider).await;
     }
 
     #[tokio::test]
