@@ -1,42 +1,58 @@
 use serde::{Deserialize, Serialize};
 
+/// Context metadata associated with one pipeline run.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PipelineContext {
+    /// Optional identifier included in persisted events.
     pub run_id: Option<String>,
 }
 
+/// Outcome of one named pipeline step.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StepResult {
+    /// Stable step name used in reports and logs.
     pub step: String,
+    /// Whether the step completed successfully.
     pub success: bool,
 }
 
+/// Tool availability or execution metadata captured by the pipeline.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ToolResult {
+    /// Tool executable name.
     pub tool: String,
+    /// Structured metadata about the tool.
     pub output: serde_json::Value,
 }
 
+/// Computed ratio of successful checks to attempted checks.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RewardReport {
+    /// Reward in the inclusive range `0.0..=1.0`.
     pub reward: f64,
 }
 
+/// Complete outcome of a pipeline or legacy check run.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PipelineReport {
+    /// Ordered check and synthetic policy outcomes.
     pub steps: Vec<StepResult>,
+    /// Tool metadata, empty for legacy [`crate::pipeline::PipelineRunner::run_checks`].
     pub tools: Vec<ToolResult>,
+    /// Computed reward, absent for legacy check-only runs.
     pub reward: Option<RewardReport>,
 }
 
 impl PipelineReport {
-    /// Return whether all checks pass and the computed reward reaches `threshold`.
+    /// Return whether every step passes and the reward reaches `threshold`.
+    ///
+    /// Thresholds below zero become zero, thresholds above one become one, and
+    /// `NaN` becomes zero. A reward equal to the normalized threshold passes.
     pub fn succeeds(&self, threshold: f32) -> bool {
         self.steps.iter().all(|step| step.success)
-            && self
-                .reward
-                .as_ref()
-                .is_none_or(|report| report.reward >= f64::from(threshold))
+            && self.reward.as_ref().is_none_or(|report| {
+                report.reward >= crate::pipeline::normalize_reward_threshold(threshold)
+            })
     }
 }
 
@@ -96,5 +112,22 @@ mod tests {
         .unwrap();
         assert_eq!(json["step"], "test");
         assert_eq!(json["success"], true);
+    }
+
+    #[test]
+    fn succeeds_normalizes_threshold_and_accepts_equality() {
+        let report = PipelineReport {
+            steps: vec![StepResult {
+                step: "build".into(),
+                success: true,
+            }],
+            tools: vec![],
+            reward: Some(RewardReport { reward: 0.5 }),
+        };
+
+        assert!(report.succeeds(f32::NAN));
+        assert!(report.succeeds(-1.0));
+        assert!(report.succeeds(0.5));
+        assert!(!report.succeeds(2.0));
     }
 }

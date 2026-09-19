@@ -872,7 +872,7 @@ impl Agent {
                 let tool_ctx = self.tool_ctx.clone();
                 let allowed_tools_for_exec = allowed_tools.clone();
 
-                futures::stream::iter(pending_calls.into_iter())
+                futures::stream::iter(pending_calls)
                     .map(|call| {
                         let executor = Arc::clone(&executor);
                         let tool_ctx = tool_ctx.clone();
