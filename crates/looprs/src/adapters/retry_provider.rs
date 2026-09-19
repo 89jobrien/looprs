@@ -103,6 +103,7 @@ mod tests {
     struct CountingProvider {
         calls: Arc<AtomicU32>,
         fail_times: u32,
+        failure_message: &'static str,
         model: ModelId,
     }
 
@@ -111,8 +112,14 @@ mod tests {
             Self {
                 calls: Arc::new(AtomicU32::new(0)),
                 fail_times,
+                failure_message: "simulated failure",
                 model: ModelId::new("test-model"),
             }
+        }
+
+        fn with_failure_message(mut self, failure_message: &'static str) -> Self {
+            self.failure_message = failure_message;
+            self
         }
         fn call_count(&self) -> u32 {
             self.calls.load(Ordering::SeqCst)
@@ -127,7 +134,7 @@ mod tests {
         ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
             let n = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
             if n <= self.fail_times {
-                Err(ProviderError::ApiError(format!("simulated failure #{n}")).into())
+                Err(ProviderError::ApiError(format!("{} #{n}", self.failure_message)).into())
             } else {
                 Ok(InferenceResponse {
                     content: vec![ContentBlock::Text {
@@ -183,6 +190,17 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn retries_timeout_and_rate_limit_failures_from_provider_fakes() {
+        for failure in ["request timed out", "rate limited"] {
+            let inner = CountingProvider::new(1).with_failure_message(failure);
+            let provider = RetryProvider::new(inner).with_base_delay_ms(0);
+
+            assert!(provider.infer(&dummy_req()).await.is_ok());
+            assert_eq!(provider.inner.call_count(), 2);
+        }
+    }
+
+    #[tokio::test]
     async fn exhausts_retries_returns_last_error() {
         let inner = CountingProvider::new(5); // always fails within 3 attempts
         let provider = RetryProvider::new(inner).with_base_delay_ms(0);
@@ -200,5 +218,43 @@ mod tests {
         assert_eq!(provider.name(), "counting");
         assert_eq!(provider.model().as_str(), "test-model");
         assert!(provider.validate_config().is_ok());
+    }
+
+    #[test]
+    fn validation_failures_from_provider_fakes_are_preserved() {
+        struct InvalidConfigProvider {
+            model: ModelId,
+        }
+
+        #[async_trait]
+        impl LLMProvider for InvalidConfigProvider {
+            async fn infer(
+                &self,
+                _req: &InferenceRequest,
+            ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
+                unreachable!("validation failure must be observed before inference")
+            }
+
+            fn name(&self) -> &str {
+                "invalid-config"
+            }
+
+            fn model(&self) -> &ModelId {
+                &self.model
+            }
+
+            fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+                Err(ProviderError::Config("invalid fake configuration".to_string()).into())
+            }
+        }
+
+        let provider = RetryProvider::new(InvalidConfigProvider {
+            model: ModelId::new("fake-model"),
+        });
+
+        assert_eq!(
+            provider.validate_config().unwrap_err().to_string(),
+            "Provider configuration error: invalid fake configuration"
+        );
     }
 }

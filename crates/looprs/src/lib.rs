@@ -96,6 +96,8 @@ pub use crate::adapters::{
 pub use crate::agent::{Agent, ChatMessage, RuntimeSettings};
 /// Agent definition schema and agent registry.
 pub use crate::agents::{AgentDefinition, AgentRegistry};
+/// Tool definitions advertised through injectable catalogs.
+pub use crate::api::ToolDefinition;
 /// Default interactive callbacks for approvals and prompts.
 pub use crate::approval::{console_approval_prompt, console_prompt, console_secret_prompt};
 /// Command schema and command registry.
@@ -128,6 +130,11 @@ pub use crate::providers::{ProviderOverrides, create_provider_with_overrides};
 pub use crate::rules::{Rule, RuleRegistry};
 /// Skill schema and registry.
 pub use crate::skills::{Skill, SkillRegistry};
+/// Injectable tool catalog/dispatcher ports and default composition.
+pub use crate::tools::{
+    BuiltinToolCatalog, StaticToolCatalog, ToolCatalog, ToolContext, ToolDispatcher, ToolError,
+    ToolExecutor, ToolPorts,
+};
 /// Public trace append and freshness helpers.
 pub use crate::trace::{
     append_turn_trace, append_turn_trace_in_dir, session_trace_path, trace_stream_is_stale,

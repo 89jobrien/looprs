@@ -1,19 +1,94 @@
 use serde_json::Value;
 
-use crate::tools::{ToolContext, ToolError, execute_tool};
+use std::sync::Arc;
+
+use crate::api::ToolDefinition;
+use crate::tools::{ToolContext, ToolError, execute_tool, get_tool_definitions};
+
+/// Port: supply the tools advertised to an inference provider.
+#[async_trait::async_trait]
+pub trait ToolCatalog: Send + Sync {
+    /// Return the complete tool catalog for the current runtime.
+    async fn definitions(&self) -> anyhow::Result<Vec<ToolDefinition>>;
+}
+
+/// Production catalog containing looprs built-in tools.
+#[derive(Debug, Default)]
+pub struct BuiltinToolCatalog;
+
+#[async_trait::async_trait]
+impl ToolCatalog for BuiltinToolCatalog {
+    async fn definitions(&self) -> anyhow::Result<Vec<ToolDefinition>> {
+        Ok(get_tool_definitions())
+    }
+}
+
+/// In-memory catalog for embedding and deterministic tests.
+#[derive(Debug, Clone, Default)]
+pub struct StaticToolCatalog {
+    definitions: Vec<ToolDefinition>,
+}
+
+impl StaticToolCatalog {
+    /// Construct a catalog from pre-built definitions.
+    pub fn new(definitions: Vec<ToolDefinition>) -> Self {
+        Self { definitions }
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolCatalog for StaticToolCatalog {
+    async fn definitions(&self) -> anyhow::Result<Vec<ToolDefinition>> {
+        Ok(self.definitions.clone())
+    }
+}
 
 /// Port: dispatch a named agent tool call.
 ///
 /// Abstracts the free `execute_tool` function so the Agent can be tested
 /// with a stub executor instead of a real subprocess/filesystem backend.
 #[async_trait::async_trait]
-pub trait ToolExecutor: Send + Sync {
+pub trait ToolDispatcher: Send + Sync {
     async fn execute(
         &self,
         name: &str,
         args: &Value,
         ctx: &ToolContext,
     ) -> Result<String, ToolError>;
+}
+
+/// Backwards-compatible name for the tool dispatch port.
+pub use ToolDispatcher as ToolExecutor;
+
+/// Injectable tool-side runtime ports used by [`crate::Agent`].
+pub struct ToolPorts {
+    catalog: Arc<dyn ToolCatalog>,
+    dispatcher: Arc<dyn ToolDispatcher>,
+}
+
+impl std::fmt::Debug for ToolPorts {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("ToolPorts { catalog: .., dispatcher: .. }")
+    }
+}
+
+impl ToolPorts {
+    /// Compose a catalog and dispatcher pair.
+    pub fn new(catalog: Arc<dyn ToolCatalog>, dispatcher: Arc<dyn ToolDispatcher>) -> Self {
+        Self {
+            catalog,
+            dispatcher,
+        }
+    }
+
+    /// Compose the built-in catalog and dispatcher defaults.
+    pub fn builtin() -> Self {
+        Self::new(Arc::new(BuiltinToolCatalog), Arc::new(DefaultToolExecutor))
+    }
+
+    pub(crate) fn into_parts(self) -> (Arc<dyn ToolCatalog>, Arc<dyn ToolDispatcher>) {
+        (self.catalog, self.dispatcher)
+    }
 }
 
 /// Production adapter: delegates to `tools::execute_tool`.

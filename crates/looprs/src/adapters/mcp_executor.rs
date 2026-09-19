@@ -1,6 +1,68 @@
 use serde_json::Value;
 
-use crate::tools::{ToolContext, ToolError, ToolExecutor};
+use std::collections::HashSet;
+use std::sync::Arc;
+
+use crate::api::ToolDefinition;
+use crate::tools::{ToolCatalog, ToolContext, ToolError, ToolExecutor};
+
+/// Adapter: combines a local catalog with MCP discovery.
+pub struct McpToolCatalog {
+    server_url: String,
+    local: Arc<dyn ToolCatalog>,
+}
+
+impl std::fmt::Debug for McpToolCatalog {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("McpToolCatalog")
+            .field("server_url", &self.server_url)
+            .finish_non_exhaustive()
+    }
+}
+
+impl McpToolCatalog {
+    /// Create an MCP catalog that preserves `local` definitions on conflicts.
+    pub fn new(server_url: impl Into<String>, local: Arc<dyn ToolCatalog>) -> Self {
+        Self {
+            server_url: server_url.into(),
+            local,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolCatalog for McpToolCatalog {
+    async fn definitions(&self) -> anyhow::Result<Vec<ToolDefinition>> {
+        let local = self.local.definitions().await?;
+        match crate::tools::mcp_tool_definitions(&self.server_url).await {
+            Ok(remote) => Ok(merge_tool_definitions(local, remote)),
+            Err(error) => {
+                log::warn!(
+                    "failed to discover MCP tools from {}: {error}",
+                    self.server_url
+                );
+                Ok(local)
+            }
+        }
+    }
+}
+
+fn merge_tool_definitions(
+    mut local: Vec<ToolDefinition>,
+    remote: Vec<ToolDefinition>,
+) -> Vec<ToolDefinition> {
+    let mut known = local
+        .iter()
+        .map(|tool| tool.name.clone())
+        .collect::<HashSet<_>>();
+    local.extend(
+        remote
+            .into_iter()
+            .filter(|tool| known.insert(tool.name.clone())),
+    );
+    local
+}
 
 /// Adapter: routes tool calls to a remote MCP server via HTTP/JSON-RPC.
 ///
@@ -63,6 +125,31 @@ impl ToolExecutor for McpToolExecutor {
 mod tests {
     use super::*;
     use crate::tools::executor::StubToolExecutor;
+
+    fn definition(name: &str, description: &str) -> ToolDefinition {
+        ToolDefinition {
+            name: name.to_string(),
+            description: description.to_string(),
+            input_schema: serde_json::json!({"type": "object"}),
+        }
+    }
+
+    #[test]
+    fn merging_empty_catalogs_is_empty() {
+        assert!(merge_tool_definitions(Vec::new(), Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn local_catalog_takes_precedence_over_remote_duplicates() {
+        let merged = merge_tool_definitions(
+            vec![definition("read", "local")],
+            vec![definition("read", "remote"), definition("remote", "remote")],
+        );
+
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].description, "local");
+        assert_eq!(merged[1].name, "remote");
+    }
 
     #[tokio::test]
     async fn mcp_executor_falls_back_on_error() {
