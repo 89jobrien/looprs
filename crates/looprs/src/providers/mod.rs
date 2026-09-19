@@ -8,6 +8,7 @@ pub mod gemini;
 pub mod local;
 pub mod openai;
 pub mod openai_sdk;
+mod streaming;
 
 use crate::api::ContentBlock;
 use crate::errors::ProviderError;
