@@ -951,13 +951,16 @@ fn build_runtime_settings(
     provider_name: &str,
 ) -> looprs::RuntimeSettings {
     let max_tokens_override = provider_config.merged_settings(provider_name).max_tokens;
-    looprs::RuntimeSettings {
-        defaults: app_config.defaults.clone(),
+    let mut runtime = looprs::RuntimeSettings::new(
+        app_config.defaults.clone(),
         max_tokens_override,
-        fs_mode: app_config.agents.fs_mode,
-        max_parallel: app_config.agents.max_parallel.max(1),
-        mcp_server_url: std::env::var("LOOPRS_MCP_SERVER_URL").ok(),
+        app_config.agents.fs_mode,
+    )
+    .with_max_parallel(app_config.agents.max_parallel);
+    if let Ok(server_url) = std::env::var("LOOPRS_MCP_SERVER_URL") {
+        runtime = runtime.with_mcp_server_url(server_url);
     }
+    runtime
 }
 
 async fn handle_colon_command(
