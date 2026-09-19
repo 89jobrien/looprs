@@ -296,7 +296,7 @@ async fn main() -> Result<()> {
     let user_plugins = user_plugins_dir.exists().then_some(user_plugins_dir);
     let repo_plugins = repo_plugins_dir.filter(|d| d.exists());
     let plugin_runtime = PluginRuntimeRegistry::load_dual_source(user_plugins, repo_plugins)
-        .unwrap_or_else(|_| PluginRuntimeRegistry::default());
+        .map_err(|error| anyhow::anyhow!("failed to initialize plugin runtime: {error}"))?;
 
     // Handle scriptable (non-interactive) mode
     if cli_args.is_scriptable() {

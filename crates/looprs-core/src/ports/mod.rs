@@ -25,8 +25,8 @@ pub use observation_store::ObservationStore;
 pub use plugin_executor::PluginExecutor;
 pub use plugin_runtime::{
     OrchestrationPluginPort, OrchestrationSupervisorPort, PluginAgentSelection,
-    PluginExecutionMode, PluginHealthState, PluginKind, PluginSupervisorStatus,
-    RuntimeSupervisorPort, ToolSupervisorPort,
+    PluginExecutionMode, PluginHealthState, PluginKind, PluginSupervisorError,
+    PluginSupervisorPort, PluginSupervisorStatus, RuntimeSupervisorPort, ToolSupervisorPort,
 };
 pub use session_store::{SessionEvent, SessionStore};
 pub use user_output::UserOutput;

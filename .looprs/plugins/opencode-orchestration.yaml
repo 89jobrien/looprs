@@ -3,7 +3,7 @@ kind: orchestration
 description: Route direct implementation requests to opencode.
 enabled: true
 required: false
-mode: daemon
+mode: one_shot
 triggers:
   - "implement"
   - "write code"

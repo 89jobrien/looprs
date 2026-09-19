@@ -21,6 +21,7 @@ chrono = { workspace = true } #unified
 looprs-macros = { workspace = true } #unified
 serde = { workspace = true } #unified
 serde_json = { workspace = true } #unified
+thiserror = "1.0"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] } #unified
 uuid = { workspace = true } #unified
 
