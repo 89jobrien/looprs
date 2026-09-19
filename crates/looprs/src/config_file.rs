@@ -83,11 +83,12 @@ impl ProviderConfig {
 
     /// Get settings for a specific provider
     pub fn get_provider_settings(&self, provider_name: &str) -> Option<&ProviderSettings> {
-        match provider_name {
-            "anthropic" | "anthropic-sdk" | "claude-sdk" => self.anthropic.as_ref(),
-            "openai" | "openai-sdk" => self.openai.as_ref(),
-            "gemini" | "google" => self.gemini.as_ref(),
-            "local" | "ollama" => self.local.as_ref(),
+        let section = crate::providers::provider_descriptor(provider_name)?.settings_section;
+        match section {
+            "anthropic" => self.anthropic.as_ref(),
+            "openai" => self.openai.as_ref(),
+            "gemini" => self.gemini.as_ref(),
+            "local" => self.local.as_ref(),
             "baml" => self.baml.as_ref(),
             _ => None,
         }
@@ -248,5 +249,23 @@ mod tests {
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: ProviderConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.provider, Some("openai".to_string()));
+    }
+
+    #[test]
+    fn aliases_share_provider_specific_settings() {
+        let config = ProviderConfig {
+            anthropic: Some(ProviderSettings {
+                model: Some("claude-model".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        for alias in ["anthropic", "anthropic-sdk", "claude-sdk"] {
+            assert_eq!(
+                config.merged_settings(alias).model.as_deref(),
+                Some("claude-model")
+            );
+        }
     }
 }

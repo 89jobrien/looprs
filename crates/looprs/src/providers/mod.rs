@@ -22,6 +22,65 @@ pub use looprs_core::ports::inference_provider::{InferenceRequest, InferenceResp
 
 const DEFAULT_TIMEOUT_SECS: u64 = 120;
 
+/// Canonical identity and configuration mapping for a provider implementation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProviderDescriptor {
+    /// Name used after alias normalization.
+    pub canonical_name: &'static str,
+    /// Accepted configuration and environment aliases.
+    pub aliases: &'static [&'static str],
+    /// Section in `.looprs/provider.json` used by this implementation.
+    pub settings_section: &'static str,
+}
+
+const PROVIDER_DESCRIPTORS: &[ProviderDescriptor] = &[
+    ProviderDescriptor {
+        canonical_name: "anthropic",
+        aliases: &["anthropic"],
+        settings_section: "anthropic",
+    },
+    ProviderDescriptor {
+        canonical_name: "anthropic-sdk",
+        aliases: &["anthropic-sdk", "claude-sdk"],
+        settings_section: "anthropic",
+    },
+    ProviderDescriptor {
+        canonical_name: "openai",
+        aliases: &["openai"],
+        settings_section: "openai",
+    },
+    ProviderDescriptor {
+        canonical_name: "openai-sdk",
+        aliases: &["openai-sdk"],
+        settings_section: "openai",
+    },
+    ProviderDescriptor {
+        canonical_name: "gemini",
+        aliases: &["gemini", "google"],
+        settings_section: "gemini",
+    },
+    ProviderDescriptor {
+        canonical_name: "local",
+        aliases: &["local", "ollama"],
+        settings_section: "local",
+    },
+    ProviderDescriptor {
+        canonical_name: "baml",
+        aliases: &["baml"],
+        settings_section: "baml",
+    },
+];
+
+/// Resolve a provider name or alias to its canonical descriptor.
+pub fn provider_descriptor(name: &str) -> Option<&'static ProviderDescriptor> {
+    PROVIDER_DESCRIPTORS.iter().find(|descriptor| {
+        descriptor
+            .aliases
+            .iter()
+            .any(|alias| alias.eq_ignore_ascii_case(name))
+    })
+}
+
 pub(crate) struct ProviderHttpClient {
     client: Client,
 }
@@ -241,13 +300,26 @@ fn resolve_model(
     config_file: &Option<crate::config_file::ProviderConfig>,
     overrides: &ProviderOverrides,
 ) -> Option<ModelId> {
+    resolve_model_from_sources(
+        config_section,
+        config_file.as_ref(),
+        overrides,
+        env::var("MODEL").ok().as_deref(),
+    )
+}
+
+fn resolve_model_from_sources(
+    config_section: &str,
+    config_file: Option<&crate::config_file::ProviderConfig>,
+    overrides: &ProviderOverrides,
+    environment_model: Option<&str>,
+) -> Option<ModelId> {
     overrides
         .model
         .clone()
-        .or_else(|| env::var("MODEL").ok().map(ModelId::new))
+        .or_else(|| environment_model.map(ModelId::new))
         .or_else(|| {
             config_file
-                .as_ref()
                 .and_then(|c| c.merged_settings(config_section).model)
                 .map(ModelId::new)
         })
@@ -259,54 +331,58 @@ async fn create_provider_by_name(
     config_file: &Option<crate::config_file::ProviderConfig>,
     overrides: ProviderOverrides,
 ) -> Result<Box<dyn LLMProvider>, ProviderError> {
-    match name.to_lowercase().as_str() {
+    let descriptor = provider_descriptor(name)
+        .ok_or_else(|| ProviderError::Config(format!("Unknown provider: {name}")))?;
+    match descriptor.canonical_name {
         "anthropic" => {
             let key = resolve_secret_env("ANTHROPIC_API_KEY")?;
-            let model = resolve_model("anthropic", config_file, &overrides);
+            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
             Ok(Box::new(anthropic::AnthropicProvider::new_with_model(
                 key, model,
             )?))
         }
-        "anthropic-sdk" | "claude-sdk" => {
+        "anthropic-sdk" => {
             let key = resolve_secret_env("ANTHROPIC_API_KEY")?;
-            let model = resolve_model("anthropic", config_file, &overrides);
+            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
             Ok(Box::new(
                 anthropic_sdk::AnthropicSdkProvider::new_with_model(key, model)?,
             ))
         }
         "openai" => {
             let key = resolve_secret_env("OPENAI_API_KEY")?;
-            let model = resolve_model("openai", config_file, &overrides);
+            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
             Ok(Box::new(openai::OpenAIProvider::new_with_model(
                 key, model,
             )?))
         }
         "openai-sdk" => {
             let key = resolve_secret_env("OPENAI_API_KEY")?;
-            let model = resolve_model("openai", config_file, &overrides);
+            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
             Ok(Box::new(openai_sdk::OpenAISdkProvider::new_with_model(
                 key, model,
             )?))
         }
-        "gemini" | "google" => {
+        "gemini" => {
             let key = resolve_secret_env("GEMINI_API_KEY")
                 .or_else(|_| resolve_secret_env("GOOGLE_API_KEY"))?;
-            let model = resolve_model("gemini", config_file, &overrides);
+            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
             Ok(Box::new(gemini::GeminiProvider::new_with_model(
                 key, model,
             )?))
         }
-        "ollama" | "local" => {
-            let model = resolve_model("local", config_file, &overrides);
+        "local" => {
+            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
             Ok(Box::new(local::LocalProvider::new_with_model(model)?))
         }
         "baml" => {
-            let model = resolve_model("baml", config_file, &overrides);
+            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
             Ok(Box::new(baml_provider::BamlProvider::for_provider(
                 "baml", model,
             )?))
         }
-        other => Err(ProviderError::Config(format!("Unknown provider: {other}"))),
+        canonical => Err(ProviderError::Config(format!(
+            "Provider descriptor has unsupported canonical name: {canonical}"
+        ))),
     }
 }
 
@@ -361,5 +437,68 @@ mod tests {
         assert!(supports_temperature("gpt-4o"));
         assert!(!supports_temperature("o1-preview"));
         assert!(!supports_temperature("gpt-5-mini"));
+    }
+
+    #[test]
+    fn provider_descriptors_resolve_every_alias_to_one_settings_section() {
+        for (name, canonical, section) in [
+            ("anthropic", "anthropic", "anthropic"),
+            ("claude-sdk", "anthropic-sdk", "anthropic"),
+            ("openai-sdk", "openai-sdk", "openai"),
+            ("google", "gemini", "gemini"),
+            ("ollama", "local", "local"),
+            ("baml", "baml", "baml"),
+        ] {
+            let descriptor = provider_descriptor(name).expect("known provider alias");
+            assert_eq!(descriptor.canonical_name, canonical);
+            assert_eq!(descriptor.settings_section, section);
+        }
+        assert!(provider_descriptor("unknown").is_none());
+    }
+
+    #[test]
+    fn baml_model_resolution_respects_precedence() {
+        let config = crate::config_file::ProviderConfig {
+            defaults: Some(crate::config_file::ProviderSettings {
+                model: Some("default-model".to_string()),
+                ..Default::default()
+            }),
+            baml: Some(crate::config_file::ProviderSettings {
+                model: Some("baml-model".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            resolve_model_from_sources("baml", Some(&config), &ProviderOverrides::default(), None,)
+                .as_ref()
+                .map(ModelId::as_str),
+            Some("baml-model")
+        );
+        assert_eq!(
+            resolve_model_from_sources(
+                "baml",
+                Some(&config),
+                &ProviderOverrides::default(),
+                Some("env-model"),
+            )
+            .as_ref()
+            .map(ModelId::as_str),
+            Some("env-model")
+        );
+        assert_eq!(
+            resolve_model_from_sources(
+                "baml",
+                Some(&config),
+                &ProviderOverrides {
+                    model: Some(ModelId::new("override-model")),
+                },
+                Some("env-model"),
+            )
+            .as_ref()
+            .map(ModelId::as_str),
+            Some("override-model")
+        );
     }
 }

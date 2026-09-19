@@ -75,10 +75,14 @@ impl EventContext {
 
     /// Attach an error description, overwriting any previous value.
     ///
-    /// Note there is no corresponding `with_warning`; set
-    /// [`EventContext::warning`] directly for [`Event::OnWarning`].
     pub fn with_error(mut self, error: String) -> Self {
         self.error = Some(error);
+        self
+    }
+
+    /// Attach a warning description, overwriting any previous value.
+    pub fn with_warning(mut self, warning: String) -> Self {
+        self.warning = Some(warning);
         self
     }
 
@@ -171,12 +175,17 @@ mod tests {
         let ctx = EventContext::new()
             .with_session_context("session_data".to_string())
             .with_user_message("test message".to_string())
-            .with_error("test error".to_string());
+            .with_tool_name("read".to_string())
+            .with_tool_output("contents".to_string())
+            .with_error("test error".to_string())
+            .with_warning("test warning".to_string());
 
         assert_eq!(ctx.session_context, Some("session_data".to_string()));
         assert_eq!(ctx.user_message, Some("test message".to_string()));
         assert_eq!(ctx.error, Some("test error".to_string()));
-        assert!(ctx.tool_name.is_none());
+        assert_eq!(ctx.tool_name.as_deref(), Some("read"));
+        assert_eq!(ctx.tool_output.as_deref(), Some("contents"));
+        assert_eq!(ctx.warning.as_deref(), Some("test warning"));
     }
 
     #[test]

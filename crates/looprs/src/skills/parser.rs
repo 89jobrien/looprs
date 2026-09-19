@@ -5,66 +5,78 @@ use serde::Deserialize;
 use std::path::Path;
 
 #[derive(Debug, Deserialize)]
-struct SkillFrontmatter {
+struct SkillDefinition {
     name: String,
+    #[serde(default)]
     description: Option<String>,
     triggers: Vec<String>,
+    #[serde(default)]
+    content: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct YamlSkill {
-    name: String,
-    description: Option<String>,
-    triggers: Vec<String>,
-    content: String,
+impl SkillDefinition {
+    fn into_skill(mut self, path: &Path, content: Option<&str>) -> Result<super::Skill> {
+        self.name = self.name.trim().to_string();
+        self.triggers = self
+            .triggers
+            .into_iter()
+            .map(|trigger| trigger.trim().to_string())
+            .collect();
+        self.content = content.unwrap_or(&self.content).trim().to_string();
+
+        if self.name.is_empty() {
+            anyhow::bail!("Skill name cannot be empty");
+        }
+        if self.triggers.is_empty() || self.triggers.iter().any(String::is_empty) {
+            anyhow::bail!(
+                "Skill must have at least one trigger and all triggers must be non-empty"
+            );
+        }
+        if self.content.is_empty() {
+            anyhow::bail!("Skill content cannot be empty");
+        }
+
+        Ok(super::Skill {
+            name: self.name,
+            description: self
+                .description
+                .map(|description| description.trim().to_string())
+                .filter(|description| !description.is_empty()),
+            triggers: self.triggers,
+            content: self.content,
+            source_path: path.to_path_buf(),
+        })
+    }
 }
 
 /// Parse SKILL.md file with YAML frontmatter  
 pub fn parse_skill_file(path: &Path, content: &str) -> Result<super::Skill> {
-    // Split frontmatter from content
-    let parts: Vec<&str> = content.splitn(3, "---").collect();
-
-    if parts.len() < 3 {
-        anyhow::bail!("Invalid SKILL.md format: missing YAML frontmatter delimiters");
-    }
+    let after_opening = content
+        .strip_prefix("---\n")
+        .or_else(|| content.strip_prefix("---\r\n"))
+        .context("Invalid SKILL.md format: missing YAML frontmatter delimiters")?;
+    let mut offset = 0;
+    let (frontmatter_text, body) = after_opening
+        .split_inclusive('\n')
+        .find_map(|line| {
+            let line_start = offset;
+            offset += line.len();
+            (line.trim_end_matches(['\r', '\n']) == "---")
+                .then(|| (&after_opening[..line_start], &after_opening[offset..]))
+        })
+        .context("Invalid SKILL.md format: missing YAML frontmatter delimiters")?;
 
     // Parse YAML frontmatter
-    let frontmatter: SkillFrontmatter =
-        serde_yaml::from_str(parts[1]).context("Failed to parse YAML frontmatter")?;
-
-    // Validate required fields
-    if frontmatter.name.is_empty() {
-        anyhow::bail!("Skill name cannot be empty");
-    }
-    if frontmatter.triggers.is_empty() {
-        anyhow::bail!("Skill must have at least one trigger");
-    }
-
-    Ok(super::Skill {
-        name: frontmatter.name,
-        description: frontmatter.description,
-        triggers: frontmatter.triggers,
-        content: parts[2].trim().to_string(),
-        source_path: path.to_path_buf(),
-    })
+    let frontmatter: SkillDefinition =
+        serde_yaml::from_str(frontmatter_text).context("Failed to parse YAML frontmatter")?;
+    frontmatter.into_skill(path, Some(body))
 }
 
 /// Parse a repository YAML skill definition.
 pub fn parse_yaml_skill(path: &Path, content: &str) -> Result<super::Skill> {
-    let skill: YamlSkill = serde_yaml::from_str(content).context("Failed to parse YAML skill")?;
-    if skill.name.is_empty() {
-        anyhow::bail!("Skill name cannot be empty");
-    }
-    if skill.triggers.is_empty() {
-        anyhow::bail!("Skill must have at least one trigger");
-    }
-    Ok(super::Skill {
-        name: skill.name,
-        description: skill.description,
-        triggers: skill.triggers,
-        content: skill.content.trim().to_string(),
-        source_path: path.to_path_buf(),
-    })
+    let skill: SkillDefinition =
+        serde_yaml::from_str(content).context("Failed to parse YAML skill")?;
+    skill.into_skill(path, None)
 }
 
 #[cfg(test)]
@@ -86,7 +98,7 @@ mod tests {
         fn valid_frontmatter_round_trips(
             name in "[a-z][a-z0-9]{1,20}",
             trigger in "[a-z]{1,30}",
-            body in "[a-zA-Z0-9 ]{0,100}",
+            body in "[a-zA-Z0-9][a-zA-Z0-9 ]{0,99}",
         ) {
             // Use serde_yaml to safely encode the trigger value
             let trigger_yaml = serde_yaml::to_string(&trigger).unwrap();
@@ -114,6 +126,24 @@ mod tests {
             let skill = parse_skill_file(&path, &content).unwrap();
             prop_assert!(!skill.name.is_empty());
             prop_assert!(!skill.triggers.is_empty());
+        }
+
+        #[test]
+        fn yaml_skill_round_trips_valid_fields(
+            name in "[a-z][a-z0-9-]{1,20}",
+            trigger in "[a-z]{1,30}",
+            body in "[a-zA-Z0-9][a-zA-Z0-9 ]{0,99}",
+        ) {
+            let yaml = serde_yaml::to_string(&serde_json::json!({
+                "name": name,
+                "triggers": [trigger],
+                "content": body,
+            })).expect("generated skill must serialize");
+            let path = PathBuf::from("/test/skill.yml");
+            let skill = parse_yaml_skill(&path, &yaml).expect("valid YAML skill must parse");
+            prop_assert!(!skill.name.trim().is_empty());
+            prop_assert!(skill.triggers.iter().all(|value| !value.trim().is_empty()));
+            prop_assert!(!skill.content.trim().is_empty());
         }
     }
 
@@ -226,5 +256,35 @@ Content
                 .to_string()
                 .contains("at least one trigger")
         );
+    }
+
+    #[test]
+    fn yaml_and_markdown_skills_share_validation() {
+        let markdown = "---\nname: '   '\ntriggers: [valid]\n---\ncontent";
+        let yaml = "name: valid\ntriggers: ['   ']\ncontent: content\n";
+
+        assert!(parse_skill_file(Path::new("SKILL.md"), markdown).is_err());
+        assert!(parse_yaml_skill(Path::new("skill.yaml"), yaml).is_err());
+    }
+
+    #[test]
+    fn markdown_delimiters_are_recognized_only_on_their_own_lines() {
+        let content = "---\nname: a---b\ntriggers: [go]\n---\nbody --- text\n";
+
+        let skill = parse_skill_file(Path::new("SKILL.md"), content).unwrap();
+
+        assert_eq!(skill.name, "a---b");
+        assert_eq!(skill.content, "body --- text");
+    }
+
+    #[test]
+    fn yaml_parser_rejects_blank_malformed_and_blank_content() {
+        for content in [
+            "",
+            "name: [broken",
+            "name: valid\ntriggers: [go]\ncontent: '   '\n",
+        ] {
+            assert!(parse_yaml_skill(Path::new("skill.yml"), content).is_err());
+        }
     }
 }

@@ -30,7 +30,8 @@ impl SkillRegistry {
             }
         }
 
-        let mut yaml_files = fs::read_dir(dir)?
+        let mut yaml_files = fs::read_dir(dir)
+            .with_context(|| format!("Failed to read skill directory: {}", dir.display()))?
             .filter_map(Result::ok)
             .map(|entry| entry.path())
             .filter(|path| {
@@ -59,7 +60,7 @@ impl SkillRegistry {
     pub fn load_with_precedence(&mut self, user_dir: &Path, repo_dir: &Path) -> Result<usize> {
         // Load user skills first (if directory exists)
         if user_dir.exists() {
-            let _ = self.load_from_directory(user_dir);
+            self.load_from_directory(user_dir)?;
         }
 
         // Load repo skills - these will override user skills with same name
@@ -153,6 +154,84 @@ Content here.
                 .map(|skill| skill.content.as_str()),
             Some("Repository guidance.")
         );
+    }
+
+    #[test]
+    fn repository_root_yml_skill_is_discovered() {
+        let temp = TempDir::new().unwrap();
+        fs::write(
+            temp.path().join("repository-skill.yml"),
+            "name: repository-skill\ntriggers: [repo]\ncontent: Repository guidance.\n",
+        )
+        .unwrap();
+
+        let mut registry = SkillRegistry::new();
+        assert_eq!(registry.load_from_directory(temp.path()).unwrap(), 1);
+        assert!(registry.get("repository-skill").is_some());
+    }
+
+    #[test]
+    fn malformed_and_blank_yaml_are_skipped_without_hiding_valid_skills() {
+        let temp = TempDir::new().unwrap();
+        fs::write(temp.path().join("blank.yml"), "").unwrap();
+        fs::write(temp.path().join("malformed.yaml"), "name: [broken").unwrap();
+        fs::write(
+            temp.path().join("valid.yml"),
+            "name: valid\ntriggers: [valid]\ncontent: valid\n",
+        )
+        .unwrap();
+
+        let mut registry = SkillRegistry::new();
+        assert_eq!(registry.load_from_directory(temp.path()).unwrap(), 1);
+        assert!(registry.get("valid").is_some());
+    }
+
+    #[test]
+    fn root_yaml_overrides_nested_markdown_with_same_name() {
+        let temp = TempDir::new().unwrap();
+        let nested = temp.path().join("shared");
+        fs::create_dir(&nested).unwrap();
+        fs::write(
+            nested.join("SKILL.md"),
+            "---\nname: shared\ntriggers: [markdown]\n---\nMarkdown body\n",
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join("shared.yml"),
+            "name: shared\ntriggers: [yaml]\ncontent: YAML body\n",
+        )
+        .unwrap();
+
+        let mut registry = SkillRegistry::new();
+        assert_eq!(registry.load_from_directory(temp.path()).unwrap(), 2);
+        let skill = registry.get("shared").unwrap();
+        assert_eq!(skill.triggers, ["yaml"]);
+        assert_eq!(skill.content, "YAML body");
+    }
+
+    #[test]
+    fn unreadable_directory_returns_contextual_error() {
+        let temp = TempDir::new().unwrap();
+        let file = temp.path().join("not-a-directory");
+        fs::write(&file, "content").unwrap();
+
+        let error = SkillRegistry::new().load_from_directory(&file).unwrap_err();
+        assert!(!error.to_string().is_empty());
+    }
+
+    #[test]
+    fn precedence_loader_propagates_existing_user_path_errors() {
+        let temp = TempDir::new().unwrap();
+        let user_file = temp.path().join("user-file");
+        let repo_dir = temp.path().join("repo");
+        fs::write(&user_file, "not a directory").unwrap();
+        fs::create_dir(&repo_dir).unwrap();
+
+        let error = SkillRegistry::new()
+            .load_with_precedence(&user_file, &repo_dir)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("skill directory"));
     }
 
     #[test]

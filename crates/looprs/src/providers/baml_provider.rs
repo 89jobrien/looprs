@@ -29,12 +29,13 @@ impl BamlProvider {
 
     /// Convenience: select client by provider name (same naming as providers/mod.rs).
     pub fn for_provider(provider: &str, model: Option<ModelId>) -> Result<Self, ProviderError> {
-        let (client_name, default_model) = match provider.to_lowercase().as_str() {
-            "anthropic" | "anthropic-sdk" | "claude-sdk" => {
-                ("Anthropic", ModelId::new("claude-sonnet-4-6"))
-            }
+        let canonical = super::provider_descriptor(provider)
+            .map(|descriptor| descriptor.canonical_name)
+            .unwrap_or(provider);
+        let (client_name, default_model) = match canonical {
+            "anthropic" | "anthropic-sdk" => ("Anthropic", ModelId::new("claude-sonnet-4-6")),
             "openai" | "openai-sdk" => ("OpenAI", ModelId::new("gpt-4o")),
-            "ollama" | "local" => ("Ollama", ModelId::new("llama3.2")),
+            "local" => ("Ollama", ModelId::new("llama3.2")),
             "baml" => ("DefaultClient", ModelId::new("gpt-4o")),
             other => {
                 return Err(ProviderError::Config(format!(
