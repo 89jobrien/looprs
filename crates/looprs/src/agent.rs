@@ -8,6 +8,7 @@ use crate::fs_mode::FsMode;
 use crate::hooks::{ApprovalCallback, HookExecutor, HookRegistry, PromptCallback};
 use crate::models_config::ModelsConfig;
 use crate::observation_manager::ObservationManager;
+use crate::orchestration::DelegationContext;
 use crate::ports::{SessionStore, UserOutput};
 use crate::providers::LLMProvider;
 use crate::providers::{InferenceRequest, InferenceResponse};
@@ -147,6 +148,7 @@ pub struct Agent {
     runtime: RuntimeSettings,
     file_ref_policy: FileRefPolicy,
     pending_metadata: HashMap<String, String>,
+    pending_delegation: Option<DelegationContext>,
     session_logger: Option<Box<dyn SessionStore>>,
     output: Box<dyn UserOutput>,
     tool_executor: Arc<dyn ToolExecutor>,
@@ -190,6 +192,7 @@ impl Agent {
             runtime,
             file_ref_policy,
             pending_metadata: HashMap::new(),
+            pending_delegation: None,
             session_logger,
             output,
             tool_executor,
@@ -282,6 +285,11 @@ impl Agent {
     /// Add per-turn metadata that will be attached to the next turn.
     pub fn set_turn_metadata(&mut self, metadata: HashMap<String, String>) {
         self.pending_metadata.extend(metadata);
+    }
+
+    /// Attach typed delegation capabilities and routing details to the next turn.
+    pub fn set_delegation_context(&mut self, context: DelegationContext) {
+        self.pending_delegation = Some(context);
     }
 
     /// Append a user message, resolving configured file references first.
@@ -506,7 +514,11 @@ impl Agent {
     /// Drives one structured stream per inference step, emits text deltas, and
     /// continues tool turns until the provider returns terminal assistant text.
     pub async fn run_turn_streaming(&mut self) -> Result<(), AgentError> {
-        let delegated_agent = self.pending_metadata.get("orchestration.agent").cloned();
+        let delegated_agent = self
+            .pending_delegation
+            .as_ref()
+            .map(|context| context.agent_name().to_string())
+            .or_else(|| self.pending_metadata.get("orchestration.agent").cloned());
         if let Some(agent_name) = delegated_agent.clone() {
             let event_ctx = EventContext::new()
                 .with_tool_name(agent_name)
@@ -535,13 +547,22 @@ impl Agent {
         for (key, value) in &self.pending_metadata {
             event_ctx.metadata.insert(key.clone(), value.clone());
         }
+        if let Some(delegation) = &self.pending_delegation {
+            event_ctx
+                .metadata
+                .extend(delegation.compatibility_metadata());
+        }
         self.events.fire(Event::UserPromptSubmit, &event_ctx);
         let mut enriched_ctx = self.execute_hooks_for_event(&Event::UserPromptSubmit, &event_ctx);
         for (key, value) in std::mem::take(&mut self.pending_metadata) {
             enriched_ctx.metadata.insert(key, value);
         }
 
-        let tool_policy = delegated_tool_policy(&enriched_ctx.metadata);
+        let tool_policy = self
+            .pending_delegation
+            .take()
+            .map(|context| context.tool_policy().clone())
+            .or_else(|| delegated_tool_policy(&enriched_ctx.metadata));
         let system_prompt = self.build_system_prompt(&enriched_ctx);
         let mut tools = get_tool_definitions();
         if let Some(server_url) = self.runtime.mcp_server_url.clone() {
@@ -736,11 +757,16 @@ impl Agent {
 
     /// Run one full agent turn (inference plus any requested tool loop).
     pub async fn run_turn(&mut self) -> Result<(), AgentError> {
-        let delegated_agent = self.pending_metadata.get("orchestration.agent").cloned();
+        let delegated_agent = self
+            .pending_delegation
+            .as_ref()
+            .map(|context| context.agent_name().to_string())
+            .or_else(|| self.pending_metadata.get("orchestration.agent").cloned());
         let orchestration_strategy = self
-            .pending_metadata
-            .get("orchestration.strategy")
-            .cloned()
+            .pending_delegation
+            .as_ref()
+            .map(|context| context.strategy().to_string())
+            .or_else(|| self.pending_metadata.get("orchestration.strategy").cloned())
             .unwrap_or_else(|| "sequential".to_string());
         if let Some(agent_name) = delegated_agent.clone() {
             let event_ctx = EventContext::new()
@@ -784,13 +810,22 @@ impl Agent {
         for (key, value) in &self.pending_metadata {
             event_ctx.metadata.insert(key.clone(), value.clone());
         }
+        if let Some(delegation) = &self.pending_delegation {
+            event_ctx
+                .metadata
+                .extend(delegation.compatibility_metadata());
+        }
         self.events.fire(Event::UserPromptSubmit, &event_ctx);
         let mut enriched_ctx = self.execute_hooks_for_event(&Event::UserPromptSubmit, &event_ctx);
         for (key, value) in std::mem::take(&mut self.pending_metadata) {
             enriched_ctx.metadata.insert(key, value);
         }
 
-        let tool_policy = delegated_tool_policy(&enriched_ctx.metadata);
+        let tool_policy = self
+            .pending_delegation
+            .take()
+            .map(|context| context.tool_policy().clone())
+            .or_else(|| delegated_tool_policy(&enriched_ctx.metadata));
 
         let system_prompt = self.build_system_prompt(&enriched_ctx);
 
@@ -1826,16 +1861,19 @@ actions:
 
     #[tokio::test]
     async fn delegated_allowlist_limits_advertised_tools() {
+        use crate::orchestration::{DelegationContext, DelegationSelection};
+
         let provider = MockProvider::simple_text("done");
         let captured = provider.captured_tools_handle();
         let mut agent = agent_for_test(provider);
 
-        let mut metadata = HashMap::new();
-        metadata.insert(
-            ORCHESTRATION_TOOLS_METADATA_KEY.to_string(),
-            "read,grep".to_string(),
-        );
-        agent.set_turn_metadata(metadata);
+        agent.set_delegation_context(DelegationContext::new(
+            "reviewer",
+            "sequential",
+            DelegationSelection::Automatic,
+            None,
+            DelegatedToolPolicy::from_names(["read", "grep"]),
+        ));
         agent.add_user_message("hello");
         agent.run_turn().await.unwrap();
 

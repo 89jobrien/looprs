@@ -5,22 +5,30 @@ use std::collections::HashSet;
 use crate::api::ToolDefinition;
 
 /// Default-deny allowlist applied to delegated tool advertisement and execution.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DelegatedToolPolicy {
     allowed: HashSet<String>,
+    ordered: Vec<String>,
 }
 
 impl DelegatedToolPolicy {
+    /// Build a policy from typed tool names.
+    pub fn from_names(names: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let mut allowed = HashSet::new();
+        let mut ordered = Vec::new();
+        for name in names {
+            let name = name.into();
+            let name = name.trim();
+            if !name.is_empty() && allowed.insert(name.to_string()) {
+                ordered.push(name.to_string());
+            }
+        }
+        Self { allowed, ordered }
+    }
+
     /// Parse a comma-separated allowlist. Missing, empty, and malformed lists deny all tools.
     pub fn from_csv(raw: Option<&str>) -> Self {
-        let allowed = raw
-            .into_iter()
-            .flat_map(|value| value.split(','))
-            .map(str::trim)
-            .filter(|tool| !tool.is_empty())
-            .map(ToOwned::to_owned)
-            .collect();
-        Self { allowed }
+        Self::from_names(raw.into_iter().flat_map(|value| value.split(',')))
     }
 
     /// Return whether the delegated turn may execute `tool_name`.
@@ -31,6 +39,11 @@ impl DelegatedToolPolicy {
     /// Remove definitions that this delegated turn may not execute.
     pub fn filter_definitions(&self, definitions: &mut Vec<ToolDefinition>) {
         definitions.retain(|definition| self.allows(&definition.name));
+    }
+
+    /// Return allowed names in stable order for compatibility metadata.
+    pub fn names(&self) -> Vec<&str> {
+        self.ordered.iter().map(String::as_str).collect()
     }
 }
 
@@ -50,5 +63,6 @@ mod tests {
         assert!(policy.allows("read"));
         assert!(policy.allows("grep"));
         assert!(!policy.allows("bash"));
+        assert_eq!(policy.names(), vec!["read", "grep"]);
     }
 }
