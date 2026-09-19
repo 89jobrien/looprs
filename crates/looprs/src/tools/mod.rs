@@ -21,6 +21,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicU8, Ordering},
 };
+use std::time::Duration;
 
 use crate::fs_mode::FsMode;
 
@@ -28,6 +29,8 @@ use crate::api::ToolDefinition;
 use crate::errors::ToolContextError;
 
 pub use error::ToolError;
+
+const MCP_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone)]
 /// Shared execution context for all built-in tools.
@@ -491,7 +494,16 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
 /// `get_tool_definitions()` so the LLM sees external tools alongside builtins.
 #[allow(dead_code)]
 pub async fn mcp_tool_definitions(server_url: &str) -> anyhow::Result<Vec<ToolDefinition>> {
-    let client = reqwest::Client::new();
+    mcp_tool_definitions_with_timeout(server_url, MCP_DISCOVERY_TIMEOUT).await
+}
+
+async fn mcp_tool_definitions_with_timeout(
+    server_url: &str,
+    request_timeout: Duration,
+) -> anyhow::Result<Vec<ToolDefinition>> {
+    let client = reqwest::Client::builder()
+        .timeout(request_timeout)
+        .build()?;
 
     let body = serde_json::json!({
         "jsonrpc": "2.0",
@@ -619,7 +631,66 @@ mod tests {
     use super::*;
     use crate::fs_mode::FsMode;
     use proptest::prelude::*;
-    use std::io;
+    use std::io::{self, Read, Write};
+    use std::time::Duration;
+
+    fn start_raw_http_server(
+        response: &'static [u8],
+        delay: Duration,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request);
+            std::thread::sleep(delay);
+            stream.write_all(response).unwrap();
+        });
+        (format!("http://{address}"), handle)
+    }
+
+    #[tokio::test]
+    async fn mcp_discovery_times_out_deterministically() {
+        let (url, server) = start_raw_http_server(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 23\r\n\r\n{\"result\":{\"tools\":[]}}",
+            Duration::from_millis(100),
+        );
+
+        let error = mcp_tool_definitions_with_timeout(&url, Duration::from_millis(10))
+            .await
+            .unwrap_err();
+
+        assert!(
+            error
+                .downcast_ref::<reqwest::Error>()
+                .is_some_and(reqwest::Error::is_timeout)
+        );
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn mcp_discovery_rejects_invalid_http() {
+        let (url, server) = start_raw_http_server(b"not-http", Duration::ZERO);
+
+        let result = mcp_tool_definitions_with_timeout(&url, Duration::from_secs(1)).await;
+
+        assert!(result.is_err());
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn mcp_discovery_rejects_invalid_json() {
+        let (url, server) = start_raw_http_server(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nnot-json",
+            Duration::ZERO,
+        );
+
+        let result = mcp_tool_definitions_with_timeout(&url, Duration::from_secs(1)).await;
+
+        assert!(result.is_err());
+        server.join().unwrap();
+    }
 
     #[test]
     fn mcp_discovery_accepts_an_empty_catalog() {

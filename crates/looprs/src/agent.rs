@@ -88,10 +88,6 @@ fn validate_tool_calls(response: &InferenceResponse) -> Result<(), AgentError> {
     Ok(())
 }
 
-fn tool_ports_for_runtime(runtime: &RuntimeSettings) -> ToolPorts {
-    crate::adapters::default_tool_ports(runtime.mcp_server_url())
-}
-
 /// Mutable runtime settings applied to each agent turn.
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
@@ -191,14 +187,7 @@ pub struct Agent {
 impl Agent {
     /// Construct an agent with default runtime settings and console output.
     pub fn new(provider: Box<dyn LLMProvider>) -> Result<Self, AgentError> {
-        use crate::adapters::UiOutput;
-        Self::new_with_runtime(
-            provider,
-            RuntimeSettings::default(),
-            FileRefPolicy::default(),
-            None,
-            Box::new(UiOutput),
-        )
+        crate::adapters::default_agent(provider)
     }
 
     /// Construct an agent with explicit runtime, policy, and adapter ports.
@@ -209,7 +198,25 @@ impl Agent {
         session_logger: Option<Box<dyn SessionStore>>,
         output: Box<dyn UserOutput>,
     ) -> Result<Self, AgentError> {
-        let (tool_catalog, tool_dispatcher) = tool_ports_for_runtime(&runtime).into_parts();
+        crate::adapters::agent_with_runtime(
+            provider,
+            runtime,
+            file_ref_policy,
+            session_logger,
+            output,
+        )
+    }
+
+    /// Construct an agent from fully injected runtime abstractions.
+    pub fn new_with_runtime_and_tool_ports(
+        provider: Box<dyn LLMProvider>,
+        runtime: RuntimeSettings,
+        file_ref_policy: FileRefPolicy,
+        session_logger: Option<Box<dyn SessionStore>>,
+        output: Box<dyn UserOutput>,
+        tool_ports: ToolPorts,
+    ) -> Result<Self, AgentError> {
+        let (tool_catalog, tool_dispatcher) = tool_ports.into_parts();
 
         Ok(Self {
             provider,
@@ -250,8 +257,13 @@ impl Agent {
 
     /// Replace both tool-side ports with an explicit composition.
     pub fn with_tool_ports(mut self, ports: ToolPorts) -> Self {
-        (self.tool_catalog, self.tool_dispatcher) = ports.into_parts();
+        self.set_tool_ports(ports);
         self
+    }
+
+    /// Replace both tool-side ports with an explicit composition.
+    pub fn set_tool_ports(&mut self, ports: ToolPorts) {
+        (self.tool_catalog, self.tool_dispatcher) = ports.into_parts();
     }
 
     /// Replace the catalog used to advertise tools to providers.
@@ -291,7 +303,6 @@ impl Agent {
     /// Update runtime settings and propagate filesystem mode to tool context.
     pub fn set_runtime_settings(&mut self, runtime: RuntimeSettings) {
         self.tool_ctx.set_fs_mode(runtime.fs_mode);
-        (self.tool_catalog, self.tool_dispatcher) = tool_ports_for_runtime(&runtime).into_parts();
         self.runtime = runtime;
     }
 
@@ -1730,6 +1741,25 @@ mod tests {
         assert_eq!(captured.lock().unwrap()[0], vec!["injected".to_string()]);
     }
 
+    #[tokio::test]
+    async fn runtime_updates_preserve_injected_tool_ports() {
+        let provider = MockProvider::simple_text("done");
+        let captured = provider.captured_tools_handle();
+        let catalog =
+            crate::tools::StaticToolCatalog::new(vec![looprs_core::api::ToolDefinition {
+                name: "injected".to_string(),
+                description: "injected catalog entry".to_string(),
+                input_schema: serde_json::json!({"type": "object"}),
+            }]);
+        let mut agent = agent_for_test(provider).with_tool_catalog(Arc::new(catalog));
+
+        agent.set_runtime_settings(RuntimeSettings::default().with_max_parallel(2));
+        agent.add_user_message("hello");
+        agent.run_turn().await.unwrap();
+
+        assert_eq!(captured.lock().unwrap()[0], vec!["injected".to_string()]);
+    }
+
     #[test]
     fn runtime_environment_wires_mcp_without_mutating_process_state() {
         let runtime = RuntimeSettings::default()
@@ -2511,7 +2541,7 @@ actions:
     }
 
     #[tokio::test]
-    async fn set_runtime_settings_rebuilds_and_disables_mcp_executor() {
+    async fn runtime_composition_rebuilds_and_disables_mcp_executor() {
         let response = |text: &str| {
             serde_json::json!({
                 "jsonrpc": "2.0",
@@ -2523,10 +2553,13 @@ actions:
         let (second_url, second_server) = start_mcp_response_server(vec![response("second")]);
         let mut agent = agent_for_test(MockProvider::simple_text("done"));
 
-        agent.set_runtime_settings(RuntimeSettings {
-            mcp_server_url: Some(first_url),
-            ..RuntimeSettings::default()
-        });
+        crate::adapters::apply_runtime_settings(
+            &mut agent,
+            RuntimeSettings {
+                mcp_server_url: Some(first_url),
+                ..RuntimeSettings::default()
+            },
+        );
         assert_eq!(
             agent
                 .tool_dispatcher
@@ -2536,10 +2569,13 @@ actions:
             "first"
         );
 
-        agent.set_runtime_settings(RuntimeSettings {
-            mcp_server_url: Some(second_url),
-            ..RuntimeSettings::default()
-        });
+        crate::adapters::apply_runtime_settings(
+            &mut agent,
+            RuntimeSettings {
+                mcp_server_url: Some(second_url),
+                ..RuntimeSettings::default()
+            },
+        );
         assert_eq!(
             agent
                 .tool_dispatcher
@@ -2549,7 +2585,7 @@ actions:
             "second"
         );
 
-        agent.set_runtime_settings(RuntimeSettings::default());
+        crate::adapters::apply_runtime_settings(&mut agent, RuntimeSettings::default());
         assert!(matches!(
             agent
                 .tool_dispatcher

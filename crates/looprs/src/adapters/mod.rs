@@ -24,9 +24,50 @@ pub use sqlite_session_store::SqliteSessionStore;
 pub use ui_output::UiOutput;
 
 use crate::app_config::{AppConfig, SessionStoreBackend};
+use crate::errors::AgentError;
+use crate::file_refs::FileRefPolicy;
 use crate::ports::SessionStore;
+use crate::ports::UserOutput;
+use crate::providers::LLMProvider;
 use crate::tools::{BuiltinToolCatalog, DefaultToolExecutor, ToolPorts};
+use crate::{Agent, RuntimeSettings};
 use std::sync::Arc;
+
+/// Compose an agent with the default runtime adapters.
+pub fn default_agent(provider: Box<dyn LLMProvider>) -> Result<Agent, AgentError> {
+    agent_with_runtime(
+        provider,
+        RuntimeSettings::default(),
+        FileRefPolicy::default(),
+        None,
+        Box::new(UiOutput),
+    )
+}
+
+/// Compose an agent from runtime settings and default tool adapters.
+pub fn agent_with_runtime(
+    provider: Box<dyn LLMProvider>,
+    runtime: RuntimeSettings,
+    file_ref_policy: FileRefPolicy,
+    session_logger: Option<Box<dyn SessionStore>>,
+    output: Box<dyn UserOutput>,
+) -> Result<Agent, AgentError> {
+    let tool_ports = default_tool_ports(runtime.mcp_server_url());
+    Agent::new_with_runtime_and_tool_ports(
+        provider,
+        runtime,
+        file_ref_policy,
+        session_logger,
+        output,
+        tool_ports,
+    )
+}
+
+/// Apply runtime settings and rebuild default tool adapters at the composition root.
+pub fn apply_runtime_settings(agent: &mut Agent, runtime: RuntimeSettings) {
+    agent.set_tool_ports(default_tool_ports(runtime.mcp_server_url()));
+    agent.set_runtime_settings(runtime);
+}
 
 /// Compose the default tool catalog and dispatcher for runtime settings.
 pub fn default_tool_ports(mcp_server_url: Option<&str>) -> ToolPorts {

@@ -22,8 +22,19 @@ pub use looprs_core::ports::inference_provider::{InferenceRequest, InferenceResp
 
 const DEFAULT_TIMEOUT_SECS: u64 = 120;
 
+type ProviderConstructor = fn(Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError>;
+type SettingsGetter = for<'a> fn(
+    &'a crate::config_file::ProviderConfig,
+) -> Option<&'a crate::config_file::ProviderSettings>;
+type SettingsGetterMut = for<'a> fn(
+    &'a mut crate::config_file::ProviderConfig,
+) -> Option<&'a mut crate::config_file::ProviderSettings>;
+type SettingsInserter = for<'a> fn(
+    &'a mut crate::config_file::ProviderConfig,
+) -> &'a mut crate::config_file::ProviderSettings;
+
 /// Canonical identity and configuration mapping for a provider implementation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct ProviderDescriptor {
     /// Name used after alias normalization.
     pub canonical_name: &'static str,
@@ -31,6 +42,98 @@ pub struct ProviderDescriptor {
     pub aliases: &'static [&'static str],
     /// Section in `.looprs/provider.json` used by this implementation.
     pub settings_section: &'static str,
+    constructor: ProviderConstructor,
+    settings: SettingsGetter,
+    settings_mut: SettingsGetterMut,
+    settings_insert: SettingsInserter,
+}
+
+impl PartialEq for ProviderDescriptor {
+    fn eq(&self, other: &Self) -> bool {
+        self.canonical_name == other.canonical_name
+            && self.aliases == other.aliases
+            && self.settings_section == other.settings_section
+    }
+}
+
+impl Eq for ProviderDescriptor {}
+
+impl ProviderDescriptor {
+    pub(crate) fn create(
+        &self,
+        model: Option<ModelId>,
+    ) -> Result<Box<dyn LLMProvider>, ProviderError> {
+        (self.constructor)(model)
+    }
+
+    pub(crate) fn settings<'a>(
+        &self,
+        config: &'a crate::config_file::ProviderConfig,
+    ) -> Option<&'a crate::config_file::ProviderSettings> {
+        (self.settings)(config)
+    }
+
+    pub(crate) fn settings_mut<'a>(
+        &self,
+        config: &'a mut crate::config_file::ProviderConfig,
+    ) -> Option<&'a mut crate::config_file::ProviderSettings> {
+        (self.settings_mut)(config)
+    }
+
+    pub(crate) fn get_or_insert_settings<'a>(
+        &self,
+        config: &'a mut crate::config_file::ProviderConfig,
+    ) -> &'a mut crate::config_file::ProviderSettings {
+        (self.settings_insert)(config)
+    }
+}
+
+fn construct_anthropic(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    Ok(Box::new(anthropic::AnthropicProvider::new_with_model(
+        resolve_secret_env("ANTHROPIC_API_KEY")?,
+        model,
+    )?))
+}
+
+fn construct_anthropic_sdk(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    Ok(Box::new(
+        anthropic_sdk::AnthropicSdkProvider::new_with_model(
+            resolve_secret_env("ANTHROPIC_API_KEY")?,
+            model,
+        )?,
+    ))
+}
+
+fn construct_openai(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    Ok(Box::new(openai::OpenAIProvider::new_with_model(
+        resolve_secret_env("OPENAI_API_KEY")?,
+        model,
+    )?))
+}
+
+fn construct_openai_sdk(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    Ok(Box::new(openai_sdk::OpenAISdkProvider::new_with_model(
+        resolve_secret_env("OPENAI_API_KEY")?,
+        model,
+    )?))
+}
+
+fn construct_gemini(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    let key =
+        resolve_secret_env("GEMINI_API_KEY").or_else(|_| resolve_secret_env("GOOGLE_API_KEY"))?;
+    Ok(Box::new(gemini::GeminiProvider::new_with_model(
+        key, model,
+    )?))
+}
+
+fn construct_local(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    Ok(Box::new(local::LocalProvider::new_with_model(model)?))
+}
+
+fn construct_baml(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    Ok(Box::new(baml_provider::BamlProvider::for_provider(
+        "baml", model,
+    )?))
 }
 
 const PROVIDER_DESCRIPTORS: &[ProviderDescriptor] = &[
@@ -38,36 +141,64 @@ const PROVIDER_DESCRIPTORS: &[ProviderDescriptor] = &[
         canonical_name: "anthropic",
         aliases: &["anthropic"],
         settings_section: "anthropic",
+        constructor: construct_anthropic,
+        settings: |config| config.anthropic.as_ref(),
+        settings_mut: |config| config.anthropic.as_mut(),
+        settings_insert: |config| config.anthropic.get_or_insert_with(Default::default),
     },
     ProviderDescriptor {
         canonical_name: "anthropic-sdk",
         aliases: &["anthropic-sdk", "claude-sdk"],
         settings_section: "anthropic",
+        constructor: construct_anthropic_sdk,
+        settings: |config| config.anthropic.as_ref(),
+        settings_mut: |config| config.anthropic.as_mut(),
+        settings_insert: |config| config.anthropic.get_or_insert_with(Default::default),
     },
     ProviderDescriptor {
         canonical_name: "openai",
         aliases: &["openai"],
         settings_section: "openai",
+        constructor: construct_openai,
+        settings: |config| config.openai.as_ref(),
+        settings_mut: |config| config.openai.as_mut(),
+        settings_insert: |config| config.openai.get_or_insert_with(Default::default),
     },
     ProviderDescriptor {
         canonical_name: "openai-sdk",
         aliases: &["openai-sdk"],
         settings_section: "openai",
+        constructor: construct_openai_sdk,
+        settings: |config| config.openai.as_ref(),
+        settings_mut: |config| config.openai.as_mut(),
+        settings_insert: |config| config.openai.get_or_insert_with(Default::default),
     },
     ProviderDescriptor {
         canonical_name: "gemini",
         aliases: &["gemini", "google"],
         settings_section: "gemini",
+        constructor: construct_gemini,
+        settings: |config| config.gemini.as_ref(),
+        settings_mut: |config| config.gemini.as_mut(),
+        settings_insert: |config| config.gemini.get_or_insert_with(Default::default),
     },
     ProviderDescriptor {
         canonical_name: "local",
         aliases: &["local", "ollama"],
         settings_section: "local",
+        constructor: construct_local,
+        settings: |config| config.local.as_ref(),
+        settings_mut: |config| config.local.as_mut(),
+        settings_insert: |config| config.local.get_or_insert_with(Default::default),
     },
     ProviderDescriptor {
         canonical_name: "baml",
         aliases: &["baml"],
         settings_section: "baml",
+        constructor: construct_baml,
+        settings: |config| config.baml.as_ref(),
+        settings_mut: |config| config.baml.as_mut(),
+        settings_insert: |config| config.baml.get_or_insert_with(Default::default),
     },
 ];
 
@@ -351,57 +482,8 @@ async fn create_provider_by_name(
 ) -> Result<Box<dyn LLMProvider>, ProviderError> {
     let descriptor = provider_descriptor(name)
         .ok_or_else(|| ProviderError::Config(format!("Unknown provider: {name}")))?;
-    match descriptor.canonical_name {
-        "anthropic" => {
-            let key = resolve_secret_env("ANTHROPIC_API_KEY")?;
-            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
-            Ok(Box::new(anthropic::AnthropicProvider::new_with_model(
-                key, model,
-            )?))
-        }
-        "anthropic-sdk" => {
-            let key = resolve_secret_env("ANTHROPIC_API_KEY")?;
-            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
-            Ok(Box::new(
-                anthropic_sdk::AnthropicSdkProvider::new_with_model(key, model)?,
-            ))
-        }
-        "openai" => {
-            let key = resolve_secret_env("OPENAI_API_KEY")?;
-            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
-            Ok(Box::new(openai::OpenAIProvider::new_with_model(
-                key, model,
-            )?))
-        }
-        "openai-sdk" => {
-            let key = resolve_secret_env("OPENAI_API_KEY")?;
-            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
-            Ok(Box::new(openai_sdk::OpenAISdkProvider::new_with_model(
-                key, model,
-            )?))
-        }
-        "gemini" => {
-            let key = resolve_secret_env("GEMINI_API_KEY")
-                .or_else(|_| resolve_secret_env("GOOGLE_API_KEY"))?;
-            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
-            Ok(Box::new(gemini::GeminiProvider::new_with_model(
-                key, model,
-            )?))
-        }
-        "local" => {
-            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
-            Ok(Box::new(local::LocalProvider::new_with_model(model)?))
-        }
-        "baml" => {
-            let model = resolve_model(descriptor.settings_section, config_file, &overrides);
-            Ok(Box::new(baml_provider::BamlProvider::for_provider(
-                "baml", model,
-            )?))
-        }
-        canonical => Err(ProviderError::Config(format!(
-            "Provider descriptor has unsupported canonical name: {canonical}"
-        ))),
-    }
+    let model = resolve_model(descriptor.settings_section, config_file, &overrides);
+    descriptor.create(model)
 }
 
 #[cfg(test)]
@@ -483,6 +565,25 @@ mod tests {
                 "ollama",
                 "baml"
             ]
+        );
+    }
+
+    #[test]
+    fn provider_descriptor_drives_construction_and_settings_access() {
+        let descriptor = provider_descriptor("ollama").unwrap();
+        let mut config = crate::config_file::ProviderConfig::default();
+
+        descriptor.get_or_insert_settings(&mut config).model = Some("llama3.2:latest".to_string());
+        let provider = descriptor
+            .create(Some(ModelId::new("llama3.2:latest")))
+            .unwrap();
+
+        assert_eq!(provider.name(), "ollama");
+        assert_eq!(
+            descriptor
+                .settings(&config)
+                .and_then(|settings| settings.model.as_deref()),
+            Some("llama3.2:latest")
         );
     }
 

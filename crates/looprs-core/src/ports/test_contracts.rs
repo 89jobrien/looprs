@@ -219,7 +219,86 @@ pub fn assert_inference_provider_contract(provider: &dyn crate::ports::Inference
     );
 
     let _ = provider.supports_tool_use();
-    let _ = provider.validate_config();
+    if let Err(error) = provider.validate_config() {
+        assert!(
+            !error.to_string().trim().is_empty(),
+            "validate_config() errors must carry a message"
+        );
+    }
+}
+
+/// Assert the shared semantics for a provider with invalid configuration.
+///
+/// Validation and inference must both return descriptive errors rather than
+/// panicking or producing an apparently successful response.
+pub async fn assert_inference_provider_error_contract(
+    provider: &dyn crate::ports::InferenceProvider,
+) {
+    use crate::api::Message;
+
+    let validation_error = provider
+        .validate_config()
+        .expect_err("invalid provider configuration must fail validation");
+    assert!(
+        !validation_error.to_string().trim().is_empty(),
+        "validation errors must carry a message"
+    );
+
+    let request = crate::ports::InferenceRequest {
+        model: provider.model().clone(),
+        messages: vec![Message::user("conformance error")],
+        tools: Vec::new(),
+        max_tokens: 16,
+        temperature: None,
+        system: String::new(),
+    };
+    let inference_error = provider
+        .infer(&request)
+        .await
+        .expect_err("invalid provider configuration must not infer successfully");
+    assert!(
+        !inference_error.to_string().trim().is_empty(),
+        "inference errors must carry a message"
+    );
+}
+
+/// Validate the response semantics shared by all provider implementations.
+///
+/// Providers may emit assistant text and tool calls. Tool results are runtime
+/// messages and must never appear in a provider response.
+pub async fn assert_inference_provider_response_contract(
+    provider: &dyn crate::ports::InferenceProvider,
+) -> Result<(), String> {
+    use crate::api::{ContentBlock, Message};
+
+    let request = crate::ports::InferenceRequest {
+        model: provider.model().clone(),
+        messages: vec![Message::user("conformance response")],
+        tools: Vec::new(),
+        max_tokens: 16,
+        temperature: None,
+        system: String::new(),
+    };
+    let response = provider
+        .infer(&request)
+        .await
+        .map_err(|error| error.to_string())?;
+    for block in &response.content {
+        match block {
+            ContentBlock::ToolUse { id, name, input }
+                if id.as_str().trim().is_empty()
+                    || name.as_str().trim().is_empty()
+                    || !input.is_object() =>
+            {
+                return Err("provider response contained a malformed tool call".to_string());
+            }
+            ContentBlock::ToolResult { .. } => {
+                return Err("provider response contained a tool result".to_string());
+            }
+            ContentBlock::Text { .. } | ContentBlock::ToolUse { .. } => {}
+        }
+    }
+    Ok(())
 }
 
 // ── UserOutput ──────────────────────────────────────────────────────────
@@ -512,6 +591,11 @@ mod tests {
         model: ModelId,
     }
 
+    struct InvalidInferenceProvider {
+        model: ModelId,
+        response: InferenceResponse,
+    }
+
     #[async_trait::async_trait]
     impl InferenceProvider for FailingInferenceProvider {
         async fn infer(
@@ -530,7 +614,29 @@ mod tests {
         }
 
         fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-            Ok(())
+            Err("scripted validation failure".into())
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for InvalidInferenceProvider {
+        async fn infer(
+            &self,
+            _req: &InferenceRequest,
+        ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(self.response.clone())
+        }
+
+        fn name(&self) -> &str {
+            "invalid-scripted"
+        }
+
+        fn model(&self) -> &ModelId {
+            &self.model
+        }
+
+        fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Err("scripted validation failure".into())
         }
     }
 
@@ -816,5 +922,57 @@ mod tests {
             events[0].as_ref().unwrap_err().to_string(),
             "scripted inference failure"
         );
+    }
+
+    #[tokio::test]
+    async fn provider_error_contract_covers_validation_and_inference_failures() {
+        let provider = FailingInferenceProvider {
+            model: ModelId::new("failing-model"),
+        };
+
+        assert_inference_provider_error_contract(&provider).await;
+    }
+
+    #[tokio::test]
+    async fn provider_response_contract_rejects_tool_results_from_providers() {
+        let provider = InvalidInferenceProvider {
+            model: ModelId::new("invalid-model"),
+            response: InferenceResponse {
+                content: vec![ContentBlock::ToolResult {
+                    tool_use_id: ToolId::new("call-1"),
+                    content: "provider-generated result".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage::default(),
+            },
+        };
+
+        let error = assert_inference_provider_response_contract(&provider)
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("tool result"));
+    }
+
+    #[tokio::test]
+    async fn provider_response_contract_rejects_malformed_tool_calls() {
+        let provider = InvalidInferenceProvider {
+            model: ModelId::new("invalid-model"),
+            response: InferenceResponse {
+                content: vec![ContentBlock::ToolUse {
+                    id: ToolId::new(""),
+                    name: ToolName::new("read"),
+                    input: serde_json::json!(["README.md"]),
+                }],
+                stop_reason: "tool_use".to_string(),
+                usage: Usage::default(),
+            },
+        };
+
+        let error = assert_inference_provider_response_contract(&provider)
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("malformed tool call"));
     }
 }
