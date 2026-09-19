@@ -29,7 +29,7 @@
 
   <rect x="520" y="140" width="130" height="76" class="node" />
   <text x="543" y="168" class="label">looprs-macros</text>
-  <text x="549" y="190" class="muted">derive helpers</text>
+  <text x="535" y="190" class="muted">macro_rules! helpers</text>
 
   <rect x="200" y="300" width="150" height="76" class="node" />
   <text x="238" y="328" class="label">looprs-cli</text>

@@ -33,8 +33,8 @@
           <tr><td><code>looprs-core</code></td><td>lib</td><td>API types, ports, events, and lightweight adapters</td></tr>
           <tr><td><code>looprs</code></td><td>lib</td><td>Agent runtime, providers, tools, hooks, skills, rules, and context pipeline</td></tr>
           <tr><td><code>looprs-cli</code></td><td>bin</td><td>CLI args, REPL loop, runtime startup and command handling</td></tr>
-          <tr><td><code>looprs-tui</code></td><td>lib/bin</td><td>Provider picker and chat TUI frontend</td></tr>
-          <tr><td><code>looprs-macros</code></td><td>proc-macro</td><td>Macro support for project ergonomics</td></tr>
+          <tr><td><code>looprs-tui</code></td><td>lib</td><td>Provider picker and chat TUI frontend used by the CLI binary</td></tr>
+          <tr><td><code>looprs-macros</code></td><td>lib</td><td>Reusable <code>macro_rules!</code> macros</td></tr>
           <tr><td><code>xtask</code></td><td>bin</td><td>Local quality gates and developer automation wrapper</td></tr>
         </tbody>
       </table>
@@ -47,9 +47,9 @@
           </thead>
           <tbody>
             <tr><td><code>looprs</code></td><td><code>looprs-core</code></td><td>Consumes stable API types and ports.</td></tr>
-            <tr><td><code>looprs-cli</code></td><td><code>looprs</code>, <code>looprs-core</code></td><td>Builds UX on runtime and shared contracts.</td></tr>
-            <tr><td><code>looprs-tui</code></td><td><code>looprs</code>, <code>looprs-core</code></td><td>Interactive rendering and provider selection.</td></tr>
-            <tr><td><code>xtask</code></td><td>workspace crates</td><td>Runs grouped quality and release checks.</td></tr>
+            <tr><td><code>looprs-cli</code></td><td><code>looprs</code>, <code>looprs-tui</code></td><td>Builds the binary UX on the runtime and TUI library.</td></tr>
+            <tr><td><code>looprs-tui</code></td><td><code>looprs</code></td><td>Interactive rendering and provider selection over the runtime.</td></tr>
+            <tr><td><code>xtask</code></td><td>no workspace crate dependency</td><td>Delegates quality and release checks to external commands.</td></tr>
           </tbody>
         </table>
       </div>
@@ -72,7 +72,7 @@
         <li><strong>looprs:</strong> add runtime behavior, provider wiring, tools, hooks, and policy loops.</li>
         <li><strong>looprs-cli:</strong> add flags, command UX, and shell-facing integration.</li>
         <li><strong>looprs-tui:</strong> add terminal interaction flows and display behavior.</li>
-        <li><strong>looprs-macros:</strong> add compile-time ergonomics helpers.</li>
+        <li><strong>looprs-macros:</strong> add reusable declarative macros.</li>
         <li><strong>xtask:</strong> add project automation and verification commands.</li>
       </ul>
 

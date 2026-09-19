@@ -141,7 +141,8 @@ Markdown constraint files in `.looprs/rules/`. Evaluated against agent behavior.
 
 ### Hooks
 
-YAML hooks fire on session lifecycle events. Define in `.looprs/hooks/<EventName>.yaml`:
+YAML hooks subscribe to runtime event variants. Define them in
+`.looprs/hooks/<EventName>.yaml`:
 
 ```yaml
 name: show_status
@@ -157,7 +158,12 @@ actions:
     approval_prompt: "Inject git status into context?"
 ```
 
-Events: `SessionStart`, `UserPromptSubmit`, `InferenceComplete`, `PreToolUse`, `PostToolUse`, `OnError`, `OnWarning`, `SessionEnd`, `DelegationStart`, `DelegationComplete`.
+Available event variants are `SessionStart`, `UserPromptSubmit`,
+`InferenceComplete`, `PreToolUse`, `PostToolUse`, `OnError`, `OnWarning`,
+`SessionEnd`, `DelegationStart`, and `DelegationComplete`. The CLI fires the
+session boundary events; turn execution fires prompt, inference, tool, and
+delegation events as those stages occur. `OnError` is currently fired for tool
+execution failures, while provider errors and timeouts return directly.
 
 Action types: `command` (Nushell command, optional `inject_as` and `requires_approval`), `message`, `conditional`.
 
@@ -195,7 +201,7 @@ The repository is a Cargo workspace:
 - `crates/looprs-cli/` — `looprs` binary, CLI argument parsing, REPL, and runtime facade
 - `crates/looprs-tui/` — `looprs provider` (provider/model select menu) and `looprs tui` (alternate chat TUI)
 - `xtask/` — local automation shim that delegates to `taskit`
-- `tests/` — workspace integration tests
+- `crates/looprs/tests/` — runtime integration tests
 - `fuzz/` — fuzz targets, excluded from the default workspace
 
 See [`docs/ownership-model.md`](./docs/ownership-model.md) for canonical ownership boundaries.

@@ -55,7 +55,7 @@ For maintainers creating releases:
 5. Re-run the full gates, commit the manifests, lockfile, and changelog with a signed
    `chore(release): prepare X.Y.Z` commit, then merge it to `main` through a pull request.
 6. Dispatch `gh workflow run release.yml --ref main -f version=X.Y.Z`.
-7. Verify all five crates, the `vX.Y.Z` tag, provenance attestations, checksums, SBOMs,
+7. Verify all five publishable crates, the `vX.Y.Z` tag, provenance attestations, checksums, SBOMs,
    and GitHub release assets.
 
 The release workflow never changes versions. It validates the merged release commit,

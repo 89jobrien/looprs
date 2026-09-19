@@ -48,7 +48,7 @@ crates/looprs/        — agent runtime, providers, tools, hooks, skills, plugin
 crates/looprs-cli/    — looprs binary, CLI arg parsing, REPL, runtime facade
 crates/looprs-tui/    — `looprs provider` (select menu) and `looprs tui` (chat TUI)
 xtask/                — local automation shim (delegates to taskit)
-tests/                — workspace integration tests
+crates/looprs/tests/  — runtime integration tests
 fuzz/                 — fuzz targets (excluded from default workspace)
 ```
 
@@ -130,12 +130,13 @@ All customization happens in `.looprs/` without modifying core:
 ### Async/Await
 - All LLM API calls are async (tokio runtime)
 - Use `#[tokio::main]` in bin, `async_trait` for providers
-- Tool execution is synchronous but may shell out to async processes
+- The tool execution port is async; built-in filesystem/shell tools perform synchronous work,
+  while remote MCP tools await network I/O
 
 ### Testing
 - `cargo nextest run --workspace`, not `cargo test`
 - Unit tests alongside implementation in `src/`
-- Integration tests in `tests/`
+- Integration tests in `crates/looprs/tests/` and `crates/looprs-cli/tests/`
 - Live LLM tests are off by default — enable with `LOOPRS_RUN_LIVE_LLM_TESTS=1`
 
 ### Module Exports

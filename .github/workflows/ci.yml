@@ -135,24 +135,7 @@ jobs:
       - name: Generate workspace coverage
         run: cargo +stable llvm-cov nextest --locked --workspace --all-features --lcov --output-path lcov.info
       - name: Record comparable workspace coverage
-        run: |
-          lines_found=$(awk -F: '/^LF:/{sum += $2} END {print sum + 0}' lcov.info)
-          lines_hit=$(awk -F: '/^LH:/{sum += $2} END {print sum + 0}' lcov.info)
-          if [[ "$lines_found" -eq 0 ]]; then
-            echo "lcov.info contains no instrumented lines" >&2
-            exit 1
-          fi
-          percentage=$(awk -v hit="$lines_hit" -v found="$lines_found" 'BEGIN {printf "%.4f", hit * 100 / found}')
-          jq -n \
-            --arg commit "$GITHUB_SHA" \
-            --arg ref "$GITHUB_REF" \
-            --argjson lines_found "$lines_found" \
-            --argjson lines_hit "$lines_hit" \
-            --argjson percentage "$percentage" \
-            '{schema_version: 1, commit: $commit, ref: $ref, lines_found: $lines_found, lines_hit: $lines_hit, percentage: $percentage}' \
-            > workspace-coverage.json
-          jq -e '.schema_version == 1 and .lines_found > 0 and .lines_hit >= 0 and .lines_hit <= .lines_found and .percentage >= 0 and .percentage <= 100' workspace-coverage.json
-          echo "### Workspace coverage: ${percentage}% (${lines_hit}/${lines_found} lines)" >> "$GITHUB_STEP_SUMMARY"
+        run: scripts/ci/coverage-summary.sh lcov.info workspace-coverage.json "$GITHUB_SHA" "$GITHUB_REF" "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: workspace-coverage-${{ github.sha }}
@@ -164,10 +147,56 @@ jobs:
           files: lcov.info
           fail_ci_if_error: true
 
+  workflow-contracts:
+    name: workflow-contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
+        with:
+          tool: actionlint@1.7.7,shellcheck@0.11.0
+          fallback: none
+      - name: Lint workflows and shell scripts
+        run: |
+          actionlint
+          git ls-files 'scripts/*.sh' 'scripts/**/*.sh' | xargs shellcheck
+      - name: Run workflow and site contract tests
+        run: |
+          scripts/tests/release-health.sh
+          scripts/tests/workflow-contracts.sh
+          scripts/tests/site-smoke.sh
+
+  workflow-contracts-windows:
+    name: workflow-contracts-windows
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Exercise Windows package success and failure paths
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force tmp | Out-Null
+          Set-Content -Encoding ascii tmp/looprs.exe 'binary'
+          Set-Content -Encoding ascii tmp/README.md '# test'
+          Set-Content -Encoding ascii tmp/LICENSE 'license'
+          scripts/ci/package-release-windows.ps1 -Binary tmp/looprs.exe -Readme tmp/README.md -License tmp/LICENSE -Output tmp/looprs.zip
+          if (-not (Test-Path tmp/looprs.zip) -or -not (Test-Path tmp/looprs.zip.sha256)) { throw 'package outputs missing' }
+          try {
+            scripts/ci/package-release-windows.ps1 -Binary tmp/missing.exe -Readme tmp/README.md -License tmp/LICENSE -Output tmp/missing.zip
+            throw 'missing binary unexpectedly packaged'
+          } catch {
+            if ($_.Exception.Message -notlike '*required package input is missing*') { throw }
+          }
+
   required:
     name: required
     if: always()
-    needs: [fmt, clippy, msrv, stable, dependency-policy, coverage]
+    needs: [fmt, clippy, msrv, stable, dependency-policy, coverage, workflow-contracts, workflow-contracts-windows]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -179,8 +208,10 @@ jobs:
           STABLE_RESULT: ${{ needs.stable.result }}
           DEPENDENCY_RESULT: ${{ needs.dependency-policy.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
+          WORKFLOW_RESULT: ${{ needs.workflow-contracts.result }}
+          WINDOWS_WORKFLOW_RESULT: ${{ needs.workflow-contracts-windows.result }}
         run: |
-          for result in "$FMT_RESULT" "$CLIPPY_RESULT" "$MSRV_RESULT" "$STABLE_RESULT" "$DEPENDENCY_RESULT" "$COVERAGE_RESULT"; do
+          for result in "$FMT_RESULT" "$CLIPPY_RESULT" "$MSRV_RESULT" "$STABLE_RESULT" "$DEPENDENCY_RESULT" "$COVERAGE_RESULT" "$WORKFLOW_RESULT" "$WINDOWS_WORKFLOW_RESULT"; do
             if [[ "$result" != "success" ]]; then
               echo "A required CI job finished with status: $result" >&2
               exit 1
