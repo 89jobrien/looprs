@@ -10,6 +10,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::OnceLock;
@@ -33,6 +34,118 @@ const CANCELLATION_POLL_INTERVAL: std::time::Duration = std::time::Duration::fro
 
 static EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 static GENERATED_RUN_ID: OnceLock<String> = OnceLock::new();
+static SYSTEM_ENVIRONMENT: SystemEnvironment = SystemEnvironment;
+static SYSTEM_CLOCK: SystemClock = SystemClock;
+static SYSTEM_CANCELLATION_FILES: SystemCancellationFiles = SystemCancellationFiles;
+static PROCESS_IDENTITY: ProcessRunIdentity = ProcessRunIdentity;
+static PROCESS_SEQUENCE: ProcessEventSequence = ProcessEventSequence;
+
+/// Reads machine-protocol configuration without coupling protocol logic to process globals.
+pub trait EnvironmentPort {
+    /// Returns one environment value when present and valid Unicode.
+    fn var(&self, name: &str) -> Option<String>;
+}
+
+/// Supplies wall-clock values used by run controls and v1 envelopes.
+pub trait ClockPort {
+    /// Returns Unix epoch time in milliseconds.
+    fn epoch_millis(&self) -> u128;
+    /// Returns the current UTC timestamp in RFC 3339 form.
+    fn rfc3339_utc(&self) -> String;
+}
+
+/// Checks whether a cancellation marker exists.
+pub trait CancellationFilePort {
+    /// Returns whether `path` currently exists.
+    fn exists(&self, path: &Path) -> bool;
+}
+
+/// Resolves the stable identity shared by events in one run.
+pub trait RunIdentityPort {
+    /// Returns a run identifier using the supplied environment and clock services.
+    fn run_id(&self, environment: &dyn EnvironmentPort, clock: &dyn ClockPort) -> String;
+}
+
+/// Supplies monotonically increasing event sequence numbers.
+pub trait EventSequencePort {
+    /// Returns the next sequence number.
+    fn next_sequence(&self) -> u64;
+}
+
+/// Receives a machine record after protocol selection and envelope construction.
+pub trait EventSinkPort {
+    /// Sink-specific error.
+    type Error;
+
+    /// Emits one selected machine record.
+    fn emit(&mut self, record: &MachineRecord) -> Result<(), Self::Error>;
+}
+
+/// Process environment adapter used by the compatibility API.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemEnvironment;
+
+impl EnvironmentPort for SystemEnvironment {
+    fn var(&self, name: &str) -> Option<String> {
+        std::env::var(name).ok()
+    }
+}
+
+/// System clock adapter used by the compatibility API.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemClock;
+
+impl ClockPort for SystemClock {
+    fn epoch_millis(&self) -> u128 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_millis())
+            .unwrap_or_default()
+    }
+
+    fn rfc3339_utc(&self) -> String {
+        chrono::Utc::now().to_rfc3339()
+    }
+}
+
+/// Host filesystem adapter used for cancellation markers.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemCancellationFiles;
+
+impl CancellationFilePort for SystemCancellationFiles {
+    fn exists(&self, path: &Path) -> bool {
+        path.exists()
+    }
+}
+
+/// Process-stable run identity adapter used by the compatibility API.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ProcessRunIdentity;
+
+impl RunIdentityPort for ProcessRunIdentity {
+    fn run_id(&self, environment: &dyn EnvironmentPort, clock: &dyn ClockPort) -> String {
+        if let Some(explicit) = environment.var(MACHINE_RUN_ID_ENV) {
+            let trimmed = explicit.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+
+        GENERATED_RUN_ID
+            .get_or_init(|| format!("run-{}-{}", clock.epoch_millis(), std::process::id()))
+            .clone()
+    }
+}
+
+/// Process-monotonic sequencing adapter used by the compatibility API.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ProcessEventSequence;
+
+impl EventSequencePort for ProcessEventSequence {
+    fn next_sequence(&self) -> u64 {
+        EVENT_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1
+    }
+}
 
 /// Supported machine event formats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,6 +250,139 @@ pub enum MachineRecord {
     V1(MachineEnvelope),
 }
 
+/// Injectable machine-protocol service.
+///
+/// The service owns no process-global state. Callers choose focused adapters for
+/// environment, time, identity, sequencing, and event delivery.
+#[derive(Clone, Copy)]
+pub struct AutomationProtocol<'a> {
+    environment: &'a dyn EnvironmentPort,
+    clock: &'a dyn ClockPort,
+    identity: &'a dyn RunIdentityPort,
+    sequence: &'a dyn EventSequencePort,
+}
+
+impl fmt::Debug for AutomationProtocol<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("AutomationProtocol { .. }")
+    }
+}
+
+impl<'a> AutomationProtocol<'a> {
+    /// Creates a protocol service from focused ports.
+    pub const fn new(
+        environment: &'a dyn EnvironmentPort,
+        clock: &'a dyn ClockPort,
+        identity: &'a dyn RunIdentityPort,
+        sequence: &'a dyn EventSequencePort,
+    ) -> Self {
+        Self {
+            environment,
+            clock,
+            identity,
+            sequence,
+        }
+    }
+
+    /// Creates the process-backed service used by the legacy free functions.
+    pub fn system() -> AutomationProtocol<'static> {
+        AutomationProtocol::new(
+            &SYSTEM_ENVIRONMENT,
+            &SYSTEM_CLOCK,
+            &PROCESS_IDENTITY,
+            &PROCESS_SEQUENCE,
+        )
+    }
+
+    /// Selects the configured protocol, validating explicit version strings.
+    pub fn selected_protocol(&self) -> Option<MachineProtocol> {
+        if let Some(protocol) = self.environment.var(MACHINE_PROTOCOL_ENV) {
+            return protocol.parse().ok();
+        }
+
+        self.environment
+            .var(MACHINE_LOG_ENV)
+            .filter(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true"))
+            .map(|_| MachineProtocol::Legacy)
+    }
+
+    /// Returns the stable identity for this service's run.
+    pub fn run_id(&self) -> String {
+        self.identity.run_id(self.environment, self.clock)
+    }
+
+    /// Builds the next typed v1 envelope when v1 is explicitly selected.
+    pub fn next_envelope(&self, kind: &str, data: Value) -> Option<MachineEnvelope> {
+        if self.selected_protocol()? != MachineProtocol::V1 {
+            return None;
+        }
+
+        Some(MachineEnvelope {
+            protocol: MachineProtocol::V1,
+            run_id: self.run_id(),
+            sequence: self.sequence.next_sequence(),
+            timestamp: self.clock.rfc3339_utc(),
+            event: MachineEvent {
+                kind: kind.to_string(),
+                data,
+            },
+        })
+    }
+
+    /// Builds the next record in the selected legacy or versioned format.
+    pub fn next_record(&self, kind: &str, data: Value) -> Option<MachineRecord> {
+        match self.selected_protocol()? {
+            MachineProtocol::Legacy => Some(MachineRecord::Legacy(MachineEvent {
+                kind: kind.to_string(),
+                data,
+            })),
+            MachineProtocol::V1 => self.next_envelope(kind, data).map(MachineRecord::V1),
+        }
+    }
+
+    /// Builds and emits one record through the supplied sink.
+    pub fn emit<S: EventSinkPort>(
+        &self,
+        sink: &mut S,
+        kind: &str,
+        data: Value,
+    ) -> Result<Option<MachineRecord>, S::Error> {
+        let Some(record) = self.next_record(kind, data) else {
+            return Ok(None);
+        };
+        sink.emit(&record)?;
+        Ok(Some(record))
+    }
+}
+
+/// JSONL event sink for machine-readable writers.
+#[derive(Debug)]
+pub struct JsonLineEventSink<W> {
+    writer: W,
+}
+
+impl<W> JsonLineEventSink<W> {
+    /// Wraps a writer as a machine event sink.
+    pub const fn new(writer: W) -> Self {
+        Self { writer }
+    }
+
+    /// Returns the wrapped writer.
+    pub fn into_inner(self) -> W {
+        self.writer
+    }
+}
+
+impl<W: io::Write> EventSinkPort for JsonLineEventSink<W> {
+    type Error = io::Error;
+
+    fn emit(&mut self, record: &MachineRecord) -> Result<(), Self::Error> {
+        serde_json::to_writer(&mut self.writer, record)?;
+        self.writer.write_all(b"\n")?;
+        self.writer.flush()
+    }
+}
+
 /// Why an active machine run was cancelled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -190,6 +436,15 @@ impl RunControls {
         timeout_seconds: Option<u64>,
         cancel_file: Option<PathBuf>,
     ) -> Result<Self, RunControlError> {
+        Self::try_from_timeout_with_clock(timeout_seconds, cancel_file, &SYSTEM_CLOCK)
+    }
+
+    /// Creates validated controls using an injected clock.
+    pub fn try_from_timeout_with_clock(
+        timeout_seconds: Option<u64>,
+        cancel_file: Option<PathBuf>,
+        clock: &dyn ClockPort,
+    ) -> Result<Self, RunControlError> {
         if timeout_seconds == Some(0) {
             return Err(RunControlError::ZeroTimeout);
         }
@@ -200,7 +455,9 @@ impl RunControls {
             return Err(RunControlError::BlankCancelPath);
         }
         let deadline_millis = timeout_seconds.map(|seconds| {
-            current_epoch_millis().saturating_add(u128::from(seconds).saturating_mul(1_000))
+            clock
+                .epoch_millis()
+                .saturating_add(u128::from(seconds).saturating_mul(1_000))
         });
         Ok(Self {
             deadline_millis,
@@ -212,11 +469,16 @@ impl RunControls {
     ///
     /// Malformed deadlines and blank cancellation paths are ignored.
     pub fn from_env() -> Self {
-        let deadline_millis = std::env::var(MACHINE_DEADLINE_MS_ENV)
-            .ok()
+        Self::from_environment(&SYSTEM_ENVIRONMENT)
+    }
+
+    /// Reads run controls through an injected environment service.
+    pub fn from_environment(environment: &dyn EnvironmentPort) -> Self {
+        let deadline_millis = environment
+            .var(MACHINE_DEADLINE_MS_ENV)
             .and_then(|value| value.trim().parse::<u128>().ok());
-        let cancel_file = std::env::var(MACHINE_CANCEL_FILE_ENV)
-            .ok()
+        let cancel_file = environment
+            .var(MACHINE_CANCEL_FILE_ENV)
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
             .map(PathBuf::from);
@@ -236,15 +498,33 @@ impl RunControls {
 
     /// Returns the current cancellation reason, if any.
     pub fn cancellation(&self) -> Option<CancellationReason> {
-        self.cancellation_at(current_epoch_millis())
+        self.cancellation_with(&SYSTEM_CLOCK, &SYSTEM_CANCELLATION_FILES)
+    }
+
+    /// Returns the current cancellation reason through injected clock and filesystem ports.
+    pub fn cancellation_with(
+        &self,
+        clock: &dyn ClockPort,
+        cancellation_files: &dyn CancellationFilePort,
+    ) -> Option<CancellationReason> {
+        self.cancellation_at_with(clock.epoch_millis(), cancellation_files)
     }
 
     /// Returns the cancellation reason at a supplied Unix epoch millisecond.
     pub fn cancellation_at(&self, now_millis: u128) -> Option<CancellationReason> {
+        self.cancellation_at_with(now_millis, &SYSTEM_CANCELLATION_FILES)
+    }
+
+    /// Returns the cancellation reason at a supplied time through an injected filesystem port.
+    pub fn cancellation_at_with(
+        &self,
+        now_millis: u128,
+        cancellation_files: &dyn CancellationFilePort,
+    ) -> Option<CancellationReason> {
         if self.deadline_exceeded_at(now_millis) {
             return Some(CancellationReason::DeadlineExceeded);
         }
-        if self.cancel_file_exists() {
+        if self.cancel_file_exists_with(cancellation_files) {
             return Some(CancellationReason::CancelRequested);
         }
         None
@@ -258,18 +538,35 @@ impl RunControls {
 
     /// Returns whether the configured cancellation file currently exists.
     pub fn cancel_file_exists(&self) -> bool {
-        self.cancel_file.as_deref().is_some_and(Path::exists)
+        self.cancel_file_exists_with(&SYSTEM_CANCELLATION_FILES)
+    }
+
+    /// Returns whether the configured marker exists through an injected filesystem port.
+    pub fn cancel_file_exists_with(&self, cancellation_files: &dyn CancellationFilePort) -> bool {
+        self.cancel_file
+            .as_deref()
+            .is_some_and(|path| cancellation_files.exists(path))
     }
 
     /// Waits until the deadline expires or the cancellation file appears.
     ///
     /// If no controls are configured, this future remains pending.
     pub async fn cancelled(&self) -> CancellationReason {
+        self.cancelled_with(&SYSTEM_CLOCK, &SYSTEM_CANCELLATION_FILES)
+            .await
+    }
+
+    /// Waits for cancellation through injected clock and filesystem ports.
+    pub async fn cancelled_with(
+        &self,
+        clock: &dyn ClockPort,
+        cancellation_files: &dyn CancellationFilePort,
+    ) -> CancellationReason {
         if self.deadline_millis.is_none() && self.cancel_file.is_none() {
             return std::future::pending().await;
         }
         loop {
-            if let Some(reason) = self.cancellation() {
+            if let Some(reason) = self.cancellation_with(clock, cancellation_files) {
                 return reason;
             }
             tokio::time::sleep(CANCELLATION_POLL_INTERVAL).await;
@@ -287,70 +584,27 @@ pub fn machine_logging_enabled() -> bool {
 /// An invalid explicit protocol disables output rather than silently falling
 /// back to the legacy format.
 pub fn selected_protocol() -> Option<MachineProtocol> {
-    if let Ok(protocol) = std::env::var(MACHINE_PROTOCOL_ENV) {
-        return protocol.parse().ok();
-    }
-
-    if std::env::var(MACHINE_LOG_ENV)
-        .ok()
-        .is_some_and(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true"))
-    {
-        return Some(MachineProtocol::Legacy);
-    }
-
-    None
+    AutomationProtocol::system().selected_protocol()
 }
 
 /// Returns an explicit run ID or a process-stable generated fallback.
 pub fn run_id() -> String {
-    if let Ok(explicit) = std::env::var(MACHINE_RUN_ID_ENV) {
-        let trimmed = explicit.trim();
-        if !trimmed.is_empty() {
-            return trimmed.to_string();
-        }
-    }
-
-    GENERATED_RUN_ID
-        .get_or_init(|| {
-            let now_ms = current_epoch_millis();
-            format!("run-{now_ms}-{}", std::process::id())
-        })
-        .clone()
+    AutomationProtocol::system().run_id()
 }
 
 /// Builds the next typed v1 envelope when v1 is explicitly selected.
 pub fn next_envelope(kind: &str, data: Value) -> Option<MachineEnvelope> {
-    if selected_protocol()? != MachineProtocol::V1 {
-        return None;
-    }
-    let sequence = EVENT_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1;
-
-    Some(MachineEnvelope {
-        protocol: MachineProtocol::V1,
-        run_id: run_id(),
-        sequence,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        event: MachineEvent {
-            kind: kind.to_string(),
-            data,
-        },
-    })
+    AutomationProtocol::system().next_envelope(kind, data)
 }
 
 /// Builds the next record in the selected legacy or versioned format.
 pub fn next_record(kind: &str, data: Value) -> Option<MachineRecord> {
-    match selected_protocol()? {
-        MachineProtocol::Legacy => Some(MachineRecord::Legacy(MachineEvent {
-            kind: kind.to_string(),
-            data,
-        })),
-        MachineProtocol::V1 => next_envelope(kind, data).map(MachineRecord::V1),
-    }
+    AutomationProtocol::system().next_record(kind, data)
 }
 
 /// Returns true when the environment-configured absolute deadline has elapsed.
 pub fn deadline_exceeded() -> bool {
-    RunControls::from_env().deadline_exceeded_at(current_epoch_millis())
+    RunControls::from_env().deadline_exceeded_at(SYSTEM_CLOCK.epoch_millis())
 }
 
 /// Returns true when the environment-configured cancellation file exists.
@@ -358,90 +612,94 @@ pub fn cancellation_requested() -> bool {
     RunControls::from_env().cancel_file_exists()
 }
 
-fn current_epoch_millis() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or_default()
-}
-
-#[cfg(test)]
-pub(crate) mod test_support {
-    use super::*;
-    use std::ffi::{OsStr, OsString};
-    use std::sync::{Mutex, MutexGuard};
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-    const VARIABLES: [&str; 5] = [
-        MACHINE_LOG_ENV,
-        MACHINE_PROTOCOL_ENV,
-        MACHINE_RUN_ID_ENV,
-        MACHINE_DEADLINE_MS_ENV,
-        MACHINE_CANCEL_FILE_ENV,
-    ];
-
-    pub(crate) struct EnvGuard {
-        _lock: MutexGuard<'static, ()>,
-        original: Vec<(&'static str, Option<OsString>)>,
-    }
-
-    impl EnvGuard {
-        pub(crate) fn lock() -> Self {
-            let lock = ENV_LOCK
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            let original = VARIABLES
-                .into_iter()
-                .map(|name| (name, std::env::var_os(name)))
-                .collect();
-            Self {
-                _lock: lock,
-                original,
-            }
-        }
-
-        pub(crate) fn set(&self, name: &str, value: impl AsRef<OsStr>) {
-            // SAFETY: all machine-protocol tests serialize environment access
-            // through ENV_LOCK and this guard restores values on drop.
-            unsafe { std::env::set_var(name, value) };
-        }
-
-        pub(crate) fn remove(&self, name: &str) {
-            // SAFETY: all machine-protocol tests serialize environment access
-            // through ENV_LOCK and this guard restores values on drop.
-            unsafe { std::env::remove_var(name) };
-        }
-    }
-
-    impl Drop for EnvGuard {
-        fn drop(&mut self) {
-            for (name, value) in &self.original {
-                // SAFETY: ENV_LOCK remains held until this restoration completes.
-                unsafe {
-                    if let Some(value) = value {
-                        std::env::set_var(name, value);
-                    } else {
-                        std::env::remove_var(name);
-                    }
-                }
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+    use std::collections::{HashMap, HashSet};
+
+    #[derive(Default)]
+    struct FakeEnvironment(HashMap<String, String>);
+
+    impl FakeEnvironment {
+        fn with(mut self, name: &str, value: &str) -> Self {
+            self.0.insert(name.to_string(), value.to_string());
+            self
+        }
+    }
+
+    impl EnvironmentPort for FakeEnvironment {
+        fn var(&self, name: &str) -> Option<String> {
+            self.0.get(name).cloned()
+        }
+    }
+
+    struct FixedClock;
+
+    impl ClockPort for FixedClock {
+        fn epoch_millis(&self) -> u128 {
+            1_000
+        }
+
+        fn rfc3339_utc(&self) -> String {
+            "2026-01-01T00:00:00+00:00".to_string()
+        }
+    }
+
+    struct FixedIdentity;
+
+    impl RunIdentityPort for FixedIdentity {
+        fn run_id(&self, _environment: &dyn EnvironmentPort, _clock: &dyn ClockPort) -> String {
+            "run-fixed".to_string()
+        }
+    }
+
+    #[derive(Default)]
+    struct LocalSequence(Cell<u64>);
+
+    impl EventSequencePort for LocalSequence {
+        fn next_sequence(&self) -> u64 {
+            let next = self.0.get() + 1;
+            self.0.set(next);
+            next
+        }
+    }
+
+    #[derive(Default)]
+    struct FakeCancellationFiles(HashSet<PathBuf>);
+
+    impl CancellationFilePort for FakeCancellationFiles {
+        fn exists(&self, path: &Path) -> bool {
+            self.0.contains(path)
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingSink(Vec<MachineRecord>);
+
+    impl EventSinkPort for RecordingSink {
+        type Error = std::convert::Infallible;
+
+        fn emit(&mut self, record: &MachineRecord) -> Result<(), Self::Error> {
+            self.0.push(record.clone());
+            Ok(())
+        }
+    }
+
+    fn protocol<'a>(
+        environment: &'a FakeEnvironment,
+        sequence: &'a LocalSequence,
+    ) -> AutomationProtocol<'a> {
+        AutomationProtocol::new(environment, &FixedClock, &FixedIdentity, sequence)
+    }
 
     #[test]
-    fn machine_log_env_selects_legacy_records() {
-        let env = test_support::EnvGuard::lock();
-        env.remove(MACHINE_PROTOCOL_ENV);
-        env.set(MACHINE_LOG_ENV, "1");
-
-        assert_eq!(selected_protocol(), Some(MachineProtocol::Legacy));
-        let record = next_record("info", serde_json::json!({ "message": "ok" }))
-            .expect("machine logging should be enabled");
+    fn injected_environment_preserves_legacy_wire_record() {
+        let environment = FakeEnvironment::default().with(MACHINE_LOG_ENV, "TRUE");
+        let sequence = LocalSequence::default();
+        let record = protocol(&environment, &sequence)
+            .next_record("info", serde_json::json!({ "message": "ok" }))
+            .expect("legacy logging should be enabled");
         assert_eq!(
             serde_json::to_value(record).expect("record should serialize"),
             serde_json::json!({
@@ -452,57 +710,69 @@ mod tests {
     }
 
     #[test]
-    fn explicit_v1_envelope_contains_stable_fields() {
-        let env = test_support::EnvGuard::lock();
-        env.set(MACHINE_PROTOCOL_ENV, MACHINE_PROTOCOL_V1);
-        env.set(MACHINE_RUN_ID_ENV, "run-abc");
-
-        let envelope = next_envelope("run.started", serde_json::json!({ "ok": true }))
+    fn injected_services_preserve_v1_wire_envelope() {
+        let environment =
+            FakeEnvironment::default().with(MACHINE_PROTOCOL_ENV, MACHINE_PROTOCOL_V1);
+        let sequence = LocalSequence::default();
+        let envelope = protocol(&environment, &sequence)
+            .next_envelope("run.started", serde_json::json!({ "ok": true }))
             .expect("machine protocol should be enabled");
-        assert_eq!(envelope.protocol, MachineProtocol::V1);
-        assert_eq!(envelope.run_id, "run-abc");
-        assert_eq!(envelope.event.kind, "run.started");
-        assert_eq!(envelope.event.data["ok"], true);
-        assert!(!envelope.timestamp.is_empty());
+        assert_eq!(
+            serde_json::to_value(envelope).expect("envelope should serialize"),
+            serde_json::json!({
+                "protocol": "looprs-machine/v1",
+                "run_id": "run-fixed",
+                "seq": 1,
+                "ts": "2026-01-01T00:00:00+00:00",
+                "event": {"kind": "run.started", "data": {"ok": true}}
+            })
+        );
     }
 
     #[test]
-    fn sequence_is_monotonic() {
-        let env = test_support::EnvGuard::lock();
-        env.set(MACHINE_PROTOCOL_ENV, MACHINE_PROTOCOL_V1);
-        let first = next_envelope("first", Value::Null).expect("first envelope");
-        let second = next_envelope("second", Value::Null).expect("second envelope");
-        assert_eq!(second.sequence, first.sequence + 1);
+    fn event_sink_receives_selected_records_in_sequence() {
+        let environment =
+            FakeEnvironment::default().with(MACHINE_PROTOCOL_ENV, MACHINE_PROTOCOL_V1);
+        let sequence = LocalSequence::default();
+        let service = protocol(&environment, &sequence);
+        let mut sink = RecordingSink::default();
+        service.emit(&mut sink, "first", Value::Null).unwrap();
+        service.emit(&mut sink, "second", Value::Null).unwrap();
+
+        let sequences = sink
+            .0
+            .iter()
+            .map(|record| match record {
+                MachineRecord::V1(envelope) => envelope.sequence,
+                MachineRecord::Legacy(_) => 0,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(sequences, [1, 2]);
     }
 
     #[test]
     fn unsupported_or_blank_protocol_is_disabled() {
-        let env = test_support::EnvGuard::lock();
-        env.remove(MACHINE_LOG_ENV);
         for value in ["", "  ", "v2", "looprs-machine/v999"] {
-            env.set(MACHINE_PROTOCOL_ENV, value);
-            assert_eq!(selected_protocol(), None, "protocol {value:?}");
-            assert!(next_record("event", Value::Null).is_none());
+            let environment = FakeEnvironment::default().with(MACHINE_PROTOCOL_ENV, value);
+            let sequence = LocalSequence::default();
+            let service = protocol(&environment, &sequence);
+            assert_eq!(service.selected_protocol(), None, "protocol {value:?}");
+            assert!(service.next_record("event", Value::Null).is_none());
         }
     }
 
     #[test]
     fn false_like_machine_log_values_are_disabled() {
-        let env = test_support::EnvGuard::lock();
-        env.remove(MACHINE_PROTOCOL_ENV);
         for value in ["", "0", "false", "yes"] {
-            env.set(MACHINE_LOG_ENV, value);
-            assert!(!machine_logging_enabled(), "value {value:?}");
+            let environment = FakeEnvironment::default().with(MACHINE_LOG_ENV, value);
+            let sequence = LocalSequence::default();
+            assert!(
+                protocol(&environment, &sequence)
+                    .selected_protocol()
+                    .is_none(),
+                "value {value:?}"
+            );
         }
-    }
-
-    #[test]
-    fn generated_run_id_is_nonempty_and_stable() {
-        let env = test_support::EnvGuard::lock();
-        env.remove(MACHINE_RUN_ID_ENV);
-        let first = run_id();
-        assert!(!first.is_empty());
-        assert_eq!(run_id(), first);
     }
 
     #[test]
@@ -517,31 +787,56 @@ mod tests {
 
     #[test]
     fn run_controls_reject_zero_timeout_and_blank_cancel_path() {
-        assert!(RunControls::try_from_timeout(Some(0), None).is_err());
-        assert!(RunControls::try_from_timeout(None, Some(PathBuf::from("  "))).is_err());
+        assert!(RunControls::try_from_timeout_with_clock(Some(0), None, &FixedClock).is_err());
+        assert!(
+            RunControls::try_from_timeout_with_clock(None, Some(PathBuf::from("  ")), &FixedClock)
+                .is_err()
+        );
     }
 
     #[test]
-    fn invalid_deadline_environment_is_ignored() {
-        let env = test_support::EnvGuard::lock();
+    fn injected_environment_ignores_invalid_deadlines() {
         for value in ["", "-1", "not-a-number"] {
-            env.set(MACHINE_DEADLINE_MS_ENV, value);
-            assert!(!deadline_exceeded(), "deadline {value:?}");
+            let environment = FakeEnvironment::default().with(MACHINE_DEADLINE_MS_ENV, value);
+            let controls = RunControls::from_environment(&environment);
+            assert!(!controls.deadline_exceeded_at(1_000), "deadline {value:?}");
         }
     }
 
     #[test]
-    fn cancellation_file_handles_existing_missing_and_blank_paths() {
-        let env = test_support::EnvGuard::lock();
-        let tmp = tempfile::NamedTempFile::new().unwrap();
-        env.set(MACHINE_CANCEL_FILE_ENV, tmp.path());
-        assert!(cancellation_requested());
-        env.set(
-            MACHINE_CANCEL_FILE_ENV,
-            tmp.path().with_extension("missing"),
+    fn injected_clock_and_filesystem_control_cancellation_deterministically() {
+        let marker = PathBuf::from("cancel.marker");
+        let controls =
+            RunControls::try_from_timeout_with_clock(Some(1), Some(marker.clone()), &FixedClock)
+                .unwrap();
+        let mut files = FakeCancellationFiles::default();
+
+        assert_eq!(controls.cancellation_at_with(1_999, &files), None);
+        files.0.insert(marker);
+        assert_eq!(
+            controls.cancellation_at_with(1_999, &files),
+            Some(CancellationReason::CancelRequested)
         );
-        assert!(!cancellation_requested());
-        env.set(MACHINE_CANCEL_FILE_ENV, "  ");
-        assert!(!cancellation_requested());
+        assert_eq!(
+            controls.cancellation_at_with(2_000, &FakeCancellationFiles::default()),
+            Some(CancellationReason::DeadlineExceeded)
+        );
+    }
+
+    #[test]
+    fn json_line_sink_emits_one_compatible_line() {
+        let environment =
+            FakeEnvironment::default().with(MACHINE_PROTOCOL_ENV, MACHINE_PROTOCOL_V1);
+        let sequence = LocalSequence::default();
+        let mut sink = JsonLineEventSink::new(Vec::new());
+
+        protocol(&environment, &sequence)
+            .emit(&mut sink, "run.started", serde_json::json!({"ok": true}))
+            .unwrap();
+
+        let output = sink.into_inner();
+        assert_eq!(output.iter().filter(|byte| **byte == b'\n').count(), 1);
+        let value: Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(value["event"]["kind"], "run.started");
     }
 }

@@ -94,6 +94,38 @@ impl ProviderConfig {
         }
     }
 
+    /// Get mutable settings for a specific provider through the descriptor registry.
+    pub fn get_provider_settings_mut(
+        &mut self,
+        provider_name: &str,
+    ) -> Option<&mut ProviderSettings> {
+        let section = crate::providers::provider_descriptor(provider_name)?.settings_section;
+        match section {
+            "anthropic" => self.anthropic.as_mut(),
+            "openai" => self.openai.as_mut(),
+            "gemini" => self.gemini.as_mut(),
+            "local" => self.local.as_mut(),
+            "baml" => self.baml.as_mut(),
+            _ => None,
+        }
+    }
+
+    /// Get or initialize mutable settings for a registered provider or alias.
+    pub fn get_or_insert_provider_settings(
+        &mut self,
+        provider_name: &str,
+    ) -> Option<&mut ProviderSettings> {
+        let section = crate::providers::provider_descriptor(provider_name)?.settings_section;
+        match section {
+            "anthropic" => Some(self.anthropic.get_or_insert_with(ProviderSettings::default)),
+            "openai" => Some(self.openai.get_or_insert_with(ProviderSettings::default)),
+            "gemini" => Some(self.gemini.get_or_insert_with(ProviderSettings::default)),
+            "local" => Some(self.local.get_or_insert_with(ProviderSettings::default)),
+            "baml" => Some(self.baml.get_or_insert_with(ProviderSettings::default)),
+            _ => None,
+        }
+    }
+
     /// Merge provider-specific settings with defaults
     pub fn merged_settings(&self, provider_name: &str) -> ProviderSettings {
         let mut merged = self.defaults.clone().unwrap_or_default();
@@ -253,7 +285,7 @@ mod tests {
 
     #[test]
     fn aliases_share_provider_specific_settings() {
-        let config = ProviderConfig {
+        let mut config = ProviderConfig {
             anthropic: Some(ProviderSettings {
                 model: Some("claude-model".to_string()),
                 ..Default::default()
@@ -265,6 +297,34 @@ mod tests {
             assert_eq!(
                 config.merged_settings(alias).model.as_deref(),
                 Some("claude-model")
+            );
+            config
+                .get_or_insert_provider_settings(alias)
+                .expect("registered alias")
+                .max_tokens = Some(42);
+            assert_eq!(
+                config
+                    .get_provider_settings_mut(alias)
+                    .expect("registered alias")
+                    .max_tokens,
+                Some(42)
+            );
+        }
+    }
+
+    #[test]
+    fn every_registered_alias_routes_immutable_and_mutable_settings() {
+        for alias in crate::providers::provider_aliases() {
+            let mut config = ProviderConfig::default();
+            config
+                .get_or_insert_provider_settings(alias)
+                .expect("registry alias should have a settings section")
+                .model = Some(alias.to_string());
+            assert_eq!(
+                config
+                    .get_provider_settings(alias)
+                    .and_then(|settings| settings.model.as_deref()),
+                Some(alias)
             );
         }
     }

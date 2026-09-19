@@ -758,11 +758,16 @@ fn provider_menu_options() -> &'static [&'static str] {
     looprs::model_catalog::MODEL_PROVIDERS
 }
 
-fn configure_provider(config: &mut ProviderConfig, provider: &str, model: Option<String>) {
+fn configure_provider(
+    config: &mut ProviderConfig,
+    provider: &str,
+    model: Option<String>,
+) -> Result<()> {
     config.provider = Some(provider.to_string());
     if let Some(model) = model {
-        provider_settings_mut(config, provider).model = Some(model);
+        provider_settings_mut(config, provider)?.model = Some(model);
     }
+    Ok(())
 }
 
 /// Interactive `looprs provider` entrypoint: pick a runtime provider,
@@ -796,7 +801,7 @@ fn run_provider_menu() -> Result<()> {
     } else {
         console_prompt("Model (leave blank to use the provider default):")
     };
-    configure_provider(&mut config, provider, model);
+    configure_provider(&mut config, provider, model)?;
 
     config.save()?;
     println!(
@@ -838,31 +843,17 @@ fn setting_keys() -> Vec<String> {
 fn provider_settings_mut<'a>(
     config: &'a mut ProviderConfig,
     provider: &str,
-) -> &'a mut ProviderSettings {
-    match provider {
-        "anthropic" | "anthropic-sdk" | "claude-sdk" => config
-            .anthropic
-            .get_or_insert_with(ProviderSettings::default),
-        "openai" | "openai-sdk" => config.openai.get_or_insert_with(ProviderSettings::default),
-        "gemini" | "google" => config.gemini.get_or_insert_with(ProviderSettings::default),
-        "local" | "ollama" => config.local.get_or_insert_with(ProviderSettings::default),
-        "baml" => config.baml.get_or_insert_with(ProviderSettings::default),
-        _ => config.openai.get_or_insert_with(ProviderSettings::default),
-    }
+) -> Result<&'a mut ProviderSettings> {
+    config
+        .get_or_insert_provider_settings(provider)
+        .ok_or_else(|| anyhow::anyhow!("unknown provider {provider:?}"))
 }
 
 fn provider_settings_ref<'a>(
     config: &'a ProviderConfig,
     provider: &str,
 ) -> Option<&'a ProviderSettings> {
-    match provider {
-        "anthropic" | "anthropic-sdk" | "claude-sdk" => config.anthropic.as_ref(),
-        "openai" | "openai-sdk" => config.openai.as_ref(),
-        "gemini" | "google" => config.gemini.as_ref(),
-        "local" | "ollama" => config.local.as_ref(),
-        "baml" => config.baml.as_ref(),
-        _ => None,
-    }
+    config.get_provider_settings(provider)
 }
 
 fn build_runtime_settings(
@@ -951,7 +942,7 @@ async fn handle_colon_command(
                 ui::warn("Usage: :unset <key>");
                 return Ok(());
             }
-            unset_setting(key, app_config, provider_config, provider_name);
+            unset_setting(key, app_config, provider_config, provider_name)?;
             save_configs(app_config, provider_config)?;
             let runtime = build_runtime_settings(app_config, provider_config, provider_name);
             agent.set_runtime_settings(runtime);
@@ -982,7 +973,7 @@ async fn handle_colon_command(
                     reload_provider = true;
                 }
                 "model" => {
-                    let settings = provider_settings_mut(provider_config, &target_provider);
+                    let settings = provider_settings_mut(provider_config, &target_provider)?;
                     settings.model = Some(value.clone());
                     reload_provider = true;
                 }
@@ -995,18 +986,18 @@ async fn handle_colon_command(
                         return Ok(());
                     }
                     provider_config.provider = Some(provider.to_string());
-                    let settings = provider_settings_mut(provider_config, provider);
+                    let settings = provider_settings_mut(provider_config, provider)?;
                     settings.model = Some(model.to_string());
                     reload_provider = true;
                 }
                 "max_tokens" => {
                     let parsed = value.parse::<u32>()?;
-                    let settings = provider_settings_mut(provider_config, &target_provider);
+                    let settings = provider_settings_mut(provider_config, &target_provider)?;
                     settings.max_tokens = Some(parsed);
                 }
                 "timeout_secs" => {
                     let parsed = value.parse::<u64>()?;
-                    let settings = provider_settings_mut(provider_config, &target_provider);
+                    let settings = provider_settings_mut(provider_config, &target_provider)?;
                     settings.timeout_secs = Some(parsed);
                 }
                 "defaults.max_context_tokens" => {
@@ -1082,19 +1073,19 @@ fn unset_setting(
     app_config: &mut AppConfig,
     provider_config: &mut ProviderConfig,
     provider_name: &str,
-) {
+) -> Result<()> {
     match key {
         "provider" => provider_config.provider = None,
         "model" => {
-            let settings = provider_settings_mut(provider_config, provider_name);
+            let settings = provider_settings_mut(provider_config, provider_name)?;
             settings.model = None;
         }
         "max_tokens" => {
-            let settings = provider_settings_mut(provider_config, provider_name);
+            let settings = provider_settings_mut(provider_config, provider_name)?;
             settings.max_tokens = None;
         }
         "timeout_secs" => {
-            let settings = provider_settings_mut(provider_config, provider_name);
+            let settings = provider_settings_mut(provider_config, provider_name)?;
             settings.timeout_secs = None;
         }
         "defaults.max_context_tokens" => app_config.defaults.max_context_tokens = None,
@@ -1103,6 +1094,7 @@ fn unset_setting(
         "fs_mode" => app_config.agents.fs_mode = looprs::FsMode::Write,
         _ => {}
     }
+    Ok(())
 }
 
 /// Config files are user-owned; we no longer write config.json or provider.json.
@@ -1212,19 +1204,8 @@ async fn execute_command(
             let new_provider = parts.next().unwrap_or("").trim().to_string();
             let new_model_id = parts.next().map(|s| s.trim().to_string());
 
-            let valid = [
-                "anthropic",
-                "openai",
-                "gemini",
-                "google",
-                "ollama",
-                "local",
-                "anthropic-sdk",
-                "openai-sdk",
-                "claude-sdk",
-                "baml",
-            ];
-            if !valid.contains(&new_provider.as_str()) {
+            if looprs::providers::provider_descriptor(&new_provider).is_none() {
+                let valid = looprs::providers::provider_aliases().collect::<Vec<_>>();
                 ui::warn(format!(
                     "Unknown provider {new_provider:?}. Valid: {}",
                     valid.join(", ")
@@ -1234,7 +1215,7 @@ async fn execute_command(
 
             provider_config.provider = Some(new_provider.clone());
             if let Some(ref m) = new_model_id {
-                let settings = provider_settings_mut(provider_config, &new_provider);
+                let settings = provider_settings_mut(provider_config, &new_provider)?;
                 settings.model = Some(m.clone());
             }
 
@@ -1316,6 +1297,7 @@ mod provider_menu_tests {
     use super::configure_provider;
     use super::parse_ollama_list_output;
     use super::provider_menu_options;
+    use super::{provider_settings_mut, provider_settings_ref};
     use looprs::ProviderConfig;
 
     // Captured from a real `ollama list` invocation.
@@ -1333,13 +1315,29 @@ mod provider_menu_tests {
     fn setup_stores_model_for_every_runtime_provider() {
         for provider in looprs::model_catalog::MODEL_PROVIDERS {
             let mut config = ProviderConfig::default();
-            configure_provider(&mut config, provider, Some("test-model".to_string()));
+            configure_provider(&mut config, provider, Some("test-model".to_string()))
+                .expect("menu provider should be registered");
 
             assert_eq!(config.provider.as_deref(), Some(*provider));
             assert_eq!(
                 config.merged_settings(provider).model.as_deref(),
                 Some("test-model"),
                 "model setting was not stored for {provider}"
+            );
+        }
+    }
+
+    #[test]
+    fn cli_settings_helpers_follow_every_registered_alias() {
+        for alias in looprs::providers::provider_aliases() {
+            let mut config = ProviderConfig::default();
+            provider_settings_mut(&mut config, alias)
+                .expect("registered alias should be mutable")
+                .model = Some(alias.to_string());
+            assert_eq!(
+                provider_settings_ref(&config, alias)
+                    .and_then(|settings| settings.model.as_deref()),
+                Some(alias)
             );
         }
     }

@@ -37,13 +37,12 @@ fn write_machine_event(
     kind: &str,
     data: serde_json::Value,
 ) -> std::io::Result<Option<serde_json::Value>> {
-    let Some(record) = automation_protocol::next_record(kind, data) else {
+    let service = automation_protocol::AutomationProtocol::system();
+    let mut sink = automation_protocol::JsonLineEventSink::new(writer);
+    let Some(record) = service.emit(&mut sink, kind, data)? else {
         return Ok(None);
     };
     let event = serde_json::to_value(record)?;
-    serde_json::to_writer(&mut *writer, &event)?;
-    writer.write_all(b"\n")?;
-    writer.flush()?;
     Ok(Some(event))
 }
 
@@ -376,55 +375,4 @@ pub fn output_preview_colored(text: &str) -> String {
 pub fn goodbye() {
     println!("\n{}", "Goodbye!".dimmed());
     emit_machine_event("goodbye", serde_json::json!({}));
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn machine_log_disabled_by_default() {
-        let env = automation_protocol::test_support::EnvGuard::lock();
-        env.remove(automation_protocol::MACHINE_LOG_ENV);
-        env.remove(automation_protocol::MACHINE_PROTOCOL_ENV);
-        assert!(!automation_protocol::machine_logging_enabled());
-    }
-
-    #[test]
-    fn machine_log_enabled_with_true_like_values() {
-        let env = automation_protocol::test_support::EnvGuard::lock();
-        for v in &["1", "true", "True", "TRUE"] {
-            env.set(automation_protocol::MACHINE_LOG_ENV, v);
-            env.remove(automation_protocol::MACHINE_PROTOCOL_ENV);
-            assert!(
-                automation_protocol::machine_logging_enabled(),
-                "value {v} should enable machine log"
-            );
-        }
-    }
-
-    #[test]
-    fn machine_event_writes_one_json_line_and_is_silent_when_disabled() {
-        let env = automation_protocol::test_support::EnvGuard::lock();
-        env.set(
-            automation_protocol::MACHINE_PROTOCOL_ENV,
-            automation_protocol::MACHINE_PROTOCOL_V1,
-        );
-        env.set(automation_protocol::MACHINE_RUN_ID_ENV, "ui-test");
-        let mut output = Vec::new();
-        write_machine_event(&mut output, "run.started", serde_json::json!({"ok": true}))
-            .expect("event should serialize");
-        assert_eq!(output.iter().filter(|byte| **byte == b'\n').count(), 1);
-        let value: serde_json::Value = serde_json::from_slice(&output).expect("valid JSONL");
-        assert_eq!(value["protocol"], automation_protocol::MACHINE_PROTOCOL_V1);
-        assert_eq!(value["run_id"], "ui-test");
-        assert_eq!(value["event"]["kind"], "run.started");
-
-        env.remove(automation_protocol::MACHINE_PROTOCOL_ENV);
-        env.remove(automation_protocol::MACHINE_LOG_ENV);
-        output.clear();
-        write_machine_event(&mut output, "ignored", serde_json::Value::Null)
-            .expect("disabled output should succeed");
-        assert!(output.is_empty());
-    }
 }
