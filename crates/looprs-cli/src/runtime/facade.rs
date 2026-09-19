@@ -31,13 +31,15 @@ pub async fn bootstrap_runtime(
 
     let provider_config = ProviderConfig::load().unwrap_or_default();
     let max_tokens_override = provider_config.merged_settings(&provider_name).max_tokens;
-    let runtime = RuntimeSettings {
-        defaults: app_config.defaults.clone(),
+    let mut runtime = RuntimeSettings::new(
+        app_config.defaults.clone(),
         max_tokens_override,
-        fs_mode: app_config.agents.fs_mode,
-        max_parallel: app_config.agents.max_parallel.max(1),
-        mcp_server_url: std::env::var("LOOPRS_MCP_SERVER_URL").ok(),
-    };
+        app_config.agents.fs_mode,
+    )
+    .with_max_parallel(app_config.agents.max_parallel);
+    if let Ok(server_url) = std::env::var("LOOPRS_MCP_SERVER_URL") {
+        runtime = runtime.with_mcp_server_url(server_url);
+    }
     let session_logger = looprs::adapters::default_session_store();
     let agent = Agent::new_with_runtime(
         provider,

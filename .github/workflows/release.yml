@@ -54,7 +54,7 @@ jobs:
           key: release-validation
       - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
-          tool: protoc@3.35.1,cargo-nextest@0.9.137,cargo-deny@0.20.2,git-cliff@2.12.0
+          tool: protoc@3.35.1,cargo-nextest@0.9.137,cargo-deny@0.20.2,git-cliff@2.12.0,cargo-semver-checks@0.42.0
           fallback: none
       - uses: hustcer/setup-nu@9215c80adb545a85c419d5085b76eb6d082f49e7 # v3.27
         with:
@@ -95,32 +95,18 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          latest=$(tail -n 1 .health-history.jsonl)
-          if ! jq -e --arg version "$VERSION" '
-            .version == $version
-            and .versions_consistent == true
-            and .tests.failed == 0
-            and .clippy.errors == 0
-            and .coverage >= 0
-            and .coverage <= 100
-          ' <<< "$latest"; then
-            echo "Latest health history entry is not a valid measurement for release ${VERSION}." >&2
-            echo "Refresh with taskit health check --with-coverage --update and append the baseline before release." >&2
-            exit 1
-          fi
-          jq -S . .health-baseline.json > /tmp/health-baseline.json
-          jq -S . <<< "$latest" > /tmp/health-history-latest.json
-          if ! cmp -s /tmp/health-baseline.json /tmp/health-history-latest.json; then
-            echo ".health-baseline.json does not match the latest persisted health history entry." >&2
-            exit 1
-          fi
+          scripts/verify-release-health.sh "$VERSION"
           cp .health-baseline.json release-health.json
           cp .health-history.jsonl release-health-history.jsonl
       - name: Run release gates
         run: |
+          scripts/tests/release-health.sh
           cargo +1.88.0 fmt --all --check
           cargo +1.88.0 clippy --locked --workspace --all-targets --all-features -- -D warnings
           cargo +1.88.0 nextest run --locked --workspace --all-targets --all-features --profile ci
+          cargo +1.88.0 semver-checks check-release -p looprs-core
+          cargo +1.88.0 semver-checks check-release -p looprs
+          cargo +1.88.0 semver-checks check-release -p looprs-tui
           cargo deny check
           cargo xtask check pre-push
       - name: Validate publication packages

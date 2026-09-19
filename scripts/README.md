@@ -2,15 +2,15 @@
 
 This directory contains automation scripts for the looprs project.
 
-## serve-assets.sh
+## serve-site.sh
 
-Serve the local static site in `assets/` for quick preview.
+Serve the local static site in `site/` for quick preview.
 
 ### Usage
 
 ```bash
-./scripts/serve-assets.sh
-./scripts/serve-assets.sh 8080
+./scripts/serve-site.sh
+./scripts/serve-site.sh 8080
 ```
 
 Default port is `4173`.
@@ -74,10 +74,21 @@ make version-major   # 0.1.11 -> 1.0.0
    - `refactor:`, `perf:` → Changed section
    - Other commits → Other section
 5. **Updates CHANGELOG.md** with new version section and organized entries
-6. **Updates Cargo.toml** with new version
+6. **Updates Cargo.toml** workspace version and internal crate requirements
 7. **Updates Cargo.lock** to match
 8. **Commits changes** with message: `chore: bump version to X.Y.Z`
 9. **Creates git tag** `vX.Y.Z` (unless `--no-tag` specified)
+
+Before dispatching a release, refresh and verify the version-scoped health artifacts:
+
+```bash
+taskit health check --with-coverage --update
+jq -c . .health-baseline.json >> .health-history.jsonl
+scripts/verify-release-health.sh X.Y.Z
+scripts/tests/release-health.sh
+```
+
+Minor and major releases also run public API compatibility checks in CI. Document intentional breaking changes in `docs/migration-X.Y.md` before release.
 
 ### Conventional Commits
 

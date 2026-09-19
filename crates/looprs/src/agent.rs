@@ -70,6 +70,7 @@ fn parse_allowed_tools(metadata: &HashMap<String, String>) -> Option<HashSet<Str
 
 /// Mutable runtime settings applied to each agent turn.
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct RuntimeSettings {
     /// Default runtime knobs loaded from app config.
     pub defaults: DefaultsConfig,
@@ -81,6 +82,46 @@ pub struct RuntimeSettings {
     pub max_parallel: usize,
     /// Optional MCP server URL used for remote tool discovery/execution.
     pub mcp_server_url: Option<String>,
+}
+
+impl RuntimeSettings {
+    /// Construct runtime settings from the stable core options.
+    pub fn new(
+        defaults: DefaultsConfig,
+        max_tokens_override: Option<u32>,
+        fs_mode: FsMode,
+    ) -> Self {
+        Self {
+            defaults,
+            max_tokens_override,
+            fs_mode,
+            ..Self::default()
+        }
+    }
+
+    /// Set the upper bound for parallel tool dispatch.
+    #[must_use]
+    pub fn with_max_parallel(mut self, max_parallel: usize) -> Self {
+        self.max_parallel = max_parallel.max(1);
+        self
+    }
+
+    /// Set the optional MCP server URL.
+    #[must_use]
+    pub fn with_mcp_server_url(mut self, server_url: impl Into<String>) -> Self {
+        self.mcp_server_url = Some(server_url.into());
+        self
+    }
+
+    /// Return the configured parallel tool dispatch limit.
+    pub fn max_parallel(&self) -> usize {
+        self.max_parallel
+    }
+
+    /// Return the configured MCP server URL, if any.
+    pub fn mcp_server_url(&self) -> Option<&str> {
+        self.mcp_server_url.as_deref()
+    }
 }
 
 /// Primary orchestrator for provider inference, tools, rules, and hooks.
@@ -872,7 +913,7 @@ impl Agent {
                 let tool_ctx = self.tool_ctx.clone();
                 let allowed_tools_for_exec = allowed_tools.clone();
 
-                futures::stream::iter(pending_calls.into_iter())
+                futures::stream::iter(pending_calls)
                     .map(|call| {
                         let executor = Arc::clone(&executor);
                         let tool_ctx = tool_ctx.clone();
