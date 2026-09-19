@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use looprs::automation_protocol::MACHINE_PROTOCOL_V1;
+use looprs::automation_protocol::{MACHINE_PROTOCOL_V1, MachineProtocol};
 use std::env;
 
 #[derive(Debug, Clone)]
@@ -77,9 +77,15 @@ impl CliArgs {
                     result.json_output = true;
                 }
                 "--machine-log" => {
+                    if result.machine_log {
+                        return Err(anyhow!("{arg} specified more than once"));
+                    }
                     result.machine_log = true;
                 }
                 "--machine-protocol" => {
+                    if result.machine_protocol.is_some() {
+                        return Err(anyhow!("{arg} specified more than once"));
+                    }
                     i += 1;
                     if i >= args.len() {
                         return Err(anyhow!("{arg} requires a value"));
@@ -87,6 +93,9 @@ impl CliArgs {
                     result.machine_protocol = Some(args[i].clone());
                 }
                 "--run-id" => {
+                    if result.run_id.is_some() {
+                        return Err(anyhow!("{arg} specified more than once"));
+                    }
                     i += 1;
                     if i >= args.len() {
                         return Err(anyhow!("{arg} requires a value"));
@@ -94,6 +103,9 @@ impl CliArgs {
                     result.run_id = Some(args[i].clone());
                 }
                 "--deadline-seconds" => {
+                    if result.deadline_seconds.is_some() {
+                        return Err(anyhow!("{arg} specified more than once"));
+                    }
                     i += 1;
                     if i >= args.len() {
                         return Err(anyhow!("{arg} requires a value"));
@@ -104,6 +116,9 @@ impl CliArgs {
                     result.deadline_seconds = Some(parsed);
                 }
                 "--cancel-file" => {
+                    if result.cancel_file.is_some() {
+                        return Err(anyhow!("{arg} specified more than once"));
+                    }
                     i += 1;
                     if i >= args.len() {
                         return Err(anyhow!("{arg} requires a value"));
@@ -118,12 +133,13 @@ impl CliArgs {
             i += 1;
         }
 
-        if let Some(protocol) = &result.machine_protocol
-            && protocol != MACHINE_PROTOCOL_V1
-        {
-            return Err(anyhow!(
-                "Unsupported machine protocol '{protocol}', expected '{MACHINE_PROTOCOL_V1}'"
-            ));
+        if let Some(protocol) = result.machine_protocol.as_mut() {
+            protocol.parse::<MachineProtocol>().map_err(|_| {
+                anyhow!(
+                    "Unsupported machine protocol '{protocol}', expected '{MACHINE_PROTOCOL_V1}'"
+                )
+            })?;
+            *protocol = protocol.trim().to_string();
         }
 
         let has_run_controls = result.run_id.is_some()
@@ -148,6 +164,14 @@ impl CliArgs {
             .is_some_and(|deadline| deadline == 0)
         {
             return Err(anyhow!("--deadline-seconds must be greater than 0"));
+        }
+
+        if result
+            .cancel_file
+            .as_deref()
+            .is_some_and(|path| path.trim().is_empty())
+        {
+            return Err(anyhow!("--cancel-file cannot be empty"));
         }
 
         Ok(result)
@@ -374,6 +398,104 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("--run-id cannot be empty")
+        );
+    }
+
+    #[test]
+    fn machine_options_reject_missing_values() {
+        for option in [
+            "--machine-protocol",
+            "--run-id",
+            "--deadline-seconds",
+            "--cancel-file",
+        ] {
+            let result = CliArgs::parse_from(&args(&[option]));
+            assert!(result.is_err(), "{option} should require a value");
+            assert!(result.unwrap_err().to_string().contains("requires a value"));
+        }
+    }
+
+    #[test]
+    fn deadline_rejects_negative_nonnumeric_and_overflow_values() {
+        for value in ["-1", "soon", "18446744073709551616"] {
+            let result = CliArgs::parse_from(&args(&[
+                "--machine-protocol",
+                MACHINE_PROTOCOL_V1,
+                "--deadline-seconds",
+                value,
+            ]));
+            assert!(result.is_err(), "deadline {value:?} should fail");
+        }
+    }
+
+    #[test]
+    fn cancel_file_rejects_empty_path() {
+        let result = CliArgs::parse_from(&args(&[
+            "--machine-protocol",
+            MACHINE_PROTOCOL_V1,
+            "--cancel-file",
+            "  ",
+        ]));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn machine_options_reject_duplicates() {
+        let cases = [
+            vec!["--machine-log", "--machine-log"],
+            vec![
+                "--machine-protocol",
+                MACHINE_PROTOCOL_V1,
+                "--machine-protocol",
+                MACHINE_PROTOCOL_V1,
+            ],
+            vec![
+                "--machine-protocol",
+                MACHINE_PROTOCOL_V1,
+                "--run-id",
+                "one",
+                "--run-id",
+                "two",
+            ],
+            vec![
+                "--machine-protocol",
+                MACHINE_PROTOCOL_V1,
+                "--deadline-seconds",
+                "1",
+                "--deadline-seconds",
+                "2",
+            ],
+            vec![
+                "--machine-protocol",
+                MACHINE_PROTOCOL_V1,
+                "--cancel-file",
+                "one",
+                "--cancel-file",
+                "two",
+            ],
+        ];
+        for case in cases {
+            let result = CliArgs::parse_from(&args(&case));
+            assert!(result.is_err(), "duplicate case {case:?} should fail");
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("specified more than once")
+            );
+        }
+    }
+
+    #[test]
+    fn machine_log_does_not_enable_versioned_run_controls() {
+        let result = CliArgs::parse_from(&args(&["--machine-log", "--run-id", "run-123"]));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("--machine-protocol")
         );
     }
 
