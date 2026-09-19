@@ -81,6 +81,18 @@ pub fn provider_descriptor(name: &str) -> Option<&'static ProviderDescriptor> {
     })
 }
 
+/// Returns all registered provider descriptors.
+pub const fn provider_descriptors() -> &'static [ProviderDescriptor] {
+    PROVIDER_DESCRIPTORS
+}
+
+/// Returns every accepted provider name and alias.
+pub fn provider_aliases() -> impl Iterator<Item = &'static str> {
+    PROVIDER_DESCRIPTORS
+        .iter()
+        .flat_map(|descriptor| descriptor.aliases.iter().copied())
+}
+
 pub(crate) struct ProviderHttpClient {
     client: Client,
 }
@@ -447,19 +459,31 @@ mod tests {
 
     #[test]
     fn provider_descriptors_resolve_every_alias_to_one_settings_section() {
-        for (name, canonical, section) in [
-            ("anthropic", "anthropic", "anthropic"),
-            ("claude-sdk", "anthropic-sdk", "anthropic"),
-            ("openai-sdk", "openai-sdk", "openai"),
-            ("google", "gemini", "gemini"),
-            ("ollama", "local", "local"),
-            ("baml", "baml", "baml"),
-        ] {
-            let descriptor = provider_descriptor(name).expect("known provider alias");
-            assert_eq!(descriptor.canonical_name, canonical);
-            assert_eq!(descriptor.settings_section, section);
+        for descriptor in provider_descriptors() {
+            for alias in descriptor.aliases {
+                assert_eq!(
+                    provider_descriptor(alias),
+                    Some(descriptor),
+                    "alias {alias:?} did not resolve to its descriptor"
+                );
+            }
         }
         assert!(provider_descriptor("unknown").is_none());
+        assert_eq!(
+            provider_aliases().collect::<Vec<_>>(),
+            vec![
+                "anthropic",
+                "anthropic-sdk",
+                "claude-sdk",
+                "openai",
+                "openai-sdk",
+                "gemini",
+                "google",
+                "local",
+                "ollama",
+                "baml"
+            ]
+        );
     }
 
     #[test]
