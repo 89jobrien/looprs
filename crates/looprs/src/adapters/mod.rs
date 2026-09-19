@@ -16,7 +16,7 @@ pub use looprs_core::adapters::ChannelBroker;
 pub use looprs_core::adapters::FsSessionStore;
 pub use looprs_core::adapters::NullOutput;
 pub use looprs_core::adapters::TerminalOutput;
-pub use mcp_executor::McpToolExecutor;
+pub use mcp_executor::{McpToolCatalog, McpToolExecutor};
 pub use plugin_executor::PluginsAdapter;
 pub use retry_provider::RetryProvider;
 pub use sqlite_observation_store::SqliteObservationStore;
@@ -25,6 +25,26 @@ pub use ui_output::UiOutput;
 
 use crate::app_config::{AppConfig, SessionStoreBackend};
 use crate::ports::SessionStore;
+use crate::tools::{BuiltinToolCatalog, DefaultToolExecutor, ToolPorts};
+use std::sync::Arc;
+
+/// Compose the default tool catalog and dispatcher for runtime settings.
+pub fn default_tool_ports(mcp_server_url: Option<&str>) -> ToolPorts {
+    let Some(server_url) = mcp_server_url else {
+        return ToolPorts::builtin();
+    };
+
+    ToolPorts::new(
+        Arc::new(McpToolCatalog::new(
+            server_url,
+            Arc::new(BuiltinToolCatalog),
+        )),
+        Arc::new(McpToolExecutor::with_fallback(
+            server_url,
+            Box::new(DefaultToolExecutor),
+        )),
+    )
+}
 
 /// Create the session store selected by `persistence.session_store` in config.
 ///

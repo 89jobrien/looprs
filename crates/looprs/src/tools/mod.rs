@@ -9,7 +9,10 @@ mod nu;
 mod read;
 mod write;
 
-pub use executor::{DefaultToolExecutor, ToolExecutor};
+pub use executor::{
+    BuiltinToolCatalog, DefaultToolExecutor, StaticToolCatalog, ToolCatalog, ToolDispatcher,
+    ToolExecutor, ToolPorts,
+};
 
 use serde_json::{Value, json};
 use std::env;
@@ -583,10 +586,16 @@ fn parse_mcp_tools_response(resp: &serde_json::Value) -> anyhow::Result<Vec<Tool
         .and_then(|v| v.as_array())
         .ok_or_else(|| anyhow::anyhow!("MCP response missing result.tools array"))?;
 
-    let defs = tools
+    tools
         .iter()
-        .filter_map(|t| {
-            let name = t.get("name")?.as_str()?.to_owned();
+        .enumerate()
+        .map(|(index, t)| {
+            let name = t
+                .get("name")
+                .and_then(|value| value.as_str())
+                .filter(|name| !name.is_empty())
+                .ok_or_else(|| anyhow::anyhow!("MCP tool at index {index} is missing a name"))?
+                .to_owned();
             let description = t
                 .get("description")
                 .and_then(|d| d.as_str())
@@ -596,15 +605,13 @@ fn parse_mcp_tools_response(resp: &serde_json::Value) -> anyhow::Result<Vec<Tool
                 .get("inputSchema")
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!({"type": "object", "properties": {}}));
-            Some(ToolDefinition {
+            Ok(ToolDefinition {
                 name,
                 description,
                 input_schema,
             })
         })
-        .collect();
-
-    Ok(defs)
+        .collect()
 }
 
 #[cfg(test)]
@@ -613,6 +620,22 @@ mod tests {
     use crate::fs_mode::FsMode;
     use proptest::prelude::*;
     use std::io;
+
+    #[test]
+    fn mcp_discovery_accepts_an_empty_catalog() {
+        let response = serde_json::json!({"result": {"tools": []}});
+
+        assert!(parse_mcp_tools_response(&response).unwrap().is_empty());
+    }
+
+    #[test]
+    fn mcp_discovery_rejects_malformed_tool_entries() {
+        let response = serde_json::json!({
+            "result": {"tools": [{"description": "missing a name"}]}
+        });
+
+        assert!(parse_mcp_tools_response(&response).is_err());
+    }
 
     // ── ToolError tests ─────────────────────────────────────────────────
 

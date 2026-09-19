@@ -317,12 +317,18 @@ fn resolve_model_from_sources(
     overrides
         .model
         .clone()
-        .or_else(|| environment_model.map(ModelId::new))
+        .and_then(normalize_model_id)
+        .or_else(|| environment_model.and_then(|model| normalize_model_id(ModelId::new(model))))
         .or_else(|| {
             config_file
                 .and_then(|c| c.merged_settings(config_section).model)
-                .map(ModelId::new)
+                .and_then(|model| normalize_model_id(ModelId::new(model)))
         })
+}
+
+fn normalize_model_id(model: ModelId) -> Option<ModelId> {
+    let normalized = model.as_str().trim();
+    (!normalized.is_empty()).then(|| ModelId::new(normalized))
 }
 
 /// Create a provider by explicit name
@@ -499,6 +505,25 @@ mod tests {
             .as_ref()
             .map(ModelId::as_str),
             Some("override-model")
+        );
+    }
+
+    #[test]
+    fn model_resolution_normalizes_whitespace_and_ignores_blank_values() {
+        assert_eq!(
+            resolve_model_from_sources(
+                "openai",
+                None,
+                &ProviderOverrides::default(),
+                Some("  gpt-5-mini  "),
+            )
+            .as_ref()
+            .map(ModelId::as_str),
+            Some("gpt-5-mini")
+        );
+        assert!(
+            resolve_model_from_sources("openai", None, &ProviderOverrides::default(), Some("   "),)
+                .is_none()
         );
     }
 }

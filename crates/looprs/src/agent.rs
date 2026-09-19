@@ -15,7 +15,7 @@ use crate::providers::{InferenceRequest, InferenceResponse};
 use crate::rules::RuleRegistry;
 use crate::session_log::SessionEvent;
 use crate::system_monitor::SystemMonitor;
-use crate::tools::{DefaultToolExecutor, ToolContext, ToolExecutor, get_tool_definitions};
+use crate::tools::{ToolCatalog, ToolContext, ToolDispatcher, ToolExecutor, ToolPorts};
 use futures::StreamExt as _;
 use looprs_core::ports::{DelegatedToolPolicy, InferenceDelta, InferenceStreamEvent};
 use std::collections::HashMap;
@@ -70,14 +70,26 @@ fn denied_by_policy(policy: Option<&DelegatedToolPolicy>, tool_name: &str) -> bo
     policy.is_some_and(|policy| !policy.allows(tool_name))
 }
 
-fn executor_for_runtime(runtime: &RuntimeSettings) -> Arc<dyn ToolExecutor> {
-    match runtime.mcp_server_url.clone() {
-        Some(server_url) => Arc::new(crate::adapters::McpToolExecutor::with_fallback(
-            server_url,
-            Box::new(DefaultToolExecutor),
-        )),
-        None => Arc::new(DefaultToolExecutor),
+fn validate_tool_calls(response: &InferenceResponse) -> Result<(), AgentError> {
+    for block in &response.content {
+        if let ContentBlock::ToolUse { id, name, input } = block {
+            if id.as_str().trim().is_empty() || name.as_str().trim().is_empty() {
+                return Err(AgentError::Inference(
+                    "provider returned a malformed tool call without id or name".to_string(),
+                ));
+            }
+            if !input.is_object() {
+                return Err(AgentError::Inference(format!(
+                    "provider returned malformed arguments for tool {name}: expected an object"
+                )));
+            }
+        }
     }
+    Ok(())
+}
+
+fn tool_ports_for_runtime(runtime: &RuntimeSettings) -> ToolPorts {
+    crate::adapters::default_tool_ports(runtime.mcp_server_url())
 }
 
 /// Mutable runtime settings applied to each agent turn.
@@ -125,6 +137,23 @@ impl RuntimeSettings {
         self
     }
 
+    /// Apply process environment settings understood by the runtime.
+    #[must_use]
+    pub fn with_environment(self) -> Self {
+        self.with_mcp_environment_value(std::env::var("LOOPRS_MCP_SERVER_URL").ok())
+    }
+
+    fn with_mcp_environment_value(mut self, server_url: Option<String>) -> Self {
+        if let Some(server_url) = server_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+        {
+            self.mcp_server_url = Some(server_url.to_string());
+        }
+        self
+    }
+
     /// Return the configured parallel tool dispatch limit.
     pub fn max_parallel(&self) -> usize {
         self.max_parallel
@@ -151,7 +180,8 @@ pub struct Agent {
     pending_delegation: Option<DelegationContext>,
     session_logger: Option<Box<dyn SessionStore>>,
     output: Box<dyn UserOutput>,
-    tool_executor: Arc<dyn ToolExecutor>,
+    tool_catalog: Arc<dyn ToolCatalog>,
+    tool_dispatcher: Arc<dyn ToolDispatcher>,
     models_config: Option<ModelsConfig>,
     system_monitor: SystemMonitor,
     session_input_tokens: u32,
@@ -179,7 +209,7 @@ impl Agent {
         session_logger: Option<Box<dyn SessionStore>>,
         output: Box<dyn UserOutput>,
     ) -> Result<Self, AgentError> {
-        let tool_executor = executor_for_runtime(&runtime);
+        let (tool_catalog, tool_dispatcher) = tool_ports_for_runtime(&runtime).into_parts();
 
         Ok(Self {
             provider,
@@ -195,28 +225,13 @@ impl Agent {
             pending_delegation: None,
             session_logger,
             output,
-            tool_executor,
+            tool_catalog,
+            tool_dispatcher,
             models_config: ModelsConfig::load().ok(),
             system_monitor: SystemMonitor::new(),
             session_input_tokens: 0,
             session_output_tokens: 0,
         })
-    }
-
-    fn merge_remote_tool_definitions(
-        mut tools: Vec<looprs_core::api::ToolDefinition>,
-        remote_tools: Vec<looprs_core::api::ToolDefinition>,
-    ) -> Vec<looprs_core::api::ToolDefinition> {
-        let mut known = tools
-            .iter()
-            .map(|tool| tool.name.clone())
-            .collect::<std::collections::HashSet<_>>();
-        for remote_tool in remote_tools {
-            if known.insert(remote_tool.name.clone()) {
-                tools.push(remote_tool);
-            }
-        }
-        tools
     }
 
     /// Replace the output adapter. Useful for tests (inject `NullOutput`) or
@@ -229,7 +244,25 @@ impl Agent {
     /// Replace the tool executor. Inject a stub in tests to avoid real
     /// filesystem or subprocess side effects.
     pub fn with_tool_executor(mut self, executor: Box<dyn ToolExecutor>) -> Self {
-        self.tool_executor = Arc::from(executor);
+        self.tool_dispatcher = Arc::from(executor);
+        self
+    }
+
+    /// Replace both tool-side ports with an explicit composition.
+    pub fn with_tool_ports(mut self, ports: ToolPorts) -> Self {
+        (self.tool_catalog, self.tool_dispatcher) = ports.into_parts();
+        self
+    }
+
+    /// Replace the catalog used to advertise tools to providers.
+    pub fn with_tool_catalog(mut self, catalog: Arc<dyn ToolCatalog>) -> Self {
+        self.tool_catalog = catalog;
+        self
+    }
+
+    /// Replace the dispatcher used to execute provider tool calls.
+    pub fn with_tool_dispatcher(mut self, dispatcher: Arc<dyn ToolDispatcher>) -> Self {
+        self.tool_dispatcher = dispatcher;
         self
     }
 
@@ -258,7 +291,7 @@ impl Agent {
     /// Update runtime settings and propagate filesystem mode to tool context.
     pub fn set_runtime_settings(&mut self, runtime: RuntimeSettings) {
         self.tool_ctx.set_fs_mode(runtime.fs_mode);
-        self.tool_executor = executor_for_runtime(&runtime);
+        (self.tool_catalog, self.tool_dispatcher) = tool_ports_for_runtime(&runtime).into_parts();
         self.runtime = runtime;
     }
 
@@ -514,6 +547,16 @@ impl Agent {
     /// Drives one structured stream per inference step, emits text deltas, and
     /// continues tool turns until the provider returns terminal assistant text.
     pub async fn run_turn_streaming(&mut self) -> Result<(), AgentError> {
+        let result = self.run_turn_streaming_inner().await;
+        if let Err(error) = &result {
+            let event_ctx = EventContext::new().with_error(error.to_string());
+            self.events.fire(Event::OnError, &event_ctx);
+            self.execute_hooks_for_event(&Event::OnError, &event_ctx);
+        }
+        result
+    }
+
+    async fn run_turn_streaming_inner(&mut self) -> Result<(), AgentError> {
         let delegated_agent = self
             .pending_delegation
             .as_ref()
@@ -564,19 +607,9 @@ impl Agent {
             .map(|context| context.tool_policy().clone())
             .or_else(|| delegated_tool_policy(&enriched_ctx.metadata));
         let system_prompt = self.build_system_prompt(&enriched_ctx);
-        let mut tools = get_tool_definitions();
-        if let Some(server_url) = self.runtime.mcp_server_url.clone() {
-            match crate::tools::mcp_tool_definitions(&server_url).await {
-                Ok(remote_tools) => {
-                    tools = Self::merge_remote_tool_definitions(tools, remote_tools);
-                }
-                Err(err) => {
-                    self.output.warn(&format!(
-                        "Warning: failed to discover MCP tools from {server_url}: {err}"
-                    ));
-                }
-            }
-        }
+        let mut tools = self.tool_catalog.definitions().await.map_err(|error| {
+            AgentError::Inference(format!("failed to load tool catalog: {error}"))
+        })?;
         if let Some(policy) = tool_policy.as_ref() {
             policy.filter_definitions(&mut tools);
         }
@@ -651,7 +684,14 @@ impl Agent {
                     inference.await?
                 };
 
-            if response.content.is_empty() {
+            validate_tool_calls(&response)?;
+
+            let has_assistant_content = response.content.iter().any(|block| match block {
+                ContentBlock::Text { text } => !text.trim().is_empty(),
+                ContentBlock::ToolUse { .. } => true,
+                ContentBlock::ToolResult { .. } => false,
+            });
+            if !has_assistant_content {
                 return Err(AgentError::Inference(
                     "provider returned a final response without assistant content".to_string(),
                 ));
@@ -703,7 +743,7 @@ impl Agent {
                         reason: "not in agent tool allowlist".to_string(),
                     })
                 } else {
-                    self.tool_executor
+                    self.tool_dispatcher
                         .execute(name.as_str(), &input, &self.tool_ctx)
                         .await
                 };
@@ -831,19 +871,9 @@ impl Agent {
 
         let mut tool_call_counts: std::collections::HashMap<String, usize> =
             std::collections::HashMap::new();
-        let mut tools = get_tool_definitions();
-        if let Some(server_url) = self.runtime.mcp_server_url.clone() {
-            match crate::tools::mcp_tool_definitions(&server_url).await {
-                Ok(remote_tools) => {
-                    tools = Self::merge_remote_tool_definitions(tools, remote_tools);
-                }
-                Err(err) => {
-                    self.output.warn(&format!(
-                        "Warning: failed to discover MCP tools from {server_url}: {err}"
-                    ));
-                }
-            }
-        }
+        let mut tools = self.tool_catalog.definitions().await.map_err(|error| {
+            AgentError::Inference(format!("failed to load tool catalog: {error}"))
+        })?;
         if let Some(policy) = tool_policy.as_ref() {
             policy.filter_definitions(&mut tools);
         }
@@ -881,6 +911,8 @@ impl Agent {
                     .await
                     .map_err(|e| AgentError::Inference(e.to_string()))?
             };
+
+            validate_tool_calls(&response)?;
 
             self.session_input_tokens += response.usage.input_tokens;
             self.session_output_tokens += response.usage.output_tokens;
@@ -1011,7 +1043,7 @@ impl Agent {
 
             let mut outcomes = if parallel_enabled {
                 let max_parallel = self.runtime.max_parallel.max(1).min(pending_calls.len());
-                let executor = Arc::clone(&self.tool_executor);
+                let executor = Arc::clone(&self.tool_dispatcher);
                 let tool_ctx = self.tool_ctx.clone();
                 let tool_policy_for_exec = tool_policy.clone();
 
@@ -1056,7 +1088,7 @@ impl Agent {
                             reason: "not in agent tool allowlist".to_string(),
                         })
                     } else {
-                        self.tool_executor
+                        self.tool_dispatcher
                             .execute(call.name.as_str(), &call.input, &self.tool_ctx)
                             .await
                     };
@@ -1323,6 +1355,7 @@ mod tests {
         responses: Vec<InferenceResponse>,
         call_count: std::sync::Arc<std::sync::Mutex<usize>>,
         captured_tools: std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>>,
+        captured_messages: std::sync::Arc<std::sync::Mutex<Vec<Vec<Message>>>>,
     }
 
     struct TrackingExecutor {
@@ -1376,6 +1409,7 @@ mod tests {
                 responses,
                 call_count: std::sync::Arc::new(std::sync::Mutex::new(0)),
                 captured_tools: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+                captured_messages: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             }
         }
 
@@ -1398,6 +1432,10 @@ mod tests {
 
         fn call_count_handle(&self) -> std::sync::Arc<std::sync::Mutex<usize>> {
             self.call_count.clone()
+        }
+
+        fn captured_messages_handle(&self) -> std::sync::Arc<std::sync::Mutex<Vec<Vec<Message>>>> {
+            Arc::clone(&self.captured_messages)
         }
     }
 
@@ -1510,6 +1548,10 @@ mod tests {
                     .map(|tool| tool.name.clone())
                     .collect::<Vec<_>>(),
             );
+            self.captured_messages
+                .lock()
+                .unwrap()
+                .push(req.messages.clone());
 
             let mut count = self.call_count.lock().unwrap();
             let idx = *count;
@@ -1668,6 +1710,53 @@ mod tests {
         assert!(seen.iter().any(|name| name == "read"));
         assert!(seen.iter().any(|name| name == "remote_test_tool"));
         server_thread.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn agent_accepts_an_injected_tool_catalog() {
+        let provider = MockProvider::simple_text("done");
+        let captured = provider.captured_tools_handle();
+        let catalog =
+            crate::tools::StaticToolCatalog::new(vec![looprs_core::api::ToolDefinition {
+                name: "injected".to_string(),
+                description: "injected catalog entry".to_string(),
+                input_schema: serde_json::json!({"type": "object"}),
+            }]);
+        let mut agent = agent_for_test(provider).with_tool_catalog(Arc::new(catalog));
+        agent.add_user_message("hello");
+
+        agent.run_turn().await.unwrap();
+
+        assert_eq!(captured.lock().unwrap()[0], vec!["injected".to_string()]);
+    }
+
+    #[test]
+    fn runtime_environment_wires_mcp_without_mutating_process_state() {
+        let runtime = RuntimeSettings::default()
+            .with_mcp_environment_value(Some("  http://mcp.test/rpc  ".to_string()));
+        assert_eq!(runtime.mcp_server_url(), Some("http://mcp.test/rpc"));
+
+        let blank = RuntimeSettings::default().with_mcp_environment_value(Some("  ".to_string()));
+        assert_eq!(blank.mcp_server_url(), None);
+    }
+
+    #[tokio::test]
+    async fn provider_fake_with_malformed_tool_call_fails_closed() {
+        let provider = MockProvider::new(vec![InferenceResponse {
+            content: vec![ContentBlock::ToolUse {
+                id: crate::types::ToolId::new(""),
+                name: crate::types::ToolName::new("read"),
+                input: serde_json::json!({"path": "README.md"}),
+            }],
+            stop_reason: "tool_use".to_string(),
+            usage: Usage::default(),
+        }]);
+        let mut agent = agent_for_test(provider);
+        agent.add_user_message("read");
+
+        let error = agent.run_turn().await.unwrap_err();
+
+        assert!(error.to_string().contains("malformed tool call"));
     }
 
     #[test]
@@ -2199,6 +2288,144 @@ actions:
     }
 
     #[tokio::test]
+    async fn streaming_rejects_empty_terminal_text() {
+        let provider = ScriptedStreamProvider {
+            model: crate::types::ModelId::new("stream-model"),
+            script: std::sync::Mutex::new(Some(StreamScript::Events(vec![
+                InferenceStreamEvent::Final(InferenceResponse {
+                    content: vec![ContentBlock::Text {
+                        text: "  ".to_string(),
+                    }],
+                    stop_reason: "end_turn".to_string(),
+                    usage: Usage::default(),
+                }),
+            ]))),
+            infer_calls: Arc::new(AtomicUsize::new(0)),
+        };
+        let mut agent = Agent::new(Box::new(provider))
+            .unwrap()
+            .with_output(Box::new(NullOutput));
+        agent.add_user_message("hello");
+
+        let error = agent.run_turn_streaming().await.unwrap_err();
+
+        assert!(error.to_string().contains("without assistant content"));
+    }
+
+    #[tokio::test]
+    async fn streaming_rejects_delta_after_final() {
+        let provider = ScriptedStreamProvider {
+            model: crate::types::ModelId::new("stream-model"),
+            script: std::sync::Mutex::new(Some(StreamScript::Events(vec![
+                InferenceStreamEvent::Final(InferenceResponse {
+                    content: vec![ContentBlock::Text {
+                        text: "done".to_string(),
+                    }],
+                    stop_reason: "end_turn".to_string(),
+                    usage: Usage::default(),
+                }),
+                InferenceStreamEvent::Delta(InferenceDelta::Text("late".to_string())),
+            ]))),
+            infer_calls: Arc::new(AtomicUsize::new(0)),
+        };
+        let mut agent = Agent::new(Box::new(provider))
+            .unwrap()
+            .with_output(Box::new(NullOutput));
+        agent.add_user_message("hello");
+
+        let error = agent.run_turn_streaming().await.unwrap_err();
+
+        assert!(error.to_string().contains("delta after the final response"));
+    }
+
+    #[tokio::test]
+    async fn streaming_terminal_error_fires_on_error_hooks() {
+        let provider = ScriptedStreamProvider {
+            model: crate::types::ModelId::new("stream-model"),
+            script: std::sync::Mutex::new(Some(StreamScript::Error("stream failed"))),
+            infer_calls: Arc::new(AtomicUsize::new(0)),
+        };
+        let mut agent = Agent::new(Box::new(provider))
+            .unwrap()
+            .with_output(Box::new(NullOutput));
+        let temp = tempfile::tempdir().unwrap();
+        let marker = temp.path().join("on-error-fired");
+        let hook = temp.path().join("on-error.yaml");
+        std::fs::write(
+            &hook,
+            format!(
+                "name: streaming-error\ntrigger: OnError\nactions:\n  - type: command\n    command: \"touch '{}'\"\n",
+                marker.display()
+            ),
+        )
+        .unwrap();
+        agent = agent
+            .with_hooks(HookRegistry::load_from_directory(&temp.path().to_path_buf()).unwrap());
+        let seen = Arc::new(AtomicUsize::new(0));
+        let seen_hook = Arc::clone(&seen);
+        agent.events.on(Event::OnError, move |_, context| {
+            assert!(
+                context
+                    .error
+                    .as_deref()
+                    .is_some_and(|error| error.contains("stream failed"))
+            );
+            seen_hook.fetch_add(1, Ordering::SeqCst);
+        });
+        agent.add_user_message("hello");
+
+        assert!(agent.run_turn_streaming().await.is_err());
+        assert_eq!(seen.load(Ordering::SeqCst), 1);
+        assert!(marker.exists(), "OnError hook command must run");
+    }
+
+    #[tokio::test]
+    async fn streaming_truncates_tool_results_before_the_next_request() {
+        let provider = MockProvider::new(vec![
+            InferenceResponse {
+                content: vec![ContentBlock::ToolUse {
+                    id: crate::types::ToolId::new("large-result"),
+                    name: crate::types::ToolName::new("read"),
+                    input: serde_json::json!({"path": "large"}),
+                }],
+                stop_reason: "tool_use".to_string(),
+                usage: Usage::default(),
+            },
+            InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "done".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage::default(),
+            },
+        ]);
+        let captured = provider.captured_messages_handle();
+        let mut agent = agent_for_test(provider).with_tool_executor(Box::new(
+            crate::tools::executor::StubToolExecutor {
+                response: "x".repeat(MAX_TOOL_RESULT_CHARS_IN_CONTEXT + 100),
+            },
+        ));
+        agent.add_user_message("read the large result");
+
+        agent.run_turn_streaming().await.unwrap();
+
+        let requests = captured.lock().unwrap();
+        let tool_result = requests[1]
+            .iter()
+            .flat_map(|message| &message.content)
+            .find_map(|block| match block {
+                ContentBlock::ToolResult { content, .. } => Some(content),
+                _ => None,
+            })
+            .expect("second request must contain the tool result");
+        assert!(tool_result.contains("[truncated tool result:"));
+        assert_eq!(
+            tool_result.chars().filter(|ch| *ch == 'x').count(),
+            MAX_TOOL_RESULT_CHARS_IN_CONTEXT
+        );
+    }
+
+    #[tokio::test]
     async fn streaming_timeout_stops_an_incomplete_provider_request() {
         let provider = ScriptedStreamProvider {
             model: crate::types::ModelId::new("stream-model"),
@@ -2302,7 +2529,7 @@ actions:
         });
         assert_eq!(
             agent
-                .tool_executor
+                .tool_dispatcher
                 .execute("remote", &serde_json::json!({}), &agent.tool_ctx)
                 .await
                 .unwrap(),
@@ -2315,7 +2542,7 @@ actions:
         });
         assert_eq!(
             agent
-                .tool_executor
+                .tool_dispatcher
                 .execute("remote", &serde_json::json!({}), &agent.tool_ctx)
                 .await
                 .unwrap(),
@@ -2325,7 +2552,7 @@ actions:
         agent.set_runtime_settings(RuntimeSettings::default());
         assert!(matches!(
             agent
-                .tool_executor
+                .tool_dispatcher
                 .execute("remote", &serde_json::json!({}), &agent.tool_ctx)
                 .await,
             Err(crate::tools::ToolError::UnknownTool(_))
