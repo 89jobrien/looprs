@@ -23,7 +23,7 @@ pub use inference_provider::{
 };
 pub use message_broker::{Message, MessageBroker};
 pub use model_catalog::{CatalogSource, RemoteCatalogError, RemoteModel, RemoteModelCatalogPort};
-pub use observation_store::ObservationStore;
+pub use observation_store::{ObservationQuery, ObservationStore};
 pub use plugin_executor::PluginExecutor;
 pub use plugin_runtime::{
     OrchestrationPluginPort, OrchestrationSupervisorPort, PluginAgentSelection,

@@ -87,7 +87,8 @@ pub mod ui;
 
 /// Default message-broker implementation.
 pub use crate::adapters::{
-    ChannelBroker, NullOutput, PluginsAdapter, RetryProvider, SqliteSessionStore,
+    ChannelBroker, NullOutput, PluginsAdapter, RetryProvider, SqliteObservationStore,
+    SqliteSessionStore,
 };
 /// Primary agent runtime type and chat/runtime models.
 pub use crate::agent::{Agent, ChatMessage, RuntimeSettings};
@@ -118,13 +119,17 @@ pub use crate::observation_manager::ObservationManager;
 /// Core message and broker traits.
 pub use crate::ports::{Message, MessageBroker};
 /// Observation and plugin execution ports.
-pub use crate::ports::{ObservationStore, PluginExecutor};
+pub use crate::ports::{ObservationQuery, ObservationStore, PluginExecutor};
 /// Provider override settings and provider factory.
 pub use crate::providers::{ProviderOverrides, create_provider_with_overrides};
 /// Rule schema and registry.
 pub use crate::rules::{Rule, RuleRegistry};
 /// Skill schema and registry.
 pub use crate::skills::{Skill, SkillRegistry};
+/// Public trace append and freshness helpers.
+pub use crate::trace::{
+    append_turn_trace, append_turn_trace_in_dir, session_trace_path, trace_stream_is_stale,
+};
 /// Shared typed IDs.
 pub use crate::types::{ModelId, ToolId, ToolName};
 /// AI analysis domain types from `looprs-core`.

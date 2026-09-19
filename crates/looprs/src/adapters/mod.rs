@@ -7,6 +7,7 @@
 pub mod mcp_executor;
 pub mod plugin_executor;
 pub mod retry_provider;
+pub mod sqlite_observation_store;
 pub mod sqlite_session_store;
 pub mod ui_output;
 
@@ -18,6 +19,7 @@ pub use looprs_core::adapters::TerminalOutput;
 pub use mcp_executor::McpToolExecutor;
 pub use plugin_executor::PluginsAdapter;
 pub use retry_provider::RetryProvider;
+pub use sqlite_observation_store::SqliteObservationStore;
 pub use sqlite_session_store::SqliteSessionStore;
 pub use ui_output::UiOutput;
 

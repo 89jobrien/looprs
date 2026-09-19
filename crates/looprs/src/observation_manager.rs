@@ -3,8 +3,9 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::adapters::SqliteObservationStore;
 use crate::observation::Observation;
-use crate::ports::ObservationStore;
+use crate::ports::{ObservationQuery, ObservationStore};
 use crate::types::ToolId;
 
 /// Manages observation capture and storage across a session
@@ -14,82 +15,17 @@ pub struct ObservationManager {
 }
 
 impl ObservationManager {
-    fn query_with_params(
-        path: &std::path::Path,
-        sql: &str,
-        params: &[&dyn rusqlite::ToSql],
-    ) -> anyhow::Result<Vec<Observation>> {
-        let conn = rusqlite::Connection::open(path)?;
-        let mut stmt = conn.prepare(sql)?;
-        let observations = stmt
-            .query_map(params, |row| {
-                let session_id: String = row.get(0)?;
-                let tool_name: String = row.get(1)?;
-                let input_str: String = row.get(2)?;
-                let output: String = row.get(3)?;
-                let tool_use_id_str: Option<String> = row.get(4)?;
-                let timestamp: i64 = row.get(5)?;
-                let context: Option<String> = row.get(6)?;
-
-                Ok(crate::observation::Observation {
-                    session_id,
-                    tool_name,
-                    input: serde_json::from_str(&input_str).unwrap_or(serde_json::Value::Null),
-                    output,
-                    tool_use_id: tool_use_id_str.map(ToolId::new),
-                    timestamp: timestamp as u64,
-                    context,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(observations)
-    }
-
-    fn limit_to_i64(limit: usize) -> i64 {
-        i64::try_from(limit).unwrap_or(i64::MAX)
-    }
-
     /// Persist all observations to a SQLite database at `path`.
+    ///
+    /// The database and schema are initialized when absent. An existing,
+    /// incompatible schema returns an error instead of being silently changed.
     pub fn persist(&self, path: &std::path::Path) -> anyhow::Result<()> {
-        let conn = rusqlite::Connection::open(path)?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS observations (
-                session_id TEXT NOT NULL,
-                tool_name  TEXT NOT NULL,
-                input      TEXT NOT NULL,
-                output     TEXT NOT NULL,
-                tool_use_id TEXT,
-                timestamp  INTEGER NOT NULL,
-                context    TEXT
-            )",
-        )?;
-        for obs in &self.observations {
-            conn.execute(
-                "INSERT INTO observations
-                 (session_id, tool_name, input, output, tool_use_id, timestamp, context)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                rusqlite::params![
-                    &obs.session_id,
-                    &obs.tool_name,
-                    obs.input.to_string(),
-                    &obs.output,
-                    obs.tool_use_id.as_ref().map(|id| id.as_str()),
-                    obs.timestamp as i64,
-                    obs.context.as_deref(),
-                ],
-            )?;
-        }
-        Ok(())
+        SqliteObservationStore::new(path).save(&self.observations)
     }
 
     /// Load observations for `session_id` from a SQLite database at `path`.
     pub fn load_from(session_id: &str, path: &std::path::Path) -> anyhow::Result<Self> {
-        let observations = Self::query_with_params(
-            path,
-            "SELECT session_id, tool_name, input, output, tool_use_id, timestamp, context
-             FROM observations WHERE session_id = ?1 ORDER BY timestamp ASC",
-            &[&session_id],
-        )?;
+        let observations = SqliteObservationStore::new(path).for_session(session_id)?;
         Ok(Self {
             session_id: session_id.to_string(),
             observations,
@@ -102,29 +38,12 @@ impl ObservationManager {
         tool_name: &str,
         limit: usize,
     ) -> anyhow::Result<Vec<Observation>> {
-        let limit_i64 = Self::limit_to_i64(limit);
-        Self::query_with_params(
-            path,
-            "SELECT session_id, tool_name, input, output, tool_use_id, timestamp, context
-             FROM observations
-             WHERE tool_name = ?1
-             ORDER BY timestamp DESC
-             LIMIT ?2",
-            &[&tool_name, &limit_i64],
-        )
+        SqliteObservationStore::new(path).by_tool(tool_name, limit)
     }
 
     /// Query most recent observations across all sessions.
     pub fn query_recent(path: &std::path::Path, limit: usize) -> anyhow::Result<Vec<Observation>> {
-        let limit_i64 = Self::limit_to_i64(limit);
-        Self::query_with_params(
-            path,
-            "SELECT session_id, tool_name, input, output, tool_use_id, timestamp, context
-             FROM observations
-             ORDER BY timestamp DESC
-             LIMIT ?1",
-            &[&limit_i64],
-        )
+        SqliteObservationStore::new(path).recent(limit)
     }
 
     /// Replay observations from another session into the current session cache.
@@ -133,28 +52,28 @@ impl ObservationManager {
         path: &std::path::Path,
         source_session_id: &str,
     ) -> anyhow::Result<usize> {
-        let source = Self::load_from(source_session_id, path)?;
+        self.replay_from(&SqliteObservationStore::new(path), source_session_id)
+    }
+
+    /// Replay a source session through a query port into this runtime cache.
+    ///
+    /// Replay preserves the source session ID and timestamp. Repeating a replay
+    /// is idempotent, while distinct observations sharing a timestamp are kept.
+    pub fn replay_from(
+        &mut self,
+        query: &dyn ObservationQuery,
+        source_session_id: &str,
+    ) -> anyhow::Result<usize> {
+        let source = query.for_session(source_session_id)?;
         let mut seen = self
             .observations
             .iter()
-            .map(|obs| {
-                (
-                    obs.session_id.clone(),
-                    obs.tool_name.clone(),
-                    obs.timestamp,
-                    obs.tool_use_id.as_ref().map(|id| id.as_str().to_string()),
-                )
-            })
+            .map(observation_identity)
             .collect::<HashSet<_>>();
 
         let mut replayed = 0usize;
-        for obs in source.observations {
-            let key = (
-                obs.session_id.clone(),
-                obs.tool_name.clone(),
-                obs.timestamp,
-                obs.tool_use_id.as_ref().map(|id| id.as_str().to_string()),
-            );
+        for obs in source {
+            let key = observation_identity(&obs);
             if seen.insert(key) {
                 self.observations.push(obs);
                 replayed = replayed.saturating_add(1);
@@ -223,6 +142,31 @@ impl ObservationManager {
     }
 }
 
+fn observation_identity(
+    observation: &Observation,
+) -> (
+    String,
+    String,
+    String,
+    String,
+    Option<String>,
+    u64,
+    Option<String>,
+) {
+    (
+        observation.session_id.clone(),
+        observation.tool_name.clone(),
+        observation.input.to_string(),
+        observation.output.clone(),
+        observation
+            .tool_use_id
+            .as_ref()
+            .map(|id| id.as_str().to_string()),
+        observation.timestamp,
+        observation.context.clone(),
+    )
+}
+
 impl Default for ObservationManager {
     fn default() -> Self {
         Self::new()
@@ -232,6 +176,18 @@ impl Default for ObservationManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn observation(session_id: &str, output: &str, timestamp: u64) -> Observation {
+        Observation {
+            tool_name: "read".to_string(),
+            input: serde_json::json!({"path": output}),
+            output: output.to_string(),
+            tool_use_id: None,
+            timestamp,
+            session_id: session_id.to_string(),
+            context: None,
+        }
+    }
 
     #[test]
     fn observation_persist_and_load_roundtrip() {
@@ -365,5 +321,146 @@ mod tests {
         assert_eq!(replayed, 1);
         assert_eq!(target.count(), 1);
         assert_eq!(target.observations()[0].tool_name, "grep");
+    }
+
+    #[test]
+    fn query_recent_zero_limit_does_not_create_missing_database() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("missing.db");
+
+        assert!(
+            ObservationManager::query_recent(&path, 0)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn query_recent_missing_database_returns_precise_error_without_creating_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("missing.db");
+
+        let error = ObservationManager::query_recent(&path, 1).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("observation database does not exist")
+        );
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn query_recent_orders_deterministically_and_honors_one_row_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("obs.db");
+        let mut manager = ObservationManager::new();
+        manager.observations = vec![
+            observation("first", "old", 9),
+            observation("second", "newer-first", 10),
+            observation("third", "newer-last", 10),
+        ];
+        manager.persist(&path).unwrap();
+
+        let all = ObservationManager::query_recent(&path, 10).unwrap();
+        let one = ObservationManager::query_recent(&path, 1).unwrap();
+
+        assert_eq!(
+            all.iter()
+                .map(|item| item.output.as_str())
+                .collect::<Vec<_>>(),
+            vec!["newer-last", "newer-first", "old"]
+        );
+        assert_eq!(one[0].output, "newer-last");
+    }
+
+    #[test]
+    fn query_recent_returns_cross_session_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("obs.db");
+        let mut manager = ObservationManager::new();
+        manager.observations = vec![
+            observation("session-a", "a", 1),
+            observation("session-b", "b", 2),
+        ];
+        manager.persist(&path).unwrap();
+
+        let rows = ObservationManager::query_recent(&path, 10).unwrap();
+
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].session_id, "session-b");
+        assert_eq!(rows[1].session_id, "session-a");
+    }
+
+    #[test]
+    fn query_recent_rejects_malformed_json_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("obs.db");
+        let manager = ObservationManager::new();
+        manager.persist(&path).unwrap();
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection
+            .execute(
+                "INSERT INTO observations
+                 (session_id, tool_name, input, output, timestamp)
+                 VALUES ('broken', 'read', 'not-json', 'output', 1)",
+                [],
+            )
+            .unwrap();
+
+        let error = ObservationManager::query_recent(&path, 1).unwrap_err();
+
+        assert!(error.to_string().contains("invalid observation input JSON"));
+    }
+
+    #[test]
+    fn query_recent_rejects_incompatible_schema_precisely() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("obs.db");
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection
+            .execute("CREATE TABLE observations (session_id TEXT NOT NULL)", [])
+            .unwrap();
+
+        let error = ObservationManager::query_recent(&path, 1).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("incompatible observations schema")
+        );
+        assert!(error.to_string().contains("tool_name"));
+    }
+
+    #[test]
+    fn replay_is_idempotent_and_unknown_sessions_are_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("obs.db");
+        let mut source = ObservationManager::new();
+        source.observations = vec![observation("source", "one", 10)];
+        source.persist(&path).unwrap();
+        let mut target = ObservationManager::new();
+
+        assert_eq!(target.replay_from_session(&path, "source").unwrap(), 1);
+        assert_eq!(target.replay_from_session(&path, "source").unwrap(), 0);
+        assert_eq!(target.replay_from_session(&path, "unknown").unwrap(), 0);
+        assert_eq!(target.count(), 1);
+    }
+
+    #[test]
+    fn replay_preserves_distinct_observations_with_timestamp_collisions() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("obs.db");
+        let mut source = ObservationManager::new();
+        source.observations = vec![
+            observation("source", "first", 10),
+            observation("source", "second", 10),
+        ];
+        source.persist(&path).unwrap();
+        let mut target = ObservationManager::new();
+
+        assert_eq!(target.replay_from_session(&path, "source").unwrap(), 2);
+        assert_eq!(target.count(), 2);
     }
 }
