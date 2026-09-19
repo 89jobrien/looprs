@@ -329,18 +329,20 @@ pub async fn assert_remote_model_catalog_contract(catalog: &dyn RemoteModelCatal
 
 /// Run the legacy low-cost live provider smoke contract.
 ///
-/// Gated behind `LOOPRS_RUN_LIVE_LLM_TESTS=1` — requires a real API key.
-/// This helper intentionally performs one small request so existing provider
-/// tests retain their historical cost and failure surface.
+/// This helper is not gated: calling it always performs one provider request.
+/// The caller owns opt-in policy, credential setup, and test isolation. Keep
+/// the calling test ignored by default and check `LOOPRS_RUN_LIVE_LLM_TESTS`
+/// before invoking this helper.
 ///
-/// Call from each provider's test module:
-/// ```ignore
-/// #[tokio::test]
-/// #[ignore = "live: set LOOPRS_RUN_LIVE_LLM_TESTS=1"]
-/// async fn live_contract() {
-///     if std::env::var("LOOPRS_RUN_LIVE_LLM_TESTS").is_err() { return; }
-///     let p = MyProvider::new_for_test();
-///     assert_inference_provider_live_contract(&p).await;
+/// ```no_run
+/// use looprs_core::ports::{InferenceProvider, test_contracts};
+///
+/// async fn run_live_contract(provider: &dyn InferenceProvider) {
+///     if std::env::var("LOOPRS_RUN_LIVE_LLM_TESTS").as_deref() != Ok("1") {
+///         return;
+///     }
+///
+///     test_contracts::assert_inference_provider_live_contract(provider).await;
 /// }
 /// ```
 pub async fn assert_inference_provider_live_contract(
@@ -369,7 +371,9 @@ pub async fn assert_inference_provider_live_contract(
 /// four requests for providers with tool support. Each invocation can incur
 /// provider charges and can fail because of credentials, quotas, networking,
 /// model availability, or nondeterministic model behavior. Keep it ignored by
-/// default and gate it behind `LOOPRS_RUN_LIVE_LLM_TESTS=1`.
+/// default. This helper does not inspect `LOOPRS_RUN_LIVE_LLM_TESTS`; the caller
+/// must apply the same opt-in gate shown on
+/// [`assert_inference_provider_live_contract`] before invoking it.
 pub async fn assert_inference_provider_live_matrix(provider: &dyn crate::ports::InferenceProvider) {
     use crate::api::{ContentBlock, Message, ToolDefinition};
 

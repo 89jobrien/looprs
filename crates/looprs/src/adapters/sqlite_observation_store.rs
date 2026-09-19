@@ -33,12 +33,19 @@ const REQUIRED_COLUMNS: [(&str, &str); 7] = [
 ///
 /// Construction does not touch the filesystem. Writes create and validate the
 /// schema; reads require an existing compatible database and never create one.
+/// A compatible `observations` table contains required `TEXT` columns
+/// `session_id`, `tool_name`, `input`, and `output`; nullable `TEXT` columns
+/// `tool_use_id` and `context`; and a required `INTEGER` `timestamp`. Missing or
+/// differently typed columns produce an `incompatible observations schema`
+/// error; this adapter never migrates an existing table.
 ///
 /// ```no_run
 /// use looprs::{ObservationQuery, ObservationStore, SqliteObservationStore};
 ///
+/// // A write initializes the schema when the database does not exist.
 /// let store = SqliteObservationStore::new("observations.db");
 /// store.save(&[])?;
+/// // Reads validate that existing schema before executing the query.
 /// let recent = store.recent(10)?;
 /// assert!(recent.is_empty());
 /// # Ok::<(), anyhow::Error>(())

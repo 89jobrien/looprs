@@ -23,7 +23,11 @@ impl ObservationManager {
         SqliteObservationStore::new(path).save(&self.observations)
     }
 
-    /// Load observations for `session_id` from a SQLite database at `path`.
+    /// Load observations for `session_id` in oldest-first replay order.
+    ///
+    /// `path` must already contain a compatible observation schema. This read
+    /// never creates or migrates a database; an unknown session returns an
+    /// empty manager after the schema is validated.
     pub fn load_from(session_id: &str, path: &std::path::Path) -> anyhow::Result<Self> {
         let observations = SqliteObservationStore::new(path).for_session(session_id)?;
         Ok(Self {
@@ -32,7 +36,9 @@ impl ObservationManager {
         })
     }
 
-    /// Query observations by tool name across sessions.
+    /// Query observations by tool name across sessions, newest-first.
+    ///
+    /// A zero limit returns an empty collection without opening `path`.
     pub fn query_by_tool(
         path: &std::path::Path,
         tool_name: &str,
@@ -41,7 +47,10 @@ impl ObservationManager {
         SqliteObservationStore::new(path).by_tool(tool_name, limit)
     }
 
-    /// Query most recent observations across all sessions.
+    /// Query most recent observations across all sessions, newest-first.
+    ///
+    /// Equal timestamps use reverse insertion order. A zero limit returns an
+    /// empty collection without opening `path`.
     pub fn query_recent(path: &std::path::Path, limit: usize) -> anyhow::Result<Vec<Observation>> {
         SqliteObservationStore::new(path).recent(limit)
     }
@@ -59,6 +68,22 @@ impl ObservationManager {
     ///
     /// Replay preserves the source session ID and timestamp. Repeating a replay
     /// is idempotent, while distinct observations sharing a timestamp are kept.
+    /// The query must return the source session in oldest-first replay order and
+    /// must validate its own backing schema before returning an unknown session
+    /// as empty. The target manager may already contain captured observations;
+    /// replay only appends source observations whose complete identity is new.
+    ///
+    /// ```no_run
+    /// use looprs::{ObservationManager, ObservationQuery, SqliteObservationStore};
+    ///
+    /// let source = SqliteObservationStore::new("observations.db");
+    /// let mut target = ObservationManager::new();
+    /// let replayed = target.replay_from(&source, "source-session")?;
+    /// assert_eq!(target.count(), replayed);
+    /// // The same source rows are not appended twice.
+    /// assert_eq!(target.replay_from(&source, "source-session")?, 0);
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
     pub fn replay_from(
         &mut self,
         query: &dyn ObservationQuery,
