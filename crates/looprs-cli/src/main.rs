@@ -3,13 +3,14 @@ use colored::*;
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
-use std::collections::HashMap;
 use std::env;
 
 use looprs::ModelId;
 use looprs::app_config::AppConfig;
 use looprs::automation_protocol;
 use looprs::file_refs::{AtReference, resolve_at_reference};
+use looprs::orchestration::{OrchestrationNotice, PreparedPrompt, RuntimeOrchestrator};
+use looprs::plugins::manifests::PluginRuntimeRegistry;
 use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
 use looprs::ui;
 use looprs::{
@@ -18,7 +19,6 @@ use looprs::{
     console_prompt, console_secret_prompt,
 };
 use looprs::{ProviderConfig, ProviderSettings};
-use looprs::{plugins::manifests::PluginRuntimeRegistry, ports::OrchestrationPluginPort};
 
 mod args;
 mod cli;
@@ -288,6 +288,12 @@ async fn main() -> Result<()> {
     let repo_plugins = repo_plugins_dir.filter(|d| d.exists());
     let plugin_runtime = PluginRuntimeRegistry::load_dual_source(user_plugins, repo_plugins)
         .map_err(|error| anyhow::anyhow!("failed to initialize plugin runtime: {error}"))?;
+    let orchestrator = RuntimeOrchestrator::new(
+        app_config.agents.clone(),
+        agent_registry,
+        skill_registry,
+        plugin_runtime,
+    );
 
     // Handle scriptable (non-interactive) mode
     if cli_args.is_scriptable() {
@@ -295,10 +301,7 @@ async fn main() -> Result<()> {
             &cli_args,
             &model,
             &provider_name,
-            app_config,
-            agent_registry,
-            skill_registry,
-            plugin_runtime,
+            orchestrator,
             agent,
             run_controls,
         )
@@ -314,9 +317,7 @@ async fn main() -> Result<()> {
         provider_config,
         agent,
         command_registry,
-        skill_registry,
-        agent_registry,
-        plugin_runtime,
+        orchestrator,
     )
     .await
 }
@@ -326,10 +327,7 @@ async fn run_scriptable(
     cli_args: &CliArgs,
     model: &str,
     provider_name: &str,
-    app_config: AppConfig,
-    agent_registry: AgentRegistry,
-    skill_registry: SkillRegistry,
-    mut plugin_runtime: PluginRuntimeRegistry,
+    mut orchestrator: RuntimeOrchestrator,
     mut agent: Agent,
     run_controls: automation_protocol::RunControls,
 ) -> Result<()> {
@@ -368,20 +366,8 @@ async fn run_scriptable(
         );
     }
 
-    let (prepared_prompt, metadata, selected_agent) = prepare_user_prompt(
-        &prompt,
-        &app_config,
-        &agent_registry,
-        &skill_registry,
-        &mut plugin_runtime,
-    )?;
-    if !metadata.is_empty() {
-        agent.set_turn_metadata(metadata);
-    }
-    if let Some(agent_name) = selected_agent {
-        ui::info(format!("Delegated prompt to agent role: {agent_name}"));
-    }
-    agent.add_user_message(prepared_prompt);
+    let prepared = orchestrator.prepare_prompt(&prompt)?;
+    submit_prepared_prompt(&mut agent, prepared);
 
     ui::assistant_lead_in();
     let result = tokio::select! {
@@ -447,12 +433,14 @@ async fn run_interactive(
     mut provider_config: ProviderConfig,
     mut agent: Agent,
     command_registry: CommandRegistry,
-    skill_registry: SkillRegistry,
-    agent_registry: AgentRegistry,
-    mut plugin_runtime: PluginRuntimeRegistry,
+    mut orchestrator: RuntimeOrchestrator,
 ) -> Result<()> {
     let command_items = build_command_items(&command_registry);
-    let skill_items = build_skill_items(&skill_registry);
+    let skill_items = orchestrator
+        .skill_names()
+        .into_iter()
+        .map(|name| format!("${name}"))
+        .collect();
     let settings_items = setting_keys();
     let helper = ReplHelper::new(MatchSets {
         commands: command_items,
@@ -562,33 +550,11 @@ async fn run_interactive(
                         ui::info("● Conversation cleared");
                     }
                     CliCommand::InvokeSkill(skill_name, trailing) => {
-                        if let Some(skill) = skill_registry.get(&skill_name) {
-                            ui::info(format!("📚 Loading skill: {}", skill.name));
-                            let skill_message = if let Some(trailing_text) = trailing {
-                                let skill_message = format!(
-                                    "=== Skill: {} ===\n{}\n\nUser message: {}",
-                                    skill.name, skill.content, trailing_text
-                                );
-                                skill_message
-                            } else {
-                                format!("Skill '{}' activated:\n\n{}", skill.name, skill.content)
-                            };
-
-                            let (prepared_message, metadata, selected_agent) = prepare_user_prompt(
-                                &skill_message,
-                                &app_config,
-                                &agent_registry,
-                                &skill_registry,
-                                &mut plugin_runtime,
-                            )?;
-                            if !metadata.is_empty() {
-                                agent.set_turn_metadata(metadata);
-                            }
-                            if let Some(agent_name) = selected_agent {
-                                ui::info(format!("Delegated prompt to agent role: {agent_name}"));
-                            }
-
-                            agent.add_user_message(prepared_message);
+                        if let Some(prepared) =
+                            orchestrator.prepare_skill(&skill_name, trailing.as_deref())?
+                        {
+                            ui::info(format!("📚 Loading skill: {skill_name}"));
+                            submit_prepared_prompt(&mut agent, prepared);
 
                             if let Err(e) = agent.run_turn().await {
                                 ui::error(format!(
@@ -649,10 +615,7 @@ async fn run_interactive(
                                 cmd,
                                 &cmd_input,
                                 &mut agent,
-                                &app_config,
-                                &agent_registry,
-                                &skill_registry,
-                                &mut plugin_runtime,
+                                &mut orchestrator,
                                 &mut state,
                             )
                             .await;
@@ -668,32 +631,6 @@ async fn run_interactive(
                         }
                     }
                     CliCommand::Message(msg) => {
-                        // Check for auto-triggering skills
-                        let matching_skills = skill_registry.find_matching(&msg);
-
-                        let final_message = if !matching_skills.is_empty() {
-                            ui::info(format!(
-                                "📚 Auto-triggered {} skill(s)",
-                                matching_skills.len()
-                            ));
-                            for skill in &matching_skills {
-                                ui::info(format!("  • {}", skill.name.cyan()));
-                            }
-
-                            // Prepend skill content to user message
-                            let mut full_message = String::new();
-                            for skill in matching_skills {
-                                full_message.push_str(&format!(
-                                    "=== Skill: {} ===\n{}\n\n",
-                                    skill.name, skill.content
-                                ));
-                            }
-                            full_message.push_str(&format!("User message: {msg}"));
-                            full_message
-                        } else {
-                            msg
-                        };
-
                         // Inject session state so the model has current context on every turn.
                         let cwd_str = env::current_dir()
                             .map(|p| p.display().to_string())
@@ -705,23 +642,17 @@ async fn run_interactive(
                             &cwd_str,
                             turn_count,
                         );
-                        let final_message = format!("{ctx_prefix}{final_message}");
-
-                        let (prepared_message, metadata, selected_agent) = prepare_user_prompt(
-                            &final_message,
-                            &app_config,
-                            &agent_registry,
-                            &skill_registry,
-                            &mut plugin_runtime,
-                        )?;
-                        if !metadata.is_empty() {
-                            agent.set_turn_metadata(metadata);
+                        let prepared = orchestrator.prepare_message(&msg, &ctx_prefix)?;
+                        if !prepared.activated_skills.is_empty() {
+                            ui::info(format!(
+                                "📚 Auto-triggered {} skill(s)",
+                                prepared.activated_skills.len()
+                            ));
+                            for skill_name in &prepared.activated_skills {
+                                ui::info(format!("  • {}", skill_name.cyan()));
+                            }
                         }
-                        if let Some(agent_name) = selected_agent {
-                            ui::info(format!("Delegated prompt to agent role: {agent_name}"));
-                        }
-
-                        agent.add_user_message(prepared_message);
+                        submit_prepared_prompt(&mut agent, prepared);
 
                         if let Err(e) = agent.run_turn().await {
                             ui::error(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));
@@ -883,17 +814,6 @@ fn build_command_items(command_registry: &CommandRegistry) -> Vec<String> {
             items.push(format!("/{alias}"));
         }
     }
-    items.sort();
-    items.dedup();
-    items
-}
-
-fn build_skill_items(skill_registry: &SkillRegistry) -> Vec<String> {
-    let mut items = skill_registry
-        .list()
-        .into_iter()
-        .map(|skill| format!("${}", skill.name))
-        .collect::<Vec<_>>();
     items.sort();
     items.dedup();
     items
@@ -1191,192 +1111,22 @@ fn save_configs(_app_config: &AppConfig, _provider_config: &ProviderConfig) -> R
     Ok(())
 }
 
-fn prepare_user_prompt(
-    raw_prompt: &str,
-    app_config: &AppConfig,
-    agent_registry: &AgentRegistry,
-    skill_registry: &SkillRegistry,
-    plugin_runtime: &mut PluginRuntimeRegistry,
-) -> Result<(String, HashMap<String, String>, Option<String>)> {
-    if agent_registry.is_empty() {
-        return Ok((raw_prompt.to_string(), HashMap::new(), None));
-    }
-
-    let explicit = parse_explicit_agent_tag(raw_prompt);
-    let (selection, task_prompt, selection_mode, routed_by_plugin) = match explicit {
-        Some((agent_name, remainder)) => {
-            if let Some(agent) = agent_registry.get(agent_name) {
-                (Some(agent), remainder, "explicit", None)
-            } else {
-                ui::warn(format!(
-                    "Unknown explicit agent tag '#{agent_name}'; falling back to auto selection"
-                ));
-                let fallback_prompt = if remainder.is_empty() {
-                    raw_prompt
-                } else {
-                    remainder
-                };
-                (
-                    agent_registry.select_for_prompt(
-                        fallback_prompt,
-                        app_config.agents.default_agent.as_deref(),
-                        app_config.agents.delegate_by_default,
-                    ),
-                    fallback_prompt,
-                    "auto",
-                    None,
-                )
-            }
+fn submit_prepared_prompt(agent: &mut Agent, prepared: PreparedPrompt) {
+    for notice in prepared.notices {
+        match notice {
+            OrchestrationNotice::UnknownExplicitAgent(agent_name) => ui::warn(format!(
+                "Unknown explicit agent tag '#{agent_name}'; falling back to auto selection"
+            )),
         }
-        None => match plugin_runtime.select_agent_for_prompt(raw_prompt)? {
-            Some(plugin_selection) => {
-                let manifest = plugin_runtime
-                    .orchestration_plugin(&plugin_selection.plugin_name)
-                    .cloned();
-
-                if let Some(agent) = agent_registry.get(&plugin_selection.agent_name) {
-                    (
-                        Some(agent),
-                        raw_prompt,
-                        "plugin",
-                        Some(plugin_selection.plugin_name),
-                    )
-                } else if manifest.as_ref().is_some_and(|m| m.required) {
-                    anyhow::bail!(
-                        "Required orchestration plugin '{}' routed to unknown agent '{}'",
-                        plugin_selection.plugin_name,
-                        plugin_selection.agent_name
-                    );
-                } else {
-                    (
-                        agent_registry.select_for_prompt(
-                            raw_prompt,
-                            app_config.agents.default_agent.as_deref(),
-                            app_config.agents.delegate_by_default,
-                        ),
-                        raw_prompt,
-                        "auto",
-                        None,
-                    )
-                }
-            }
-            None => (
-                agent_registry.select_for_prompt(
-                    raw_prompt,
-                    app_config.agents.default_agent.as_deref(),
-                    app_config.agents.delegate_by_default,
-                ),
-                raw_prompt,
-                "auto",
-                None,
-            ),
-        },
-    };
-
-    let Some(agent) = selection else {
-        return Ok((raw_prompt.to_string(), HashMap::new(), None));
-    };
-
-    let mut metadata = HashMap::new();
-    metadata.insert("orchestration.mode".to_string(), "delegated".to_string());
-    metadata.insert("orchestration.agent".to_string(), agent.name.clone());
-    metadata.insert(
-        "orchestration.strategy".to_string(),
-        app_config.agents.orchestration.clone(),
-    );
-    metadata.insert(
-        "orchestration.selection".to_string(),
-        selection_mode.to_string(),
-    );
-    if let Some(plugin_name) = routed_by_plugin {
-        metadata.insert("orchestration.plugin".to_string(), plugin_name);
     }
-    if !agent.tools.is_empty() {
-        metadata.insert("orchestration.tools".to_string(), agent.tools.join(","));
+    if let Some(delegation) = prepared.delegation {
+        ui::info(format!(
+            "Delegated prompt to agent role: {}",
+            delegation.agent_name()
+        ));
+        agent.set_delegation_context(delegation);
     }
-
-    let role = agent
-        .role
-        .clone()
-        .unwrap_or_else(|| "Specialized assistant".to_string());
-    let description = agent.description.clone().unwrap_or_default();
-    let system_prompt = agent.system_prompt.clone().unwrap_or_default();
-    let constraints = if agent.constraints.is_empty() {
-        String::new()
-    } else {
-        agent
-            .constraints
-            .iter()
-            .map(|c| format!("- {c}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-
-    let missing_skills = agent
-        .skills
-        .iter()
-        .filter(|skill_name| skill_registry.get(skill_name).is_none())
-        .cloned()
-        .collect::<Vec<_>>();
-    if !missing_skills.is_empty() {
-        anyhow::bail!(
-            "missing delegated skill(s) for agent '{}': {}",
-            agent.name,
-            missing_skills.join(", ")
-        );
-    }
-
-    let delegated_skills = agent
-        .skills
-        .iter()
-        .filter_map(|skill_name| {
-            skill_registry
-                .get(skill_name)
-                .map(|skill| format!("- {}\n{}", skill.name, skill.content.trim_end_matches('\n')))
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    let skills_section = if delegated_skills.is_empty() {
-        String::new()
-    } else {
-        format!("\nSkills:\n{delegated_skills}")
-    };
-
-    let rewritten = format!(
-        "[Delegation]\nAgent: {}\nRole: {}\nDescription: {}\nSystem Prompt:\n{}\nConstraints:\n{}{}\n\nTask:\n{}",
-        agent.name, role, description, system_prompt, constraints, skills_section, task_prompt
-    );
-
-    Ok((rewritten, metadata, Some(agent.name.clone())))
-}
-
-fn parse_explicit_agent_tag(raw_prompt: &str) -> Option<(&str, &str)> {
-    let trimmed = raw_prompt.trim_start();
-    if !trimmed.starts_with('#') {
-        return None;
-    }
-
-    let after_hash = &trimmed[1..];
-    if after_hash.is_empty() {
-        return None;
-    }
-
-    let split_at = after_hash
-        .char_indices()
-        .find_map(|(idx, ch)| ch.is_whitespace().then_some(idx))
-        .unwrap_or(after_hash.len());
-
-    let agent_name = &after_hash[..split_at];
-    if agent_name.is_empty()
-        || !agent_name
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
-    {
-        return None;
-    }
-
-    let remainder = after_hash[split_at..].trim_start();
-    Some((agent_name, remainder))
+    agent.add_user_message(prepared.prompt);
 }
 
 /// Execute a custom command
@@ -1386,15 +1136,11 @@ struct SessionState {
     model: String,
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn execute_command(
     cmd: &Command,
     input: &str,
     agent: &mut Agent,
-    app_config: &AppConfig,
-    agent_registry: &AgentRegistry,
-    skill_registry: &SkillRegistry,
-    plugin_runtime: &mut PluginRuntimeRegistry,
+    orchestrator: &mut RuntimeOrchestrator,
     state: &mut SessionState,
 ) -> Result<()> {
     let provider_config = &mut state.provider_config;
@@ -1404,20 +1150,8 @@ async fn execute_command(
 
     match &cmd.action {
         CommandAction::Prompt { template, .. } => {
-            let (prepared_prompt, metadata, selected_agent) = prepare_user_prompt(
-                template,
-                app_config,
-                agent_registry,
-                skill_registry,
-                plugin_runtime,
-            )?;
-            if !metadata.is_empty() {
-                agent.set_turn_metadata(metadata);
-            }
-            if let Some(agent_name) = selected_agent {
-                ui::info(format!("Delegated prompt to agent role: {agent_name}"));
-            }
-            agent.add_user_message(prepared_prompt);
+            let prepared = orchestrator.prepare_prompt(template)?;
+            submit_prepared_prompt(agent, prepared);
             agent.run_turn().await?;
         }
         CommandAction::Shell {
@@ -1446,20 +1180,8 @@ async fn execute_command(
                 let clean = looprs::ui::output_preview_colored(trimmed);
                 ui::info("Output injected into context");
                 let output_prompt = format!("Command output:\n```\n{clean}\n```");
-                let (prepared_prompt, metadata, selected_agent) = prepare_user_prompt(
-                    &output_prompt,
-                    app_config,
-                    agent_registry,
-                    skill_registry,
-                    plugin_runtime,
-                )?;
-                if !metadata.is_empty() {
-                    agent.set_turn_metadata(metadata);
-                }
-                if let Some(agent_name) = selected_agent {
-                    ui::info(format!("Delegated prompt to agent role: {agent_name}"));
-                }
-                agent.add_user_message(prepared_prompt);
+                let prepared = orchestrator.prepare_prompt(&output_prompt)?;
+                submit_prepared_prompt(agent, prepared);
             } else if !stdout.is_empty() {
                 let trimmed = stdout.trim();
                 looprs::ui::output_preview_colored(trimmed);
@@ -1592,15 +1314,9 @@ async fn execute_command(
 #[cfg(test)]
 mod provider_menu_tests {
     use super::configure_provider;
-    use super::parse_explicit_agent_tag;
     use super::parse_ollama_list_output;
-    use super::prepare_user_prompt;
     use super::provider_menu_options;
     use looprs::ProviderConfig;
-    use looprs::app_config::AppConfig;
-    use looprs::plugins::manifests::PluginRuntimeRegistry;
-    use looprs::{AgentDefinition, AgentRegistry, Skill, SkillRegistry};
-    use std::path::PathBuf;
 
     // Captured from a real `ollama list` invocation.
     const REAL_OLLAMA_LIST_OUTPUT: &str = "NAME                                             ID              SIZE      MODIFIED\nfunctiongemma:latest                             7c19b650567a    300 MB    2 months ago\ngemma-lg:latest                                  e6349aa91a78    24 GB     2 months ago\nhf.co/unsloth/gemma-4-26B-A4B-it-GGUF:UD-Q6_K    e6349aa91a78    24 GB     2 months ago\nnomic-embed-text:latest                          0a109f422b47    274 MB    2 months ago\nllama3.2:latest                                  a80c4f17acd5    2.0 GB    4 months ago\n";
@@ -1664,71 +1380,6 @@ mod provider_menu_tests {
     }
 
     #[test]
-    fn parses_hash_agent_tag_with_prompt() {
-        let parsed = parse_explicit_agent_tag("#taskit investigate regression").unwrap();
-        assert_eq!(parsed.0, "taskit");
-        assert_eq!(parsed.1, "investigate regression");
-    }
-
-    #[test]
-    fn parses_hash_agent_tag_without_prompt() {
-        let parsed = parse_explicit_agent_tag("#opencode").unwrap();
-        assert_eq!(parsed.0, "opencode");
-        assert_eq!(parsed.1, "");
-    }
-
-    #[test]
-    fn rejects_invalid_hash_agent_tag() {
-        assert!(parse_explicit_agent_tag("#taskit/alpha do thing").is_none());
-        assert!(parse_explicit_agent_tag("not a tag").is_none());
-    }
-
-    #[test]
-    fn prepare_prompt_injects_agent_tool_allowlist_and_skill_content() {
-        let app_config = AppConfig::default();
-
-        let mut agents = AgentRegistry::new();
-        agents.register(AgentDefinition {
-            name: "reviewer".to_string(),
-            role: Some("Reviewer".to_string()),
-            description: Some("Reviews code".to_string()),
-            system_prompt: Some("Review for issues".to_string()),
-            tools: vec!["read".to_string(), "grep".to_string()],
-            skills: vec!["security-checklist".to_string()],
-            constraints: vec!["read-only".to_string()],
-            triggers: vec!["review".to_string()],
-        });
-
-        let mut skills = SkillRegistry::new();
-        skills.register(Skill {
-            name: "security-checklist".to_string(),
-            description: Some("Security review checklist".to_string()),
-            triggers: vec![],
-            content: "Check auth paths and secret handling.".to_string(),
-            source_path: PathBuf::from("/tmp/security-checklist/SKILL.md"),
-        });
-
-        let mut plugin_runtime = PluginRuntimeRegistry::default();
-        let (rewritten, metadata, selected_agent) = prepare_user_prompt(
-            "please review this change",
-            &app_config,
-            &agents,
-            &skills,
-            &mut plugin_runtime,
-        )
-        .unwrap();
-
-        assert_eq!(selected_agent.as_deref(), Some("reviewer"));
-        assert_eq!(
-            metadata.get("orchestration.tools").map(String::as_str),
-            Some("read,grep")
-        );
-        assert!(rewritten.contains("Skills:"));
-        assert!(rewritten.contains("security-checklist"));
-        assert!(rewritten.contains("Check auth paths and secret handling."));
-    }
-
-    #[test]
     fn repo_skill_path_uses_configured_app_path() {
         let source = include_str!("main.rs");
         assert!(
@@ -1739,35 +1390,5 @@ mod provider_menu_tests {
             source.contains("join(&app_config.paths.skills)"),
             "expected repo skills path to use app_config.paths.skills"
         );
-    }
-
-    #[test]
-    fn prepare_prompt_rejects_missing_delegated_skills() {
-        let app_config = AppConfig::default();
-
-        let mut agents = AgentRegistry::new();
-        agents.register(AgentDefinition {
-            name: "reviewer".to_string(),
-            role: Some("Reviewer".to_string()),
-            description: Some("Reviews code".to_string()),
-            system_prompt: Some("Review for issues".to_string()),
-            tools: vec!["read".to_string()],
-            skills: vec!["missing-skill".to_string()],
-            constraints: vec![],
-            triggers: vec!["review".to_string()],
-        });
-
-        let skills = SkillRegistry::new();
-        let mut plugin_runtime = PluginRuntimeRegistry::default();
-        let err = prepare_user_prompt(
-            "please review this change",
-            &app_config,
-            &agents,
-            &skills,
-            &mut plugin_runtime,
-        )
-        .expect_err("missing delegated skill should fail");
-
-        assert!(err.to_string().contains("missing delegated skill"));
     }
 }

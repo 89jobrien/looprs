@@ -43,6 +43,34 @@ fn fake_ollama(response: FakeResponse) -> (String, Receiver<()>, thread::JoinHan
     (address, request_rx, handle)
 }
 
+fn capturing_fake_ollama() -> (String, Receiver<String>, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake Ollama");
+    let address = format!("http://{}", listener.local_addr().expect("local address"));
+    let (request_tx, request_rx) = mpsc::channel();
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept request");
+        let mut request = [0_u8; 64 * 1024];
+        let bytes_read = stream.read(&mut request).expect("read request");
+        request_tx
+            .send(String::from_utf8_lossy(&request[..bytes_read]).into_owned())
+            .expect("send captured request");
+        let body = json!({
+            "message": {"role": "assistant", "content": "delegated ok"},
+            "prompt_eval_count": 7,
+            "eval_count": 3
+        })
+        .to_string();
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        stream
+            .write_all(response.as_bytes())
+            .expect("write response");
+    });
+    (address, request_rx, handle)
+}
+
 fn serve_response(stream: &mut TcpStream, response: FakeResponse) {
     let mut request = [0_u8; 16 * 1024];
     let _ = stream.read(&mut request);
@@ -249,5 +277,53 @@ fn legacy_machine_log_keeps_top_level_kind_and_data() {
         .collect();
     assert!(records.iter().any(|value| value.get("kind").is_some()));
     assert!(records.iter().all(|value| value.get("protocol").is_none()));
+    server.join().expect("fake server joins");
+}
+
+#[test]
+fn scriptable_cli_delegates_through_runtime_orchestrator() {
+    let home = tempfile::tempdir().expect("temp home");
+    let looprs_dir = home.path().join(".looprs");
+    let agents_dir = looprs_dir.join("agents");
+    std::fs::create_dir_all(&agents_dir).expect("create agents directory");
+    std::fs::write(
+        looprs_dir.join("config.json"),
+        r#"{"paths":{"agents":".looprs/agents","skills":".looprs/skills","plugins":".looprs/plugins"}}"#,
+    )
+    .expect("write config");
+    std::fs::write(
+        agents_dir.join("reviewer.yaml"),
+        r#"name: reviewer
+role: Reviewer
+system_prompt: Review carefully
+tools: [read]
+triggers: [hello]
+"#,
+    )
+    .expect("write agent");
+    let (host, requests, server) = capturing_fake_ollama();
+
+    let output = command(home.path(), &host).output().expect("run looprs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let request = requests
+        .recv_timeout(Duration::from_secs(5))
+        .expect("captured provider request");
+    let body = request
+        .split_once("\r\n\r\n")
+        .map(|(_, body)| body)
+        .expect("HTTP request body");
+    let payload: Value = serde_json::from_str(body).expect("request JSON");
+    let user_content = payload["messages"]
+        .as_array()
+        .and_then(|messages| messages.iter().find(|message| message["role"] == "user"))
+        .and_then(|message| message["content"].as_str())
+        .expect("user prompt");
+    assert!(user_content.contains("[Delegation]"));
+    assert!(user_content.contains("Agent: reviewer"));
     server.join().expect("fake server joins");
 }

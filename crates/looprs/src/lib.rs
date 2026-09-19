@@ -50,6 +50,8 @@ pub mod observability;
 pub mod observation;
 /// Observation storage and retrieval manager.
 pub mod observation_manager;
+/// Agent selection, skill resolution, and delegated prompt preparation.
+pub mod orchestration;
 /// Optional deterministic pipeline execution framework.
 pub mod pipeline;
 /// Plugin manifests, loading, and execution helpers.
