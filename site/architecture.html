@@ -124,11 +124,11 @@
         <li><strong>Turn traces:</strong> request and response payload summaries are appended to JSONL.</li>
         <li><strong>UI events:</strong> frontend-visible lifecycle markers are written separately for tooling.</li>
         <li><strong>Session context:</strong> git state and todo context can be injected on session start.</li>
-        <li><strong>Diagnostics loop:</strong> warnings and errors flow through event hooks and user output ports.</li>
+        <li><strong>Diagnostics loop:</strong> tool failures fire <code>OnError</code>; provider failures return through the caller and output ports.</li>
       </ul>
 
       <h2>Runtime excerpt</h2>
-      <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs/src/agent.rs#L672"><code>crates/looprs/src/agent.rs#L672</code></a></p>
+      <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs/src/agent.rs"><code>crates/looprs/src/agent.rs</code></a></p>
       <pre><code>let mut tools = get_tool_definitions();
 if let Some(server_url) = self.runtime.mcp_server_url.clone() {
     match crate::tools::mcp_tool_definitions(&server_url).await {

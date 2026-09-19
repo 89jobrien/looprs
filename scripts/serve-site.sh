@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SITE_DIR="$ROOT_DIR/site"
+SITE_DIR="${LOOPRS_SITE_DIR:-$ROOT_DIR/site}"
 PORT="${1:-4173}"
 
 if [[ ! -d "$SITE_DIR" ]]; then
@@ -10,7 +10,9 @@ if [[ ! -d "$SITE_DIR" ]]; then
 	exit 1
 fi
 
-echo "Serving looprs static site from: $SITE_DIR"
-echo "URL: http://127.0.0.1:$PORT"
+if [[ ! "$PORT" =~ ^[0-9]+$ ]] || ((PORT < 0 || PORT > 65535)); then
+	echo "invalid port: $PORT" >&2
+	exit 1
+fi
 
-python3 -m http.server "$PORT" --directory "$SITE_DIR"
+exec python3 -u "$ROOT_DIR/scripts/serve-site.py" "$SITE_DIR" "$PORT"

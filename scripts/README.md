@@ -15,6 +15,42 @@ Serve the local static site in `site/` for quick preview.
 
 Default port is `4173`.
 
+Pass `0` to let the operating system select an ephemeral port. The server prints
+the resolved URL before accepting requests. `LOOPRS_SITE_DIR` can override the
+default `site/` directory for smoke tests.
+
+## check-site.py
+
+Validate every committed site `href` and `src`, reject local path escapes or
+missing assets, and fetch every local target from a running preview server:
+
+```bash
+./scripts/serve-site.sh 0
+python3 scripts/check-site.py site http://127.0.0.1:PORT
+```
+
+## CI and release helpers
+
+The reusable scripts under `scripts/ci/` keep workflow behavior executable and
+fixture-tested:
+
+- `coverage-summary.sh` calculates and validates workspace LCOV totals.
+- `package-release-unix.py` creates reproducible Unix archives and checksums.
+- `package-release-windows.ps1` creates Windows archives and checksums.
+- `release-binary-path.sh` selects the built binary used for SBOM generation.
+- `validate-release-assets.sh` requires the complete version-scoped release set.
+- `verify-release-health.sh` validates persisted health data for a release.
+
+Run their success and failure fixtures, site smoke test, and linters with:
+
+```bash
+scripts/tests/release-health.sh
+scripts/tests/workflow-contracts.sh
+scripts/tests/site-smoke.sh
+actionlint
+git ls-files 'scripts/*.sh' 'scripts/**/*.sh' | xargs shellcheck
+```
+
 ## bump-version.sh
 
 Version bumping and changelog organization script for looprs releases.

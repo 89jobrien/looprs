@@ -34,7 +34,7 @@
           <tr><td>Providers</td><td>SDK-backed variants</td><td>Stable</td><td><code>openai-sdk</code>, <code>anthropic-sdk</code>, <code>claude-sdk</code>.</td></tr>
           <tr><td>Tools</td><td><code>read</code> <code>write</code> <code>edit</code> <code>glob</code> <code>grep</code> <code>nu</code> <code>bash</code></td><td>Stable</td><td>Tool schemas exposed to providers each turn.</td></tr>
           <tr><td>Prompt UX</td><td><code>@file</code> references</td><td>Stable</td><td>File content injection with extension and size policy controls.</td></tr>
-          <tr><td>Hooks</td><td>Lifecycle event hooks</td><td>Stable</td><td>10 events, command/message/conditional actions.</td></tr>
+          <tr><td>Hooks</td><td>Runtime event hooks</td><td>Stable</td><td>10 event variants; emission follows the session, turn, delegation, and tool paths described in the state model.</td></tr>
           <tr><td>Configuration</td><td>Repo and user override layering</td><td>Stable</td><td><code>.looprs/</code> overrides <code>$HOME/.looprs/</code>.</td></tr>
           <tr><td>Delegation</td><td>Agent manifests and routed delegation</td><td>Stable</td><td>Role selection and delegated metadata in runtime.</td></tr>
           <tr><td>Delegation</td><td>Delegated tool allowlists</td><td>Stable</td><td>Allowed tools filtered in request and execution path.</td></tr>
