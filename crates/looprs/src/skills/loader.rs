@@ -135,6 +135,19 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
+    #[cfg(unix)]
+    struct PermissionGuard {
+        path: std::path::PathBuf,
+        permissions: fs::Permissions,
+    }
+
+    #[cfg(unix)]
+    impl Drop for PermissionGuard {
+        fn drop(&mut self) {
+            let _ = fs::set_permissions(&self.path, self.permissions.clone());
+        }
+    }
+
     #[test]
     fn test_load_from_empty_directory() {
         let temp = TempDir::new().unwrap();
@@ -219,6 +232,44 @@ Content here.
 
         let mut registry = SkillRegistry::new();
         assert_eq!(registry.load_from_directory(temp.path()).unwrap(), 1);
+        assert!(registry.get("valid").is_some());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_yaml_is_skipped_without_hiding_valid_skills() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = TempDir::new().unwrap();
+        let unreadable = temp.path().join("unreadable.yaml");
+        fs::write(
+            &unreadable,
+            "name: unreadable\ntriggers: [hidden]\ncontent: hidden\n",
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join("valid.yaml"),
+            "name: valid\ntriggers: [valid]\ncontent: visible\n",
+        )
+        .unwrap();
+
+        let original_permissions = fs::metadata(&unreadable).unwrap().permissions();
+        let _guard = PermissionGuard {
+            path: unreadable.clone(),
+            permissions: original_permissions.clone(),
+        };
+        let mut denied_permissions = original_permissions;
+        denied_permissions.set_mode(0o000);
+        fs::set_permissions(&unreadable, denied_permissions).unwrap();
+
+        assert!(
+            fs::read_to_string(&unreadable).is_err(),
+            "test setup must make the YAML file unreadable"
+        );
+
+        let mut registry = SkillRegistry::new();
+        assert_eq!(registry.load_from_directory(temp.path()).unwrap(), 1);
+        assert!(registry.get("unreadable").is_none());
         assert!(registry.get("valid").is_some());
     }
 

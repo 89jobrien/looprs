@@ -730,6 +730,25 @@ mod tests {
     }
 
     #[test]
+    fn generated_process_run_id_is_stable_through_injected_protocol() {
+        let environment =
+            FakeEnvironment::default().with(MACHINE_PROTOCOL_ENV, MACHINE_PROTOCOL_V1);
+        let sequence = LocalSequence::default();
+        let service =
+            AutomationProtocol::new(&environment, &FixedClock, &ProcessRunIdentity, &sequence);
+
+        let first = service
+            .next_envelope("first", Value::Null)
+            .expect("v1 protocol should emit the first envelope");
+        let second = service
+            .next_envelope("second", Value::Null)
+            .expect("v1 protocol should emit the second envelope");
+
+        assert_eq!(first.run_id, format!("run-1000-{}", std::process::id()));
+        assert_eq!(second.run_id, first.run_id);
+    }
+
+    #[test]
     fn event_sink_receives_selected_records_in_sequence() {
         let environment =
             FakeEnvironment::default().with(MACHINE_PROTOCOL_ENV, MACHINE_PROTOCOL_V1);
