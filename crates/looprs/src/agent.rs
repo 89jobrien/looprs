@@ -8,15 +8,17 @@ use crate::fs_mode::FsMode;
 use crate::hooks::{ApprovalCallback, HookExecutor, HookRegistry, PromptCallback};
 use crate::models_config::ModelsConfig;
 use crate::observation_manager::ObservationManager;
+use crate::orchestration::DelegationContext;
 use crate::ports::{SessionStore, UserOutput};
 use crate::providers::LLMProvider;
 use crate::providers::{InferenceRequest, InferenceResponse};
 use crate::rules::RuleRegistry;
 use crate::session_log::SessionEvent;
 use crate::system_monitor::SystemMonitor;
-use crate::tools::{DefaultToolExecutor, ToolContext, ToolExecutor, get_tool_definitions};
+use crate::tools::{ToolCatalog, ToolContext, ToolDispatcher, ToolExecutor, ToolPorts};
 use futures::StreamExt as _;
-use std::collections::{HashMap, HashSet};
+use looprs_core::ports::{DelegatedToolPolicy, InferenceDelta, InferenceStreamEvent};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::time::{Duration, timeout};
 
@@ -52,24 +54,43 @@ fn truncate_tool_result_for_context(content: &str) -> String {
     )
 }
 
-fn parse_allowed_tools(metadata: &HashMap<String, String>) -> Option<HashSet<String>> {
-    let raw = metadata.get(ORCHESTRATION_TOOLS_METADATA_KEY)?;
-    let parsed = raw
-        .split(',')
-        .map(str::trim)
-        .filter(|tool| !tool.is_empty())
-        .map(ToOwned::to_owned)
-        .collect::<HashSet<_>>();
+fn delegated_tool_policy(metadata: &HashMap<String, String>) -> Option<DelegatedToolPolicy> {
+    let is_delegated = metadata.contains_key("orchestration.agent")
+        || metadata.contains_key(ORCHESTRATION_TOOLS_METADATA_KEY);
+    is_delegated.then(|| {
+        DelegatedToolPolicy::from_csv(
+            metadata
+                .get(ORCHESTRATION_TOOLS_METADATA_KEY)
+                .map(String::as_str),
+        )
+    })
+}
 
-    if parsed.is_empty() {
-        None
-    } else {
-        Some(parsed)
+fn denied_by_policy(policy: Option<&DelegatedToolPolicy>, tool_name: &str) -> bool {
+    policy.is_some_and(|policy| !policy.allows(tool_name))
+}
+
+fn validate_tool_calls(response: &InferenceResponse) -> Result<(), AgentError> {
+    for block in &response.content {
+        if let ContentBlock::ToolUse { id, name, input } = block {
+            if id.as_str().trim().is_empty() || name.as_str().trim().is_empty() {
+                return Err(AgentError::Inference(
+                    "provider returned a malformed tool call without id or name".to_string(),
+                ));
+            }
+            if !input.is_object() {
+                return Err(AgentError::Inference(format!(
+                    "provider returned malformed arguments for tool {name}: expected an object"
+                )));
+            }
+        }
     }
+    Ok(())
 }
 
 /// Mutable runtime settings applied to each agent turn.
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct RuntimeSettings {
     /// Default runtime knobs loaded from app config.
     pub defaults: DefaultsConfig,
@@ -81,6 +102,63 @@ pub struct RuntimeSettings {
     pub max_parallel: usize,
     /// Optional MCP server URL used for remote tool discovery/execution.
     pub mcp_server_url: Option<String>,
+}
+
+impl RuntimeSettings {
+    /// Construct runtime settings from the stable core options.
+    pub fn new(
+        defaults: DefaultsConfig,
+        max_tokens_override: Option<u32>,
+        fs_mode: FsMode,
+    ) -> Self {
+        Self {
+            defaults,
+            max_tokens_override,
+            fs_mode,
+            ..Self::default()
+        }
+    }
+
+    /// Set the upper bound for parallel tool dispatch.
+    #[must_use]
+    pub fn with_max_parallel(mut self, max_parallel: usize) -> Self {
+        self.max_parallel = max_parallel.max(1);
+        self
+    }
+
+    /// Set the optional MCP server URL.
+    #[must_use]
+    pub fn with_mcp_server_url(mut self, server_url: impl Into<String>) -> Self {
+        self.mcp_server_url = Some(server_url.into());
+        self
+    }
+
+    /// Apply process environment settings understood by the runtime.
+    #[must_use]
+    pub fn with_environment(self) -> Self {
+        self.with_mcp_environment_value(std::env::var("LOOPRS_MCP_SERVER_URL").ok())
+    }
+
+    fn with_mcp_environment_value(mut self, server_url: Option<String>) -> Self {
+        if let Some(server_url) = server_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+        {
+            self.mcp_server_url = Some(server_url.to_string());
+        }
+        self
+    }
+
+    /// Return the configured parallel tool dispatch limit.
+    pub fn max_parallel(&self) -> usize {
+        self.max_parallel
+    }
+
+    /// Return the configured MCP server URL, if any.
+    pub fn mcp_server_url(&self) -> Option<&str> {
+        self.mcp_server_url.as_deref()
+    }
 }
 
 /// Primary orchestrator for provider inference, tools, rules, and hooks.
@@ -95,9 +173,11 @@ pub struct Agent {
     runtime: RuntimeSettings,
     file_ref_policy: FileRefPolicy,
     pending_metadata: HashMap<String, String>,
+    pending_delegation: Option<DelegationContext>,
     session_logger: Option<Box<dyn SessionStore>>,
     output: Box<dyn UserOutput>,
-    tool_executor: Arc<dyn ToolExecutor>,
+    tool_catalog: Arc<dyn ToolCatalog>,
+    tool_dispatcher: Arc<dyn ToolDispatcher>,
     models_config: Option<ModelsConfig>,
     system_monitor: SystemMonitor,
     session_input_tokens: u32,
@@ -107,14 +187,7 @@ pub struct Agent {
 impl Agent {
     /// Construct an agent with default runtime settings and console output.
     pub fn new(provider: Box<dyn LLMProvider>) -> Result<Self, AgentError> {
-        use crate::adapters::UiOutput;
-        Self::new_with_runtime(
-            provider,
-            RuntimeSettings::default(),
-            FileRefPolicy::default(),
-            None,
-            Box::new(UiOutput),
-        )
+        crate::adapters::default_agent(provider)
     }
 
     /// Construct an agent with explicit runtime, policy, and adapter ports.
@@ -125,13 +198,25 @@ impl Agent {
         session_logger: Option<Box<dyn SessionStore>>,
         output: Box<dyn UserOutput>,
     ) -> Result<Self, AgentError> {
-        let tool_executor: Box<dyn ToolExecutor> = match runtime.mcp_server_url.clone() {
-            Some(server_url) => Box::new(crate::adapters::McpToolExecutor::with_fallback(
-                server_url,
-                Box::new(DefaultToolExecutor),
-            )),
-            None => Box::new(DefaultToolExecutor),
-        };
+        crate::adapters::agent_with_runtime(
+            provider,
+            runtime,
+            file_ref_policy,
+            session_logger,
+            output,
+        )
+    }
+
+    /// Construct an agent from fully injected runtime abstractions.
+    pub fn new_with_runtime_and_tool_ports(
+        provider: Box<dyn LLMProvider>,
+        runtime: RuntimeSettings,
+        file_ref_policy: FileRefPolicy,
+        session_logger: Option<Box<dyn SessionStore>>,
+        output: Box<dyn UserOutput>,
+        tool_ports: ToolPorts,
+    ) -> Result<Self, AgentError> {
+        let (tool_catalog, tool_dispatcher) = tool_ports.into_parts();
 
         Ok(Self {
             provider,
@@ -144,30 +229,16 @@ impl Agent {
             runtime,
             file_ref_policy,
             pending_metadata: HashMap::new(),
+            pending_delegation: None,
             session_logger,
             output,
-            tool_executor: Arc::from(tool_executor),
+            tool_catalog,
+            tool_dispatcher,
             models_config: ModelsConfig::load().ok(),
             system_monitor: SystemMonitor::new(),
             session_input_tokens: 0,
             session_output_tokens: 0,
         })
-    }
-
-    fn merge_remote_tool_definitions(
-        mut tools: Vec<looprs_core::api::ToolDefinition>,
-        remote_tools: Vec<looprs_core::api::ToolDefinition>,
-    ) -> Vec<looprs_core::api::ToolDefinition> {
-        let mut known = tools
-            .iter()
-            .map(|tool| tool.name.clone())
-            .collect::<std::collections::HashSet<_>>();
-        for remote_tool in remote_tools {
-            if known.insert(remote_tool.name.clone()) {
-                tools.push(remote_tool);
-            }
-        }
-        tools
     }
 
     /// Replace the output adapter. Useful for tests (inject `NullOutput`) or
@@ -180,7 +251,30 @@ impl Agent {
     /// Replace the tool executor. Inject a stub in tests to avoid real
     /// filesystem or subprocess side effects.
     pub fn with_tool_executor(mut self, executor: Box<dyn ToolExecutor>) -> Self {
-        self.tool_executor = Arc::from(executor);
+        self.tool_dispatcher = Arc::from(executor);
+        self
+    }
+
+    /// Replace both tool-side ports with an explicit composition.
+    pub fn with_tool_ports(mut self, ports: ToolPorts) -> Self {
+        self.set_tool_ports(ports);
+        self
+    }
+
+    /// Replace both tool-side ports with an explicit composition.
+    pub fn set_tool_ports(&mut self, ports: ToolPorts) {
+        (self.tool_catalog, self.tool_dispatcher) = ports.into_parts();
+    }
+
+    /// Replace the catalog used to advertise tools to providers.
+    pub fn with_tool_catalog(mut self, catalog: Arc<dyn ToolCatalog>) -> Self {
+        self.tool_catalog = catalog;
+        self
+    }
+
+    /// Replace the dispatcher used to execute provider tool calls.
+    pub fn with_tool_dispatcher(mut self, dispatcher: Arc<dyn ToolDispatcher>) -> Self {
+        self.tool_dispatcher = dispatcher;
         self
     }
 
@@ -235,6 +329,11 @@ impl Agent {
     /// Add per-turn metadata that will be attached to the next turn.
     pub fn set_turn_metadata(&mut self, metadata: HashMap<String, String>) {
         self.pending_metadata.extend(metadata);
+    }
+
+    /// Attach typed delegation capabilities and routing details to the next turn.
+    pub fn set_delegation_context(&mut self, context: DelegationContext) {
+        self.pending_delegation = Some(context);
     }
 
     /// Append a user message, resolving configured file references first.
@@ -456,134 +555,209 @@ impl Agent {
 
     /// Single-turn streaming inference.
     ///
-    /// Drives `provider.infer_stream()`, emitting each text chunk via
-    /// `output.write_chunk()`. When stop_reason is `tool_use` the accumulated
-    /// response is re-parsed and tool calls are executed identically to
-    /// `run_turn()`. Subsequent turns after tool execution run non-streaming
-    /// (the provider accumulates those as a single response).
+    /// Drives one structured stream per inference step, emits text deltas, and
+    /// continues tool turns until the provider returns terminal assistant text.
     pub async fn run_turn_streaming(&mut self) -> Result<(), AgentError> {
-        use futures::StreamExt as _;
+        let result = self.run_turn_streaming_inner().await;
+        if let Err(error) = &result {
+            let event_ctx = EventContext::new().with_error(error.to_string());
+            self.events.fire(Event::OnError, &event_ctx);
+            self.execute_hooks_for_event(&Event::OnError, &event_ctx);
+        }
+        result
+    }
 
-        let enriched_ctx = EventContext::new();
+    async fn run_turn_streaming_inner(&mut self) -> Result<(), AgentError> {
+        let delegated_agent = self
+            .pending_delegation
+            .as_ref()
+            .map(|context| context.agent_name().to_string())
+            .or_else(|| self.pending_metadata.get("orchestration.agent").cloned());
+        if let Some(agent_name) = delegated_agent.clone() {
+            let event_ctx = EventContext::new()
+                .with_tool_name(agent_name)
+                .with_metadata("orchestration.mode".to_string(), "delegated".to_string());
+            self.events.fire(Event::DelegationStart, &event_ctx);
+            self.execute_hooks_for_event(&Event::DelegationStart, &event_ctx);
+        }
+
+        let user_message = self
+            .messages
+            .last()
+            .filter(|message| message.role == "user")
+            .and_then(|message| message.content.first())
+            .and_then(|block| match block {
+                ContentBlock::Text { text } => Some(text.clone()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        if let Some(ref mut logger) = self.session_logger {
+            let _ = logger.log(SessionEvent::UserMessage {
+                content: user_message.clone(),
+                provider: self.provider.name().to_string(),
+            });
+        }
+        let mut event_ctx = EventContext::new().with_user_message(user_message);
+        for (key, value) in &self.pending_metadata {
+            event_ctx.metadata.insert(key.clone(), value.clone());
+        }
+        if let Some(delegation) = &self.pending_delegation {
+            event_ctx
+                .metadata
+                .extend(delegation.compatibility_metadata());
+        }
+        self.events.fire(Event::UserPromptSubmit, &event_ctx);
+        let mut enriched_ctx = self.execute_hooks_for_event(&Event::UserPromptSubmit, &event_ctx);
+        for (key, value) in std::mem::take(&mut self.pending_metadata) {
+            enriched_ctx.metadata.insert(key, value);
+        }
+
+        let tool_policy = self
+            .pending_delegation
+            .take()
+            .map(|context| context.tool_policy().clone())
+            .or_else(|| delegated_tool_policy(&enriched_ctx.metadata));
         let system_prompt = self.build_system_prompt(&enriched_ctx);
+        let mut tools = self.tool_catalog.definitions().await.map_err(|error| {
+            AgentError::Inference(format!("failed to load tool catalog: {error}"))
+        })?;
+        if let Some(policy) = tool_policy.as_ref() {
+            policy.filter_definitions(&mut tools);
+        }
 
-        let mut max_tokens = self.provider.model().max_tokens();
-        if let Some(ov) = self.runtime.max_tokens_override {
-            max_tokens = max_tokens.min(ov);
-        }
-        if let Some(max_ctx) = self.runtime.defaults.max_context_tokens {
-            max_tokens = max_tokens.min(max_ctx);
-        }
-        let messages = if let Some(max_ctx) = self.runtime.defaults.max_context_tokens {
-            compact_messages(&self.messages, max_ctx as usize)
-        } else {
-            self.messages.clone()
-        };
-        let allowed_tools = parse_allowed_tools(&self.pending_metadata);
-        let mut tools = get_tool_definitions();
-        if let Some(server_url) = self.runtime.mcp_server_url.clone() {
-            match crate::tools::mcp_tool_definitions(&server_url).await {
-                Ok(remote_tools) => {
-                    tools = Self::merge_remote_tool_definitions(tools, remote_tools);
+        loop {
+            let mut max_tokens = self.provider.model().max_tokens();
+            if let Some(override_tokens) = self.runtime.max_tokens_override {
+                max_tokens = max_tokens.min(override_tokens);
+            }
+            if let Some(max_context) = self.runtime.defaults.max_context_tokens {
+                max_tokens = max_tokens.min(max_context);
+            }
+            let messages = if let Some(max_context) = self.runtime.defaults.max_context_tokens {
+                compact_messages(&self.messages, max_context as usize)
+            } else {
+                self.messages.clone()
+            };
+            let req = InferenceRequest {
+                model: self.provider.model().clone(),
+                messages,
+                tools: tools.clone(),
+                max_tokens,
+                temperature: self.runtime.defaults.temperature,
+                system: system_prompt.clone(),
+            };
+
+            let inference = async {
+                let mut stream = self.provider.infer_stream(&req).await;
+                let mut final_response = None;
+                let mut saw_text_delta = false;
+                while let Some(event) = stream.next().await {
+                    match event.map_err(|error| AgentError::Inference(error.to_string()))? {
+                        InferenceStreamEvent::Delta(InferenceDelta::Text(text)) => {
+                            if final_response.is_some() {
+                                return Err(AgentError::Inference(
+                                    "provider emitted a delta after the final response".to_string(),
+                                ));
+                            }
+                            saw_text_delta = true;
+                            self.output.write_chunk(&text);
+                        }
+                        InferenceStreamEvent::Delta(InferenceDelta::ToolCall { .. }) => {
+                            if final_response.is_some() {
+                                return Err(AgentError::Inference(
+                                    "provider emitted a delta after the final response".to_string(),
+                                ));
+                            }
+                        }
+                        InferenceStreamEvent::Final(response) => {
+                            if final_response.replace(response).is_some() {
+                                return Err(AgentError::Inference(
+                                    "provider emitted more than one final response".to_string(),
+                                ));
+                            }
+                        }
+                    }
                 }
-                Err(err) => {
-                    self.output.warn(&format!(
-                        "Warning: failed to discover MCP tools from {server_url}: {err}"
-                    ));
-                }
-            }
-        }
-        if let Some(allowed) = allowed_tools.as_ref() {
-            tools.retain(|tool| allowed.contains(tool.name.as_str()));
-        }
-        let allowed_tools = parse_allowed_tools(&self.pending_metadata);
-        if let Some(allowed) = allowed_tools.as_ref() {
-            tools.retain(|tool| allowed.contains(tool.name.as_str()));
-        }
-        let req = InferenceRequest {
-            model: self.provider.model().clone(),
-            messages,
-            tools,
-            max_tokens,
-            temperature: self.runtime.defaults.temperature,
-            system: system_prompt,
-        };
-
-        // Stream text chunks to the output port, accumulate full text.
-        let mut stream = self.provider.infer_stream(&req).await;
-        let mut accumulated = String::new();
-        while let Some(chunk) = stream.next().await {
-            match chunk {
-                Ok(text) => {
-                    self.output.write_chunk(&text);
-                    accumulated.push_str(&text);
-                }
-                Err(e) => return Err(AgentError::Inference(e.to_string())),
-            }
-        }
-
-        // Recover the provider's structured response so streamed turns preserve
-        // tool calls and usage accounting.
-        let response = if let Some(timeout_secs) = self.runtime.defaults.timeout_seconds {
-            match timeout(Duration::from_secs(timeout_secs), self.provider.infer(&req)).await {
-                Ok(res) => res.map_err(|e| AgentError::Inference(e.to_string()))?,
-                Err(_) => return Err(AgentError::Timeout),
-            }
-        } else {
-            self.provider
-                .infer(&req)
-                .await
-                .map_err(|e| AgentError::Inference(e.to_string()))?
-        };
-
-        self.session_input_tokens += response.usage.input_tokens;
-        self.session_output_tokens += response.usage.output_tokens;
-        self.log_inference(&response);
-
-        #[cfg(not(test))]
-        if let Err(e) =
-            crate::trace::append_turn_trace(self.observations.session_id(), &req, &response)
-        {
-            self.output
-                .warn(&format!("Warning: Failed to append turn trace: {e}"));
-        }
-
-        let event_ctx = EventContext::new();
-        self.events.fire(Event::InferenceComplete, &event_ctx);
-        self.execute_hooks_for_event(&Event::InferenceComplete, &event_ctx);
-
-        if response.content.is_empty() {
-            if !accumulated.is_empty() {
-                self.messages
-                    .push(Message::assistant(vec![ContentBlock::Text {
-                        text: accumulated,
-                    }]));
-            }
-            return Ok(());
-        }
-
-        let has_tool_use = response
-            .content
-            .iter()
-            .any(|block| matches!(block, ContentBlock::ToolUse { .. }));
-        self.messages.push(Message::assistant(response.content));
-
-        if has_tool_use {
-            let mut tool_results = Vec::new();
-            let assistant_message = self.messages.last().expect("assistant message just pushed");
-
-            for block in &assistant_message.content {
-                let ContentBlock::ToolUse { id, name, input } = block else {
-                    continue;
+                final_response
+                    .map(|response| (response, saw_text_delta))
+                    .ok_or_else(|| {
+                        AgentError::Inference(
+                            "provider stream ended without a final response".to_string(),
+                        )
+                    })
+            };
+            let (response, saw_text_delta) =
+                if let Some(timeout_seconds) = self.runtime.defaults.timeout_seconds {
+                    timeout(Duration::from_secs(timeout_seconds), inference)
+                        .await
+                        .map_err(|_| AgentError::Timeout)??
+                } else {
+                    inference.await?
                 };
 
+            validate_tool_calls(&response)?;
+
+            let has_assistant_content = response.content.iter().any(|block| match block {
+                ContentBlock::Text { text } => !text.trim().is_empty(),
+                ContentBlock::ToolUse { .. } => true,
+                ContentBlock::ToolResult { .. } => false,
+            });
+            if !has_assistant_content {
+                return Err(AgentError::Inference(
+                    "provider returned a final response without assistant content".to_string(),
+                ));
+            }
+
+            self.session_input_tokens += response.usage.input_tokens;
+            self.session_output_tokens += response.usage.output_tokens;
+            self.log_inference(&response);
+            let event_ctx = EventContext::new();
+            self.events.fire(Event::InferenceComplete, &event_ctx);
+            self.execute_hooks_for_event(&Event::InferenceComplete, &event_ctx);
+
+            let mut tool_calls = Vec::new();
+            for block in &response.content {
+                match block {
+                    ContentBlock::Text { text } => {
+                        if !saw_text_delta {
+                            self.output.assistant_text(text);
+                        }
+                    }
+                    ContentBlock::ToolUse { id, name, input } => {
+                        let preview = input
+                            .to_string()
+                            .chars()
+                            .take(TOOL_PREVIEW_LEN)
+                            .collect::<String>();
+                        self.output.tool_call(name.as_str(), &preview);
+                        tool_calls.push((id.clone(), name.clone(), input.clone()));
+                    }
+                    ContentBlock::ToolResult { .. } => {}
+                }
+            }
+            self.messages.push(Message::assistant(response.content));
+
+            if tool_calls.is_empty() {
+                break;
+            }
+
+            let mut tool_results = Vec::new();
+            for (id, name, input) in tool_calls {
                 let event_ctx = EventContext::new().with_tool_name(name.as_str().to_string());
                 self.events.fire(Event::PreToolUse, &event_ctx);
                 self.execute_hooks_for_event(&Event::PreToolUse, &event_ctx);
 
-                let result = self
-                    .tool_executor
-                    .execute(name.as_str(), input, &self.tool_ctx);
+                let result = if denied_by_policy(tool_policy.as_ref(), name.as_str()) {
+                    Err(crate::tools::ToolError::ModeDenied {
+                        tool: name.to_string(),
+                        mode: "delegated".to_string(),
+                        reason: "not in agent tool allowlist".to_string(),
+                    })
+                } else {
+                    self.tool_dispatcher
+                        .execute(name.as_str(), &input, &self.tool_ctx)
+                        .await
+                };
                 let raw_content = match result {
                     Ok(ref output) => {
                         self.output.tool_ok();
@@ -613,14 +787,20 @@ impl Agent {
                 };
 
                 tool_results.push(ContentBlock::ToolResult {
-                    tool_use_id: id.clone(),
+                    tool_use_id: id,
                     content: truncate_tool_result_for_context(&raw_content),
                 });
             }
 
-            if !tool_results.is_empty() {
-                self.messages.push(Message::tool_results(tool_results));
-            }
+            self.messages.push(Message::tool_results(tool_results));
+        }
+
+        if let Some(agent_name) = delegated_agent {
+            let event_ctx = EventContext::new()
+                .with_tool_name(agent_name)
+                .with_metadata("orchestration.mode".to_string(), "delegated".to_string());
+            self.events.fire(Event::DelegationComplete, &event_ctx);
+            self.execute_hooks_for_event(&Event::DelegationComplete, &event_ctx);
         }
 
         Ok(())
@@ -628,11 +808,16 @@ impl Agent {
 
     /// Run one full agent turn (inference plus any requested tool loop).
     pub async fn run_turn(&mut self) -> Result<(), AgentError> {
-        let delegated_agent = self.pending_metadata.get("orchestration.agent").cloned();
+        let delegated_agent = self
+            .pending_delegation
+            .as_ref()
+            .map(|context| context.agent_name().to_string())
+            .or_else(|| self.pending_metadata.get("orchestration.agent").cloned());
         let orchestration_strategy = self
-            .pending_metadata
-            .get("orchestration.strategy")
-            .cloned()
+            .pending_delegation
+            .as_ref()
+            .map(|context| context.strategy().to_string())
+            .or_else(|| self.pending_metadata.get("orchestration.strategy").cloned())
             .unwrap_or_else(|| "sequential".to_string());
         if let Some(agent_name) = delegated_agent.clone() {
             let event_ctx = EventContext::new()
@@ -676,33 +861,32 @@ impl Agent {
         for (key, value) in &self.pending_metadata {
             event_ctx.metadata.insert(key.clone(), value.clone());
         }
+        if let Some(delegation) = &self.pending_delegation {
+            event_ctx
+                .metadata
+                .extend(delegation.compatibility_metadata());
+        }
         self.events.fire(Event::UserPromptSubmit, &event_ctx);
         let mut enriched_ctx = self.execute_hooks_for_event(&Event::UserPromptSubmit, &event_ctx);
         for (key, value) in std::mem::take(&mut self.pending_metadata) {
             enriched_ctx.metadata.insert(key, value);
         }
 
-        let allowed_tools = parse_allowed_tools(&enriched_ctx.metadata);
+        let tool_policy = self
+            .pending_delegation
+            .take()
+            .map(|context| context.tool_policy().clone())
+            .or_else(|| delegated_tool_policy(&enriched_ctx.metadata));
 
         let system_prompt = self.build_system_prompt(&enriched_ctx);
 
         let mut tool_call_counts: std::collections::HashMap<String, usize> =
             std::collections::HashMap::new();
-        let mut tools = get_tool_definitions();
-        if let Some(server_url) = self.runtime.mcp_server_url.clone() {
-            match crate::tools::mcp_tool_definitions(&server_url).await {
-                Ok(remote_tools) => {
-                    tools = Self::merge_remote_tool_definitions(tools, remote_tools);
-                }
-                Err(err) => {
-                    self.output.warn(&format!(
-                        "Warning: failed to discover MCP tools from {server_url}: {err}"
-                    ));
-                }
-            }
-        }
-        if let Some(allowed) = allowed_tools.as_ref() {
-            tools.retain(|tool| allowed.contains(tool.name.as_str()));
+        let mut tools = self.tool_catalog.definitions().await.map_err(|error| {
+            AgentError::Inference(format!("failed to load tool catalog: {error}"))
+        })?;
+        if let Some(policy) = tool_policy.as_ref() {
+            policy.filter_definitions(&mut tools);
         }
 
         loop {
@@ -738,6 +922,8 @@ impl Agent {
                     .await
                     .map_err(|e| AgentError::Inference(e.to_string()))?
             };
+
+            validate_tool_calls(&response)?;
 
             self.session_input_tokens += response.usage.input_tokens;
             self.session_output_tokens += response.usage.output_tokens;
@@ -868,34 +1054,28 @@ impl Agent {
 
             let mut outcomes = if parallel_enabled {
                 let max_parallel = self.runtime.max_parallel.max(1).min(pending_calls.len());
-                let executor = Arc::clone(&self.tool_executor);
+                let executor = Arc::clone(&self.tool_dispatcher);
                 let tool_ctx = self.tool_ctx.clone();
-                let allowed_tools_for_exec = allowed_tools.clone();
+                let tool_policy_for_exec = tool_policy.clone();
 
-                futures::stream::iter(pending_calls.into_iter())
+                futures::stream::iter(pending_calls)
                     .map(|call| {
                         let executor = Arc::clone(&executor);
                         let tool_ctx = tool_ctx.clone();
-                        let allowed_tools_for_exec = allowed_tools_for_exec.clone();
+                        let tool_policy_for_exec = tool_policy_for_exec.clone();
                         async move {
                             let name = call.name.clone();
                             let input = call.input.clone();
-                            let result = if let Some(allowed) = allowed_tools_for_exec.as_ref()
-                                && !allowed.contains(name.as_str())
-                            {
-                                Err(crate::tools::ToolError::ModeDenied {
-                                    tool: name.to_string(),
-                                    mode: "delegated".to_string(),
-                                    reason: "not in agent tool allowlist".to_string(),
-                                })
-                            } else {
-                                tokio::task::spawn_blocking(move || {
-                                    executor.execute(name.as_str(), &input, &tool_ctx)
-                                })
-                                .await
-                                .map_err(|e| crate::tools::ToolError::CommandFailed(e.to_string()))
-                                .and_then(|r| r)
-                            };
+                            let result =
+                                if denied_by_policy(tool_policy_for_exec.as_ref(), name.as_str()) {
+                                    Err(crate::tools::ToolError::ModeDenied {
+                                        tool: name.to_string(),
+                                        mode: "delegated".to_string(),
+                                        reason: "not in agent tool allowlist".to_string(),
+                                    })
+                                } else {
+                                    executor.execute(name.as_str(), &input, &tool_ctx).await
+                                };
 
                             ToolCallOutcome {
                                 position: call.position,
@@ -910,33 +1090,28 @@ impl Agent {
                     .collect::<Vec<_>>()
                     .await
             } else {
-                pending_calls
-                    .into_iter()
-                    .map(|call| {
-                        let result = if let Some(allowed) = allowed_tools.as_ref()
-                            && !allowed.contains(call.name.as_str())
-                        {
-                            Err(crate::tools::ToolError::ModeDenied {
-                                tool: call.name.to_string(),
-                                mode: "delegated".to_string(),
-                                reason: "not in agent tool allowlist".to_string(),
-                            })
-                        } else {
-                            self.tool_executor.execute(
-                                call.name.as_str(),
-                                &call.input,
-                                &self.tool_ctx,
-                            )
-                        };
-                        ToolCallOutcome {
-                            position: call.position,
-                            id: call.id,
-                            name: call.name,
-                            input: call.input,
-                            result,
-                        }
-                    })
-                    .collect::<Vec<_>>()
+                let mut outcomes = Vec::with_capacity(pending_calls.len());
+                for call in pending_calls {
+                    let result = if denied_by_policy(tool_policy.as_ref(), call.name.as_str()) {
+                        Err(crate::tools::ToolError::ModeDenied {
+                            tool: call.name.to_string(),
+                            mode: "delegated".to_string(),
+                            reason: "not in agent tool allowlist".to_string(),
+                        })
+                    } else {
+                        self.tool_dispatcher
+                            .execute(call.name.as_str(), &call.input, &self.tool_ctx)
+                            .await
+                    };
+                    outcomes.push(ToolCallOutcome {
+                        position: call.position,
+                        id: call.id,
+                        name: call.name,
+                        input: call.input,
+                        result,
+                    });
+                }
+                outcomes
             };
 
             outcomes.sort_by_key(|outcome| outcome.position);
@@ -1133,12 +1308,65 @@ mod tests {
     use std::net::TcpListener;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    enum StreamScript {
+        Events(Vec<InferenceStreamEvent>),
+        Error(&'static str),
+        Pending,
+    }
+
+    struct ScriptedStreamProvider {
+        model: crate::types::ModelId,
+        script: std::sync::Mutex<Option<StreamScript>>,
+        infer_calls: Arc<AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl LLMProvider for ScriptedStreamProvider {
+        async fn infer(
+            &self,
+            _req: &InferenceRequest,
+        ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
+            self.infer_calls.fetch_add(1, Ordering::SeqCst);
+            Err("recovery infer must not run".into())
+        }
+
+        async fn infer_stream(&self, _req: &InferenceRequest) -> crate::ports::InferStream {
+            let script = self.script.lock().unwrap().take().unwrap();
+            match script {
+                StreamScript::Events(events) => {
+                    Box::pin(futures::stream::iter(events.into_iter().map(Ok)))
+                }
+                StreamScript::Error(message) => {
+                    Box::pin(futures::stream::once(async move { Err(message.into()) }))
+                }
+                StreamScript::Pending => Box::pin(futures::stream::pending()),
+            }
+        }
+
+        fn name(&self) -> &str {
+            "scripted-stream"
+        }
+
+        fn model(&self) -> &crate::types::ModelId {
+            &self.model
+        }
+
+        fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Ok(())
+        }
+
+        fn supports_streaming(&self) -> bool {
+            true
+        }
+    }
+
     // Mock provider for testing
     struct MockProvider {
         model: crate::types::ModelId,
         responses: Vec<InferenceResponse>,
         call_count: std::sync::Arc<std::sync::Mutex<usize>>,
         captured_tools: std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>>,
+        captured_messages: std::sync::Arc<std::sync::Mutex<Vec<Vec<Message>>>>,
     }
 
     struct TrackingExecutor {
@@ -1147,8 +1375,9 @@ mod tests {
         delay_ms: u64,
     }
 
+    #[async_trait::async_trait]
     impl ToolExecutor for TrackingExecutor {
-        fn execute(
+        async fn execute(
             &self,
             _name: &str,
             _args: &serde_json::Value,
@@ -1170,7 +1399,7 @@ mod tests {
                 }
             }
 
-            std::thread::sleep(std::time::Duration::from_millis(self.delay_ms));
+            tokio::time::sleep(std::time::Duration::from_millis(self.delay_ms)).await;
             self.active.fetch_sub(1, Ordering::SeqCst);
             Ok("ok".to_string())
         }
@@ -1191,6 +1420,7 @@ mod tests {
                 responses,
                 call_count: std::sync::Arc::new(std::sync::Mutex::new(0)),
                 captured_tools: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+                captured_messages: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             }
         }
 
@@ -1209,6 +1439,14 @@ mod tests {
 
         fn captured_tools_handle(&self) -> std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>> {
             self.captured_tools.clone()
+        }
+
+        fn call_count_handle(&self) -> std::sync::Arc<std::sync::Mutex<usize>> {
+            self.call_count.clone()
+        }
+
+        fn captured_messages_handle(&self) -> std::sync::Arc<std::sync::Mutex<Vec<Vec<Message>>>> {
+            Arc::clone(&self.captured_messages)
         }
     }
 
@@ -1286,6 +1524,29 @@ mod tests {
         (format!("http://{addr}"), handle)
     }
 
+    fn start_mcp_response_server(
+        bodies: Vec<serde_json::Value>,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = std::thread::spawn(move || {
+            for body in bodies {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut buf = [0_u8; 8192];
+                let _ = stream.read(&mut buf);
+                let body = body.to_string();
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                stream.write_all(response.as_bytes()).unwrap();
+                stream.flush().unwrap();
+            }
+        });
+        (format!("http://{addr}"), handle)
+    }
+
     #[async_trait::async_trait]
     impl LLMProvider for MockProvider {
         async fn infer(
@@ -1298,6 +1559,10 @@ mod tests {
                     .map(|tool| tool.name.clone())
                     .collect::<Vec<_>>(),
             );
+            self.captured_messages
+                .lock()
+                .unwrap()
+                .push(req.messages.clone());
 
             let mut count = self.call_count.lock().unwrap();
             let idx = *count;
@@ -1456,6 +1721,72 @@ mod tests {
         assert!(seen.iter().any(|name| name == "read"));
         assert!(seen.iter().any(|name| name == "remote_test_tool"));
         server_thread.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn agent_accepts_an_injected_tool_catalog() {
+        let provider = MockProvider::simple_text("done");
+        let captured = provider.captured_tools_handle();
+        let catalog =
+            crate::tools::StaticToolCatalog::new(vec![looprs_core::api::ToolDefinition {
+                name: "injected".to_string(),
+                description: "injected catalog entry".to_string(),
+                input_schema: serde_json::json!({"type": "object"}),
+            }]);
+        let mut agent = agent_for_test(provider).with_tool_catalog(Arc::new(catalog));
+        agent.add_user_message("hello");
+
+        agent.run_turn().await.unwrap();
+
+        assert_eq!(captured.lock().unwrap()[0], vec!["injected".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn runtime_updates_preserve_injected_tool_ports() {
+        let provider = MockProvider::simple_text("done");
+        let captured = provider.captured_tools_handle();
+        let catalog =
+            crate::tools::StaticToolCatalog::new(vec![looprs_core::api::ToolDefinition {
+                name: "injected".to_string(),
+                description: "injected catalog entry".to_string(),
+                input_schema: serde_json::json!({"type": "object"}),
+            }]);
+        let mut agent = agent_for_test(provider).with_tool_catalog(Arc::new(catalog));
+
+        agent.set_runtime_settings(RuntimeSettings::default().with_max_parallel(2));
+        agent.add_user_message("hello");
+        agent.run_turn().await.unwrap();
+
+        assert_eq!(captured.lock().unwrap()[0], vec!["injected".to_string()]);
+    }
+
+    #[test]
+    fn runtime_environment_wires_mcp_without_mutating_process_state() {
+        let runtime = RuntimeSettings::default()
+            .with_mcp_environment_value(Some("  http://mcp.test/rpc  ".to_string()));
+        assert_eq!(runtime.mcp_server_url(), Some("http://mcp.test/rpc"));
+
+        let blank = RuntimeSettings::default().with_mcp_environment_value(Some("  ".to_string()));
+        assert_eq!(blank.mcp_server_url(), None);
+    }
+
+    #[tokio::test]
+    async fn provider_fake_with_malformed_tool_call_fails_closed() {
+        let provider = MockProvider::new(vec![InferenceResponse {
+            content: vec![ContentBlock::ToolUse {
+                id: crate::types::ToolId::new(""),
+                name: crate::types::ToolName::new("read"),
+                input: serde_json::json!({"path": "README.md"}),
+            }],
+            stop_reason: "tool_use".to_string(),
+            usage: Usage::default(),
+        }]);
+        let mut agent = agent_for_test(provider);
+        agent.add_user_message("read");
+
+        let error = agent.run_turn().await.unwrap_err();
+
+        assert!(error.to_string().contains("malformed tool call"));
     }
 
     #[test]
@@ -1649,16 +1980,19 @@ actions:
 
     #[tokio::test]
     async fn delegated_allowlist_limits_advertised_tools() {
+        use crate::orchestration::{DelegationContext, DelegationSelection};
+
         let provider = MockProvider::simple_text("done");
         let captured = provider.captured_tools_handle();
         let mut agent = agent_for_test(provider);
 
-        let mut metadata = HashMap::new();
-        metadata.insert(
-            ORCHESTRATION_TOOLS_METADATA_KEY.to_string(),
-            "read,grep".to_string(),
-        );
-        agent.set_turn_metadata(metadata);
+        agent.set_delegation_context(DelegationContext::new(
+            "reviewer",
+            "sequential",
+            DelegationSelection::Automatic,
+            None,
+            DelegatedToolPolicy::from_names(["read", "grep"]),
+        ));
         agent.add_user_message("hello");
         agent.run_turn().await.unwrap();
 
@@ -1681,8 +2015,9 @@ actions:
             calls: Arc<Mutex<Vec<String>>>,
         }
 
+        #[async_trait::async_trait]
         impl ToolExecutor for RecordingToolExecutor {
-            fn execute(
+            async fn execute(
                 &self,
                 name: &str,
                 _args: &serde_json::Value,
@@ -1755,31 +2090,161 @@ actions:
     }
 
     #[tokio::test]
-    async fn test_run_turn_streaming_accumulates_chunks() {
-        // MockProvider uses default infer_stream; provide two responses because
-        // run_turn_streaming does a recovery infer after streaming.
+    async fn delegated_empty_allowlist_denies_tool_execution() {
+        use crate::tools::ToolExecutor;
+        use serde_json::json;
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Default)]
+        struct RecordingToolExecutor {
+            calls: Arc<Mutex<Vec<String>>>,
+        }
+
+        #[async_trait::async_trait]
+        impl ToolExecutor for RecordingToolExecutor {
+            async fn execute(
+                &self,
+                name: &str,
+                _args: &serde_json::Value,
+                _ctx: &ToolContext,
+            ) -> Result<String, crate::tools::ToolError> {
+                self.calls.lock().unwrap().push(name.to_string());
+                Ok("executed".to_string())
+            }
+        }
+
         let provider = MockProvider::new(vec![
             InferenceResponse {
-                content: vec![ContentBlock::Text {
-                    text: "streamed response".to_string(),
+                content: vec![ContentBlock::ToolUse {
+                    id: crate::types::ToolId::new("tool_1"),
+                    name: crate::types::ToolName::new("bash"),
+                    input: json!({"command": "pwd"}),
                 }],
-                stop_reason: "end_turn".to_string(),
+                stop_reason: "tool_use".to_string(),
                 usage: Usage {
-                    input_tokens: 10,
-                    output_tokens: 20,
+                    input_tokens: 1,
+                    output_tokens: 1,
                 },
             },
             InferenceResponse {
                 content: vec![ContentBlock::Text {
-                    text: "streamed response".to_string(),
+                    text: "done".to_string(),
                 }],
                 stop_reason: "end_turn".to_string(),
                 usage: Usage {
-                    input_tokens: 10,
-                    output_tokens: 20,
+                    input_tokens: 1,
+                    output_tokens: 1,
                 },
             },
         ]);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let executor = RecordingToolExecutor {
+            calls: Arc::clone(&calls),
+        };
+        let mut agent = agent_for_test(provider).with_tool_executor(Box::new(executor));
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            ORCHESTRATION_TOOLS_METADATA_KEY.to_string(),
+            " , ".to_string(),
+        );
+        metadata.insert("orchestration.agent".to_string(), "reviewer".to_string());
+        agent.set_turn_metadata(metadata);
+        agent.add_user_message("do not grant tools by malformed metadata");
+
+        agent.run_turn().await.unwrap();
+
+        assert!(calls.lock().unwrap().is_empty());
+        assert!(
+            agent
+                .messages
+                .iter()
+                .any(|message| message.content.iter().any(
+                    |block| matches!(block, ContentBlock::ToolResult { content, .. }
+                if content.contains("not in agent tool allowlist"))
+                ))
+        );
+    }
+
+    #[tokio::test]
+    async fn delegated_streaming_allowlist_blocks_unadvertised_tool_execution() {
+        use crate::tools::ToolExecutor;
+        use serde_json::json;
+        use std::sync::{Arc, Mutex};
+
+        struct RecordingToolExecutor {
+            calls: Arc<Mutex<Vec<String>>>,
+        }
+
+        #[async_trait::async_trait]
+        impl ToolExecutor for RecordingToolExecutor {
+            async fn execute(
+                &self,
+                name: &str,
+                _args: &serde_json::Value,
+                _ctx: &ToolContext,
+            ) -> Result<String, crate::tools::ToolError> {
+                self.calls.lock().unwrap().push(name.to_string());
+                Ok("executed".to_string())
+            }
+        }
+
+        let provider = MockProvider::new(vec![
+            InferenceResponse {
+                content: vec![ContentBlock::ToolUse {
+                    id: crate::types::ToolId::new("tool_stream_1"),
+                    name: crate::types::ToolName::new("bash"),
+                    input: json!({"command": "pwd"}),
+                }],
+                stop_reason: "tool_use".to_string(),
+                usage: Usage {
+                    input_tokens: 1,
+                    output_tokens: 1,
+                },
+            },
+            InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "done".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 1,
+                    output_tokens: 1,
+                },
+            },
+        ]);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let executor = RecordingToolExecutor {
+            calls: Arc::clone(&calls),
+        };
+        let mut agent = agent_for_test(provider).with_tool_executor(Box::new(executor));
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            ORCHESTRATION_TOOLS_METADATA_KEY.to_string(),
+            "read".to_string(),
+        );
+        metadata.insert("orchestration.agent".to_string(), "reviewer".to_string());
+        agent.set_turn_metadata(metadata);
+        agent.add_user_message("inspect without shell access");
+
+        agent.run_turn_streaming().await.unwrap();
+
+        assert!(calls.lock().unwrap().is_empty());
+        assert_eq!(agent.latest_assistant_text(), Some("done".to_string()));
+    }
+
+    #[tokio::test]
+    async fn streaming_turn_uses_one_request_and_coherent_final_response() {
+        let provider = MockProvider::new(vec![InferenceResponse {
+            content: vec![ContentBlock::Text {
+                text: "streamed response".to_string(),
+            }],
+            stop_reason: "end_turn".to_string(),
+            usage: Usage {
+                input_tokens: 10,
+                output_tokens: 20,
+            },
+        }]);
+        let call_count = provider.call_count_handle();
         let mut agent = agent_for_test(provider);
 
         agent.add_user_message("Hello");
@@ -1796,6 +2261,404 @@ actions:
             other => panic!("expected Text block, got {other:?}"),
         };
         assert_eq!(text, "streamed response");
+        assert_eq!(*call_count.lock().unwrap(), 1);
+        assert_eq!(agent.session_input_tokens, 10);
+        assert_eq!(agent.session_output_tokens, 20);
+    }
+
+    #[tokio::test]
+    async fn streaming_error_is_terminal_without_recovery_infer() {
+        let infer_calls = Arc::new(AtomicUsize::new(0));
+        let provider = ScriptedStreamProvider {
+            model: crate::types::ModelId::new("stream-model"),
+            script: std::sync::Mutex::new(Some(StreamScript::Error("stream failed"))),
+            infer_calls: Arc::clone(&infer_calls),
+        };
+        let mut agent = Agent::new(Box::new(provider))
+            .unwrap()
+            .with_output(Box::new(NullOutput));
+        agent.add_user_message("hello");
+
+        let error = agent.run_turn_streaming().await.unwrap_err();
+
+        assert!(error.to_string().contains("stream failed"));
+        assert_eq!(infer_calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn streaming_rejects_missing_or_duplicate_final_response() {
+        for events in [
+            vec![InferenceStreamEvent::Delta(InferenceDelta::Text(
+                "partial".to_string(),
+            ))],
+            vec![
+                InferenceStreamEvent::Final(InferenceResponse {
+                    content: Vec::new(),
+                    stop_reason: "stop".to_string(),
+                    usage: Usage::default(),
+                }),
+                InferenceStreamEvent::Final(InferenceResponse {
+                    content: Vec::new(),
+                    stop_reason: "stop".to_string(),
+                    usage: Usage::default(),
+                }),
+            ],
+        ] {
+            let provider = ScriptedStreamProvider {
+                model: crate::types::ModelId::new("stream-model"),
+                script: std::sync::Mutex::new(Some(StreamScript::Events(events))),
+                infer_calls: Arc::new(AtomicUsize::new(0)),
+            };
+            let mut agent = Agent::new(Box::new(provider))
+                .unwrap()
+                .with_output(Box::new(NullOutput));
+            agent.add_user_message("hello");
+            assert!(agent.run_turn_streaming().await.is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn streaming_rejects_empty_terminal_text() {
+        let provider = ScriptedStreamProvider {
+            model: crate::types::ModelId::new("stream-model"),
+            script: std::sync::Mutex::new(Some(StreamScript::Events(vec![
+                InferenceStreamEvent::Final(InferenceResponse {
+                    content: vec![ContentBlock::Text {
+                        text: "  ".to_string(),
+                    }],
+                    stop_reason: "end_turn".to_string(),
+                    usage: Usage::default(),
+                }),
+            ]))),
+            infer_calls: Arc::new(AtomicUsize::new(0)),
+        };
+        let mut agent = Agent::new(Box::new(provider))
+            .unwrap()
+            .with_output(Box::new(NullOutput));
+        agent.add_user_message("hello");
+
+        let error = agent.run_turn_streaming().await.unwrap_err();
+
+        assert!(error.to_string().contains("without assistant content"));
+    }
+
+    #[tokio::test]
+    async fn streaming_rejects_delta_after_final() {
+        let provider = ScriptedStreamProvider {
+            model: crate::types::ModelId::new("stream-model"),
+            script: std::sync::Mutex::new(Some(StreamScript::Events(vec![
+                InferenceStreamEvent::Final(InferenceResponse {
+                    content: vec![ContentBlock::Text {
+                        text: "done".to_string(),
+                    }],
+                    stop_reason: "end_turn".to_string(),
+                    usage: Usage::default(),
+                }),
+                InferenceStreamEvent::Delta(InferenceDelta::Text("late".to_string())),
+            ]))),
+            infer_calls: Arc::new(AtomicUsize::new(0)),
+        };
+        let mut agent = Agent::new(Box::new(provider))
+            .unwrap()
+            .with_output(Box::new(NullOutput));
+        agent.add_user_message("hello");
+
+        let error = agent.run_turn_streaming().await.unwrap_err();
+
+        assert!(error.to_string().contains("delta after the final response"));
+    }
+
+    #[tokio::test]
+    async fn streaming_terminal_error_fires_on_error_hooks() {
+        let provider = ScriptedStreamProvider {
+            model: crate::types::ModelId::new("stream-model"),
+            script: std::sync::Mutex::new(Some(StreamScript::Error("stream failed"))),
+            infer_calls: Arc::new(AtomicUsize::new(0)),
+        };
+        let mut agent = Agent::new(Box::new(provider))
+            .unwrap()
+            .with_output(Box::new(NullOutput));
+        let temp = tempfile::tempdir().unwrap();
+        let marker = temp.path().join("on-error-fired");
+        let hook = temp.path().join("on-error.yaml");
+        std::fs::write(
+            &hook,
+            format!(
+                "name: streaming-error\ntrigger: OnError\nactions:\n  - type: command\n    command: \"touch '{}'\"\n",
+                marker.display()
+            ),
+        )
+        .unwrap();
+        agent = agent
+            .with_hooks(HookRegistry::load_from_directory(&temp.path().to_path_buf()).unwrap());
+        let seen = Arc::new(AtomicUsize::new(0));
+        let seen_hook = Arc::clone(&seen);
+        agent.events.on(Event::OnError, move |_, context| {
+            assert!(
+                context
+                    .error
+                    .as_deref()
+                    .is_some_and(|error| error.contains("stream failed"))
+            );
+            seen_hook.fetch_add(1, Ordering::SeqCst);
+        });
+        agent.add_user_message("hello");
+
+        assert!(agent.run_turn_streaming().await.is_err());
+        assert_eq!(seen.load(Ordering::SeqCst), 1);
+        assert!(marker.exists(), "OnError hook command must run");
+    }
+
+    #[tokio::test]
+    async fn streaming_truncates_tool_results_before_the_next_request() {
+        let provider = MockProvider::new(vec![
+            InferenceResponse {
+                content: vec![ContentBlock::ToolUse {
+                    id: crate::types::ToolId::new("large-result"),
+                    name: crate::types::ToolName::new("read"),
+                    input: serde_json::json!({"path": "large"}),
+                }],
+                stop_reason: "tool_use".to_string(),
+                usage: Usage::default(),
+            },
+            InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "done".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage::default(),
+            },
+        ]);
+        let captured = provider.captured_messages_handle();
+        let mut agent = agent_for_test(provider).with_tool_executor(Box::new(
+            crate::tools::executor::StubToolExecutor {
+                response: "x".repeat(MAX_TOOL_RESULT_CHARS_IN_CONTEXT + 100),
+            },
+        ));
+        agent.add_user_message("read the large result");
+
+        agent.run_turn_streaming().await.unwrap();
+
+        let requests = captured.lock().unwrap();
+        let tool_result = requests[1]
+            .iter()
+            .flat_map(|message| &message.content)
+            .find_map(|block| match block {
+                ContentBlock::ToolResult { content, .. } => Some(content),
+                _ => None,
+            })
+            .expect("second request must contain the tool result");
+        assert!(tool_result.contains("[truncated tool result:"));
+        assert_eq!(
+            tool_result.chars().filter(|ch| *ch == 'x').count(),
+            MAX_TOOL_RESULT_CHARS_IN_CONTEXT
+        );
+    }
+
+    #[tokio::test]
+    async fn streaming_timeout_stops_an_incomplete_provider_request() {
+        let provider = ScriptedStreamProvider {
+            model: crate::types::ModelId::new("stream-model"),
+            script: std::sync::Mutex::new(Some(StreamScript::Pending)),
+            infer_calls: Arc::new(AtomicUsize::new(0)),
+        };
+        let mut agent = Agent::new_with_runtime(
+            Box::new(provider),
+            RuntimeSettings {
+                defaults: DefaultsConfig {
+                    timeout_seconds: Some(0),
+                    ..DefaultsConfig::default()
+                },
+                ..RuntimeSettings::default()
+            },
+            FileRefPolicy::default(),
+            None,
+            Box::new(NullOutput),
+        )
+        .unwrap();
+        agent.add_user_message("hello");
+
+        assert!(matches!(
+            agent.run_turn_streaming().await,
+            Err(AgentError::Timeout)
+        ));
+    }
+
+    #[tokio::test]
+    async fn streaming_tool_error_is_returned_to_provider_before_final_text() {
+        struct FailingToolExecutor;
+
+        #[async_trait::async_trait]
+        impl ToolExecutor for FailingToolExecutor {
+            async fn execute(
+                &self,
+                _name: &str,
+                _args: &serde_json::Value,
+                _ctx: &ToolContext,
+            ) -> Result<String, crate::tools::ToolError> {
+                Err(crate::tools::ToolError::CommandFailed(
+                    "scripted tool failure".to_string(),
+                ))
+            }
+        }
+
+        let provider = MockProvider::new(vec![
+            InferenceResponse {
+                content: vec![ContentBlock::ToolUse {
+                    id: crate::types::ToolId::new("failed_call"),
+                    name: crate::types::ToolName::new("read"),
+                    input: serde_json::json!({"path": "README.md"}),
+                }],
+                stop_reason: "tool_use".to_string(),
+                usage: Usage::default(),
+            },
+            InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "handled failure".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage::default(),
+            },
+        ]);
+        let mut agent = agent_for_test(provider).with_tool_executor(Box::new(FailingToolExecutor));
+        agent.add_user_message("read a file");
+
+        agent.run_turn_streaming().await.unwrap();
+
+        assert_eq!(
+            agent.latest_assistant_text(),
+            Some("handled failure".to_string())
+        );
+        assert!(
+            agent
+                .messages
+                .iter()
+                .any(|message| message.content.iter().any(
+                    |block| matches!(block, ContentBlock::ToolResult { content, .. }
+                if content.contains("scripted tool failure"))
+                ))
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_composition_rebuilds_and_disables_mcp_executor() {
+        let response = |text: &str| {
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"content": [{"type": "text", "text": text}]}
+            })
+        };
+        let (first_url, first_server) = start_mcp_response_server(vec![response("first")]);
+        let (second_url, second_server) = start_mcp_response_server(vec![response("second")]);
+        let mut agent = agent_for_test(MockProvider::simple_text("done"));
+
+        crate::adapters::apply_runtime_settings(
+            &mut agent,
+            RuntimeSettings {
+                mcp_server_url: Some(first_url),
+                ..RuntimeSettings::default()
+            },
+        );
+        assert_eq!(
+            agent
+                .tool_dispatcher
+                .execute("remote", &serde_json::json!({}), &agent.tool_ctx)
+                .await
+                .unwrap(),
+            "first"
+        );
+
+        crate::adapters::apply_runtime_settings(
+            &mut agent,
+            RuntimeSettings {
+                mcp_server_url: Some(second_url),
+                ..RuntimeSettings::default()
+            },
+        );
+        assert_eq!(
+            agent
+                .tool_dispatcher
+                .execute("remote", &serde_json::json!({}), &agent.tool_ctx)
+                .await
+                .unwrap(),
+            "second"
+        );
+
+        crate::adapters::apply_runtime_settings(&mut agent, RuntimeSettings::default());
+        assert!(matches!(
+            agent
+                .tool_dispatcher
+                .execute("remote", &serde_json::json!({}), &agent.tool_ctx)
+                .await,
+            Err(crate::tools::ToolError::UnknownTool(_))
+        ));
+        first_server.join().unwrap();
+        second_server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn streaming_mcp_tool_execution_completes_without_runtime_panic() {
+        let (server_url, server) = start_mcp_response_server(vec![
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"tools": [{
+                    "name": "remote_test_tool",
+                    "description": "remote tool",
+                    "inputSchema": {"type": "object", "properties": {}}
+                }]}
+            }),
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"content": [{"type": "text", "text": "remote result"}]}
+            }),
+        ]);
+        let provider = MockProvider::new(vec![
+            InferenceResponse {
+                content: vec![ContentBlock::ToolUse {
+                    id: crate::types::ToolId::new("remote_call"),
+                    name: crate::types::ToolName::new("remote_test_tool"),
+                    input: serde_json::json!({}),
+                }],
+                stop_reason: "tool_use".to_string(),
+                usage: Usage::default(),
+            },
+            InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "complete".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage::default(),
+            },
+        ]);
+        let mut agent = Agent::new_with_runtime(
+            Box::new(provider),
+            RuntimeSettings {
+                mcp_server_url: Some(server_url),
+                ..RuntimeSettings::default()
+            },
+            FileRefPolicy::default(),
+            None,
+            Box::new(NullOutput),
+        )
+        .unwrap();
+        agent.add_user_message("use the remote tool");
+
+        agent.run_turn_streaming().await.unwrap();
+
+        assert_eq!(agent.latest_assistant_text(), Some("complete".to_string()));
+        assert!(
+            agent
+                .messages
+                .iter()
+                .any(|message| message.content.iter().any(
+                    |block| matches!(block, ContentBlock::ToolResult { content, .. }
+                if content == "remote result")
+                ))
+        );
+        server.join().unwrap();
     }
 
     #[tokio::test]
@@ -1868,21 +2731,11 @@ actions:
     }
 
     #[tokio::test]
-    async fn test_run_turn_streaming_executes_tool_use_blocks() {
+    async fn run_turn_streaming_tool_use_returns_final_text() {
         use crate::tools::executor::StubToolExecutor;
         use crate::types::{ToolId, ToolName};
 
         let provider = MockProvider::new(vec![
-            InferenceResponse {
-                content: vec![ContentBlock::Text {
-                    text: "streaming intro".to_string(),
-                }],
-                stop_reason: "end_turn".to_string(),
-                usage: Usage {
-                    input_tokens: 1,
-                    output_tokens: 1,
-                },
-            },
             InferenceResponse {
                 content: vec![ContentBlock::ToolUse {
                     id: ToolId::new("call_1"),
@@ -1921,7 +2774,9 @@ actions:
                 .any(|b| matches!(b, ContentBlock::ToolResult { .. }))),
             "expected tool results in conversation history"
         );
-        assert_eq!(agent.latest_assistant_text(), None);
+        assert_eq!(agent.latest_assistant_text(), Some("done".to_string()));
+        assert_eq!(agent.session_input_tokens, 3);
+        assert_eq!(agent.session_output_tokens, 4);
     }
 
     #[tokio::test]

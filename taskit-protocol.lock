@@ -20,7 +20,7 @@
     {
       "name": "looprs-pipeline-types",
       "path": "crates/looprs/src/pipeline/types.rs",
-      "hash": "ced41edb770cd8ee0db1df73512540c117f53e68a7b9e03cabb297a9c9d4218d"
+      "hash": "7e08d5776dcb9fe4e628e5101f728a84458acae62eb1f5b2330581f0e883178b"
     },
     {
       "name": "looprs-types",

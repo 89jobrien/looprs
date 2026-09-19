@@ -7,8 +7,93 @@ use crate::observation::Observation;
 use crate::ports::message_broker::{Message, MessageBroker};
 use crate::ports::model_catalog::RemoteModelCatalogPort;
 use crate::ports::observation_store::ObservationStore;
+use crate::ports::plugin_runtime::{
+    PluginHealthState, PluginKind, PluginSupervisorError, PluginSupervisorPort,
+};
 use crate::ports::session_store::{SessionEvent, SessionStore};
 use crate::ports::user_output::UserOutput;
+
+// ── PluginSupervisorPort ────────────────────────────────────────────────
+
+/// Assert that a managed daemon satisfies the shared supervision contract.
+///
+/// The same contract applies to tool, runtime, and orchestration plugins:
+/// status reports a live process, probe preserves health, restart replaces the
+/// process and increments its bounded counter, and shutdown is observable.
+pub fn assert_plugin_supervisor_contract(
+    supervisor: &mut dyn PluginSupervisorPort,
+    kind: PluginKind,
+    plugin_name: &str,
+) {
+    let initial = supervisor
+        .status(kind, plugin_name)
+        .expect("managed daemon status must be available");
+    assert_eq!(initial.kind, kind);
+    assert_eq!(initial.plugin_name, plugin_name);
+    assert_eq!(initial.state, PluginHealthState::Healthy);
+    assert!(initial.pid.is_some(), "healthy daemon must expose its pid");
+
+    let probed = supervisor
+        .probe(kind, plugin_name)
+        .expect("managed daemon probe must succeed");
+    assert_eq!(probed.state, PluginHealthState::Healthy);
+
+    supervisor
+        .restart(kind, plugin_name, "conformance restart")
+        .expect("managed daemon restart must succeed");
+    let restarted = supervisor
+        .status(kind, plugin_name)
+        .expect("restarted daemon status must be available");
+    assert_eq!(restarted.restart_count, initial.restart_count + 1);
+    assert_eq!(
+        restarted.last_restart_reason.as_deref(),
+        Some("conformance restart")
+    );
+    assert_ne!(
+        restarted.pid, initial.pid,
+        "restart must replace the process"
+    );
+
+    supervisor
+        .shutdown(kind, plugin_name)
+        .expect("managed daemon shutdown must succeed");
+    let stopped = supervisor
+        .status(kind, plugin_name)
+        .expect("stopped daemon status must remain observable");
+    assert_eq!(stopped.state, PluginHealthState::Stopped);
+    assert!(stopped.pid.is_none());
+}
+
+/// Assert shared unknown, one-shot, and disabled supervision errors.
+pub fn assert_plugin_supervisor_error_contract(
+    supervisor: &mut dyn PluginSupervisorPort,
+    kind: PluginKind,
+    one_shot_name: &str,
+    disabled_name: &str,
+) {
+    let unknown = supervisor
+        .restart(kind, "missing-conformance-plugin", "conformance")
+        .expect_err("unknown plugin restart must fail");
+    assert!(matches!(
+        unknown,
+        PluginSupervisorError::UnknownPlugin { .. }
+    ));
+
+    let one_shot = supervisor
+        .restart(kind, one_shot_name, "conformance")
+        .expect_err("one-shot plugin restart must fail");
+    assert!(matches!(one_shot, PluginSupervisorError::NotDaemon { .. }));
+
+    let disabled = supervisor
+        .restart(kind, disabled_name, "conformance")
+        .expect_err("disabled plugin restart must fail");
+    assert!(matches!(disabled, PluginSupervisorError::Disabled { .. }));
+    let disabled_status = supervisor
+        .status(kind, disabled_name)
+        .expect("disabled daemon status must remain observable");
+    assert_eq!(disabled_status.state, PluginHealthState::Disabled);
+    assert!(disabled_status.pid.is_none());
+}
 
 // ── MessageBroker ───────────────────────────────────────────────────────
 
@@ -134,7 +219,86 @@ pub fn assert_inference_provider_contract(provider: &dyn crate::ports::Inference
     );
 
     let _ = provider.supports_tool_use();
-    let _ = provider.validate_config();
+    if let Err(error) = provider.validate_config() {
+        assert!(
+            !error.to_string().trim().is_empty(),
+            "validate_config() errors must carry a message"
+        );
+    }
+}
+
+/// Assert the shared semantics for a provider with invalid configuration.
+///
+/// Validation and inference must both return descriptive errors rather than
+/// panicking or producing an apparently successful response.
+pub async fn assert_inference_provider_error_contract(
+    provider: &dyn crate::ports::InferenceProvider,
+) {
+    use crate::api::Message;
+
+    let validation_error = provider
+        .validate_config()
+        .expect_err("invalid provider configuration must fail validation");
+    assert!(
+        !validation_error.to_string().trim().is_empty(),
+        "validation errors must carry a message"
+    );
+
+    let request = crate::ports::InferenceRequest {
+        model: provider.model().clone(),
+        messages: vec![Message::user("conformance error")],
+        tools: Vec::new(),
+        max_tokens: 16,
+        temperature: None,
+        system: String::new(),
+    };
+    let inference_error = provider
+        .infer(&request)
+        .await
+        .expect_err("invalid provider configuration must not infer successfully");
+    assert!(
+        !inference_error.to_string().trim().is_empty(),
+        "inference errors must carry a message"
+    );
+}
+
+/// Validate the response semantics shared by all provider implementations.
+///
+/// Providers may emit assistant text and tool calls. Tool results are runtime
+/// messages and must never appear in a provider response.
+pub async fn assert_inference_provider_response_contract(
+    provider: &dyn crate::ports::InferenceProvider,
+) -> Result<(), String> {
+    use crate::api::{ContentBlock, Message};
+
+    let request = crate::ports::InferenceRequest {
+        model: provider.model().clone(),
+        messages: vec![Message::user("conformance response")],
+        tools: Vec::new(),
+        max_tokens: 16,
+        temperature: None,
+        system: String::new(),
+    };
+    let response = provider
+        .infer(&request)
+        .await
+        .map_err(|error| error.to_string())?;
+    for block in &response.content {
+        match block {
+            ContentBlock::ToolUse { id, name, input }
+                if id.as_str().trim().is_empty()
+                    || name.as_str().trim().is_empty()
+                    || !input.is_object() =>
+            {
+                return Err("provider response contained a malformed tool call".to_string());
+            }
+            ContentBlock::ToolResult { .. } => {
+                return Err("provider response contained a tool result".to_string());
+            }
+            ContentBlock::Text { .. } | ContentBlock::ToolUse { .. } => {}
+        }
+    }
+    Ok(())
 }
 
 // ── UserOutput ──────────────────────────────────────────────────────────
@@ -242,26 +406,28 @@ pub async fn assert_remote_model_catalog_contract(catalog: &dyn RemoteModelCatal
     }
 }
 
-/// Assert the full InferenceProvider live contract.
+/// Run the legacy low-cost live provider smoke contract.
 ///
-/// Gated behind `LOOPRS_RUN_LIVE_LLM_TESTS=1` — requires a real API key.
-/// Runs the shared provider matrix: single-turn text, multi-turn history, and
-/// a tool-use/result round-trip when the provider advertises tool support.
+/// This helper is not gated: calling it always performs one provider request.
+/// The caller owns opt-in policy, credential setup, and test isolation. Keep
+/// the calling test ignored by default and check `LOOPRS_RUN_LIVE_LLM_TESTS`
+/// before invoking this helper.
 ///
-/// Call from each provider's test module:
-/// ```ignore
-/// #[tokio::test]
-/// #[ignore = "live: set LOOPRS_RUN_LIVE_LLM_TESTS=1"]
-/// async fn live_contract() {
-///     if std::env::var("LOOPRS_RUN_LIVE_LLM_TESTS").is_err() { return; }
-///     let p = MyProvider::new_for_test();
-///     assert_inference_provider_live_contract(&p).await;
+/// ```no_run
+/// use looprs_core::ports::{InferenceProvider, test_contracts};
+///
+/// async fn run_live_contract(provider: &dyn InferenceProvider) {
+///     if std::env::var("LOOPRS_RUN_LIVE_LLM_TESTS").as_deref() != Ok("1") {
+///         return;
+///     }
+///
+///     test_contracts::assert_inference_provider_live_contract(provider).await;
 /// }
 /// ```
 pub async fn assert_inference_provider_live_contract(
     provider: &dyn crate::ports::InferenceProvider,
 ) {
-    use crate::api::{ContentBlock, Message, ToolDefinition};
+    use crate::api::Message;
 
     let single_turn = crate::ports::InferenceRequest {
         model: provider.model().clone(),
@@ -276,6 +442,21 @@ pub async fn assert_inference_provider_live_contract(
         .await
         .expect("live contract single-turn inference must succeed");
     assert_valid_inference_response(&response, "single-turn");
+}
+
+/// Run the opt-in live provider scenario matrix.
+///
+/// The matrix performs two requests for providers without tool support and
+/// four requests for providers with tool support. Each invocation can incur
+/// provider charges and can fail because of credentials, quotas, networking,
+/// model availability, or nondeterministic model behavior. Keep it ignored by
+/// default. This helper does not inspect `LOOPRS_RUN_LIVE_LLM_TESTS`; the caller
+/// must apply the same opt-in gate shown on
+/// [`assert_inference_provider_live_contract`] before invoking it.
+pub async fn assert_inference_provider_live_matrix(provider: &dyn crate::ports::InferenceProvider) {
+    use crate::api::{ContentBlock, Message, ToolDefinition};
+
+    assert_inference_provider_live_contract(provider).await;
 
     let multi_turn = crate::ports::InferenceRequest {
         model: provider.model().clone(),
@@ -395,6 +576,7 @@ mod tests {
     use crate::ports::model_catalog::{CatalogSource, RemoteCatalogError, RemoteModel};
     use crate::ports::{InferenceProvider, InferenceRequest, InferenceResponse, Usage};
     use crate::types::{ModelId, ToolId, ToolName};
+    use futures::StreamExt;
     use std::collections::VecDeque;
     use std::sync::Mutex;
 
@@ -403,6 +585,59 @@ mod tests {
         requests: Mutex<Vec<InferenceRequest>>,
         responses: Mutex<VecDeque<InferenceResponse>>,
         supports_tools: bool,
+    }
+
+    struct FailingInferenceProvider {
+        model: ModelId,
+    }
+
+    struct InvalidInferenceProvider {
+        model: ModelId,
+        response: InferenceResponse,
+    }
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for FailingInferenceProvider {
+        async fn infer(
+            &self,
+            _req: &InferenceRequest,
+        ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
+            Err("scripted inference failure".into())
+        }
+
+        fn name(&self) -> &str {
+            "failing-scripted"
+        }
+
+        fn model(&self) -> &ModelId {
+            &self.model
+        }
+
+        fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Err("scripted validation failure".into())
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for InvalidInferenceProvider {
+        async fn infer(
+            &self,
+            _req: &InferenceRequest,
+        ) -> Result<InferenceResponse, Box<dyn std::error::Error + Send + Sync>> {
+            Ok(self.response.clone())
+        }
+
+        fn name(&self) -> &str {
+            "invalid-scripted"
+        }
+
+        fn model(&self) -> &ModelId {
+            &self.model
+        }
+
+        fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+            Err("scripted validation failure".into())
+        }
     }
 
     impl ScriptedInferenceProvider {
@@ -551,7 +786,7 @@ mod tests {
     async fn inference_live_contract_exercises_shared_scenario_matrix() {
         let provider = ScriptedInferenceProvider::new(true);
 
-        assert_inference_provider_live_contract(&provider).await;
+        assert_inference_provider_live_matrix(&provider).await;
 
         let requests = provider.requests.lock().unwrap();
         assert_eq!(requests.len(), 4, "all inference scenarios must run");
@@ -572,8 +807,172 @@ mod tests {
     async fn inference_live_contract_skips_tools_when_unsupported() {
         let provider = ScriptedInferenceProvider::new(false);
 
-        assert_inference_provider_live_contract(&provider).await;
+        assert_inference_provider_live_matrix(&provider).await;
 
         assert_eq!(provider.requests.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn legacy_live_contract_remains_a_single_low_cost_request() {
+        let provider = ScriptedInferenceProvider::new(false);
+
+        assert_inference_provider_live_contract(&provider).await;
+
+        assert_eq!(provider.requests.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "single-turn response must contain non-empty assistant text")]
+    async fn inference_live_matrix_rejects_empty_text_deterministically() {
+        let provider = ScriptedInferenceProvider {
+            model: ModelId::new("contract-model"),
+            requests: Mutex::new(Vec::new()),
+            responses: Mutex::new(VecDeque::from([InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: String::new(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 1,
+                    output_tokens: 1,
+                },
+            }])),
+            supports_tools: false,
+        };
+
+        assert_inference_provider_live_matrix(&provider).await;
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "single-turn usage.input_tokens must be > 0")]
+    async fn inference_live_matrix_rejects_zero_usage_deterministically() {
+        let provider = ScriptedInferenceProvider {
+            model: ModelId::new("contract-model"),
+            requests: Mutex::new(Vec::new()),
+            responses: Mutex::new(VecDeque::from([InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "pong".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 0,
+                    output_tokens: 1,
+                },
+            }])),
+            supports_tools: false,
+        };
+
+        assert_inference_provider_live_matrix(&provider).await;
+    }
+
+    #[tokio::test]
+    async fn default_stream_emits_typed_delta_and_authoritative_final_response() {
+        let provider = ScriptedInferenceProvider::new(false);
+        let request = InferenceRequest {
+            model: provider.model().clone(),
+            messages: vec![crate::api::Message::user("stream")],
+            tools: Vec::new(),
+            max_tokens: 32,
+            temperature: Some(0.0),
+            system: "stream".to_string(),
+        };
+
+        let events = provider
+            .infer_stream(&request)
+            .await
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(provider.requests.lock().unwrap().len(), 1);
+        assert!(matches!(
+            events.first(),
+            Some(Ok(crate::ports::InferenceStreamEvent::Delta(
+                crate::ports::InferenceDelta::Text(text)
+            ))) if text == "pong"
+        ));
+        assert!(matches!(
+            events.last(),
+            Some(Ok(crate::ports::InferenceStreamEvent::Final(response)))
+                if response.usage.input_tokens == 3 && response.usage.output_tokens == 2
+        ));
+    }
+
+    #[tokio::test]
+    async fn default_stream_preserves_inference_errors_without_a_final_response() {
+        let provider = FailingInferenceProvider {
+            model: ModelId::new("failing-model"),
+        };
+        let request = InferenceRequest {
+            model: provider.model().clone(),
+            messages: vec![crate::api::Message::user("stream")],
+            tools: Vec::new(),
+            max_tokens: 32,
+            temperature: None,
+            system: String::new(),
+        };
+
+        let events = provider
+            .infer_stream(&request)
+            .await
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].as_ref().unwrap_err().to_string(),
+            "scripted inference failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_error_contract_covers_validation_and_inference_failures() {
+        let provider = FailingInferenceProvider {
+            model: ModelId::new("failing-model"),
+        };
+
+        assert_inference_provider_error_contract(&provider).await;
+    }
+
+    #[tokio::test]
+    async fn provider_response_contract_rejects_tool_results_from_providers() {
+        let provider = InvalidInferenceProvider {
+            model: ModelId::new("invalid-model"),
+            response: InferenceResponse {
+                content: vec![ContentBlock::ToolResult {
+                    tool_use_id: ToolId::new("call-1"),
+                    content: "provider-generated result".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage::default(),
+            },
+        };
+
+        let error = assert_inference_provider_response_contract(&provider)
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("tool result"));
+    }
+
+    #[tokio::test]
+    async fn provider_response_contract_rejects_malformed_tool_calls() {
+        let provider = InvalidInferenceProvider {
+            model: ModelId::new("invalid-model"),
+            response: InferenceResponse {
+                content: vec![ContentBlock::ToolUse {
+                    id: ToolId::new(""),
+                    name: ToolName::new("read"),
+                    input: serde_json::json!(["README.md"]),
+                }],
+                stop_reason: "tool_use".to_string(),
+                usage: Usage::default(),
+            },
+        };
+
+        let error = assert_inference_provider_response_contract(&provider)
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("malformed tool call"));
     }
 }

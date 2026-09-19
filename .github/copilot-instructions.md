@@ -144,12 +144,13 @@ Design principle: **extend without modifying core** - all customization via `.lo
 
 ### Async Context
 - All LLM API calls are async (tokio runtime)
-- Tool execution is synchronous but can shell out to async processes
+- The tool execution port is async; built-in tools may perform synchronous work and remote MCP
+  tools await network I/O
 - Use `#[tokio::main]` in bin, `async_trait` for provider implementations
 
 ### Testing
 - Unit tests in `src/` alongside implementation
-- Integration tests in `tests/`
+- Integration tests in `crates/looprs/tests/` and `crates/looprs-cli/tests/`
 - `cli_smoke.rs` for end-to-end validation
 
 ### Rust Edition and Version

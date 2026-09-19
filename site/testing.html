@@ -60,9 +60,10 @@
           </p>
         </div>
         <div class="card">
-          <h3>Coverage and regressions</h3>
+          <h3>Regression gate</h3>
           <p>
-            Pre-push checks include targeted crate coverage and fail fast on integration-breaking changes.
+            Pre-push runs formatting, lint, protocol, and test gates. Workspace coverage is measured
+            separately by CI and persisted as a comparable artifact.
           </p>
         </div>
       </div>
@@ -108,7 +109,7 @@ exec cargo xtask check pre-push</code></pre>
           <h3>Live LLM test gate</h3>
           <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/README.md#L180"><code>README.md#L180</code></a></p>
           <pre><code>export LOOPRS_RUN_LIVE_LLM_TESTS=1
-cargo test --all-targets -- --ignored</code></pre>
+cargo nextest run --workspace --run-ignored ignored-only</code></pre>
         </div>
       </div>
 

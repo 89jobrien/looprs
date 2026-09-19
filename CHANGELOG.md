@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-19
+
+### Breaking Changes
+- Add parallel-dispatch and MCP options to `RuntimeSettings`; direct struct literals must migrate to `RuntimeSettings::new` and builder methods
+- Mark `RuntimeSettings` as non-exhaustive so future runtime options can be added without another struct-field break
+
+### Features
+- Add versioned machine-run controls and structured automation output
+- Add bounded parallel tool dispatch, MCP discovery, and delegated tool allowlists
+- Add a static architecture and stability reference site
+
+### Fixes
+- Validate release health artifacts against the exact release version
+- Preserve the `quinn-proto 0.11.17` security update in workspace and fuzz lockfiles
+
+### Migration
+- See `docs/migration-0.6.md` for the `RuntimeSettings` construction change and release compatibility guidance
+
 ## [0.5.5] - 2026-09-13
 
 ### CI
@@ -19,7 +37,7 @@ All notable changes to this project are documented in this file.
 - Honor configured pipeline execution semantics
 
 ### Security
-- Upgrade lockfile dependencies to resolve RustSec advisories through `quinn-proto 0.11.17`
+- Upgrade lockfile dependencies to resolve RustSec advisories through `quinn-proto 0.11.17` (restored in 0.6.0 after post-release lockfile drift)
 
 ### Tests
 - Add provider inference conformance matrix coverage

@@ -126,11 +126,14 @@ pub struct PipelineConfig {
     pub enabled: bool,
     /// Directory where each check and final report are appended to `events.jsonl`.
     pub log_dir: String,
-    /// Minimum successful-check ratio required for pipeline success, clamped to 0..=1.
+    /// Minimum successful-check ratio required for pipeline success.
+    ///
+    /// Values below zero normalize to zero, values above one normalize to one,
+    /// and `NaN` normalizes to zero. Equality passes the threshold.
     pub reward_threshold: f32,
     /// Fail preflight when `cargo`, the tool required by enabled checks, is unavailable.
     pub require_tools: bool,
-    /// Revert worktree changes on pipeline failure.
+    /// Restore the pre-check in-memory conversation snapshot on blocking failure.
     pub auto_revert: bool,
     /// Stop the ordered build, test, lint, typecheck, benchmark suite at its first failure.
     pub fail_fast: bool,

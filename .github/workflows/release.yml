@@ -54,7 +54,7 @@ jobs:
           key: release-validation
       - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
-          tool: protoc@3.35.1,cargo-nextest@0.9.137,cargo-deny@0.20.2,git-cliff@2.12.0
+          tool: protoc@3.35.1,cargo-nextest@0.9.137,cargo-deny@0.20.2,git-cliff@2.12.0,cargo-semver-checks@0.42.0
           fallback: none
       - uses: hustcer/setup-nu@9215c80adb545a85c419d5085b76eb6d082f49e7 # v3.27
         with:
@@ -95,32 +95,18 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          latest=$(tail -n 1 .health-history.jsonl)
-          if ! jq -e --arg version "$VERSION" '
-            .version == $version
-            and .versions_consistent == true
-            and .tests.failed == 0
-            and .clippy.errors == 0
-            and .coverage >= 0
-            and .coverage <= 100
-          ' <<< "$latest"; then
-            echo "Latest health history entry is not a valid measurement for release ${VERSION}." >&2
-            echo "Refresh with taskit health check --with-coverage --update and append the baseline before release." >&2
-            exit 1
-          fi
-          jq -S . .health-baseline.json > /tmp/health-baseline.json
-          jq -S . <<< "$latest" > /tmp/health-history-latest.json
-          if ! cmp -s /tmp/health-baseline.json /tmp/health-history-latest.json; then
-            echo ".health-baseline.json does not match the latest persisted health history entry." >&2
-            exit 1
-          fi
+          scripts/verify-release-health.sh "$VERSION"
           cp .health-baseline.json release-health.json
           cp .health-history.jsonl release-health-history.jsonl
       - name: Run release gates
         run: |
+          scripts/tests/release-health.sh
           cargo +1.88.0 fmt --all --check
           cargo +1.88.0 clippy --locked --workspace --all-targets --all-features -- -D warnings
           cargo +1.88.0 nextest run --locked --workspace --all-targets --all-features --profile ci
+          cargo +1.88.0 semver-checks check-release -p looprs-core
+          cargo +1.88.0 semver-checks check-release -p looprs
+          cargo +1.88.0 semver-checks check-release -p looprs-tui
           cargo deny check
           cargo xtask check pre-push
       - name: Validate publication packages
@@ -275,66 +261,32 @@ jobs:
           ASSET: looprs-v${{ needs.validate.outputs.version }}-${{ matrix.asset }}
           TARGET: ${{ matrix.target }}
         run: |
-          mkdir -p dist/package
-          cp "target/${TARGET}/release/looprs" dist/package/looprs
-          cp README.md LICENSE dist/package/
-          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
-          export SOURCE_DATE_EPOCH
-          python3 - <<'PY'
-          import gzip
-          import os
-          import tarfile
-          from pathlib import Path
-
-          root = Path("dist/package")
-          output = Path("dist") / f"{os.environ['ASSET']}.tar.gz"
-          verification = output.with_suffix(output.suffix + ".verify")
-          epoch = int(os.environ["SOURCE_DATE_EPOCH"])
-
-          def write_archive(destination: Path) -> None:
-              with destination.open("wb") as raw:
-                  with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=epoch, compresslevel=9) as compressed:
-                      with tarfile.open(fileobj=compressed, mode="w", format=tarfile.USTAR_FORMAT) as archive:
-                          for path in sorted(root.iterdir(), key=lambda entry: entry.name):
-                              info = archive.gettarinfo(str(path), arcname=path.name)
-                              info.uid = 0
-                              info.gid = 0
-                              info.uname = ""
-                              info.gname = ""
-                              info.mtime = epoch
-                              info.mode = 0o755 if path.name == "looprs" else 0o644
-                              with path.open("rb") as source:
-                                  archive.addfile(info, source)
-
-          write_archive(output)
-          write_archive(verification)
-          if output.read_bytes() != verification.read_bytes():
-              raise SystemExit("same-commit archive reproducibility check failed")
-          verification.unlink()
-          PY
-          if [[ "${RUNNER_OS}" == "macOS" ]]; then
-            (cd dist && shasum -a 256 "${ASSET}.tar.gz" > "${ASSET}.tar.gz.sha256")
-          else
-            (cd dist && sha256sum "${ASSET}.tar.gz" > "${ASSET}.tar.gz.sha256")
-          fi
+          source_date_epoch="$(git show -s --format=%ct "$GITHUB_SHA")"
+          python3 scripts/ci/package-release-unix.py \
+            --binary "target/${TARGET}/release/looprs" \
+            --readme README.md \
+            --license LICENSE \
+            --output "dist/${ASSET}.tar.gz" \
+            --epoch "$source_date_epoch"
       - name: Package CLI for Windows
         if: runner.os == 'Windows'
         shell: pwsh
         env:
           ASSET: looprs-v${{ needs.validate.outputs.version }}-${{ matrix.asset }}
           TARGET: ${{ matrix.target }}
+        run: scripts/ci/package-release-windows.ps1 -Binary "target/$env:TARGET/release/looprs.exe" -Readme README.md -License LICENSE -Output "dist/$env:ASSET.zip"
+      - name: Select SBOM binary
+        id: binary-path
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
-          New-Item -ItemType Directory -Force dist/package | Out-Null
-          Copy-Item "target/$env:TARGET/release/looprs.exe" dist/package/looprs.exe
-          Copy-Item README.md, LICENSE dist/package/
-          Compress-Archive -Path dist/package/* -DestinationPath "dist/$env:ASSET.zip" -CompressionLevel Optimal
-          $archive = "dist/$env:ASSET.zip"
-          $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
-          "$hash  $env:ASSET.zip" | Set-Content -Encoding ascii "$archive.sha256"
+          binary_path="$(scripts/ci/release-binary-path.sh "$TARGET" "$RUNNER_OS")"
+          echo "path=${binary_path}" >> "$GITHUB_OUTPUT"
       - name: Generate binary SBOM
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
-          file: target/${{ matrix.target }}/release/${{ runner.os == 'Windows' && 'looprs.exe' || 'looprs' }}
+          file: ${{ steps.binary-path.outputs.path }}
           format: spdx-json
           output-file: dist/looprs-v${{ needs.validate.outputs.version }}-${{ matrix.asset }}.spdx.json
           artifact-name: sbom-${{ matrix.target }}.spdx.json
@@ -413,23 +365,19 @@ jobs:
               push "https://github.com/${GITHUB_REPOSITORY}.git" "v${VERSION}"
           fi
 
+          mapfile -t release_assets < <(scripts/ci/validate-release-assets.sh release-assets "$VERSION")
+
           prerelease_args=()
           core_version=${VERSION%%+*}
           if [[ "$core_version" == *-* ]]; then
             prerelease_args+=(--prerelease)
           fi
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
-            gh release upload "v${VERSION}" release-assets/*.tar.gz release-assets/*.tar.gz.sha256 release-assets/*.zip release-assets/*.zip.sha256 release-assets/*.spdx.json release-assets/release-health.json release-assets/release-health-history.jsonl --clobber
+            gh release upload "v${VERSION}" "${release_assets[@]}" --clobber
             gh release edit "v${VERSION}" --title "looprs v${VERSION}" --notes-file release-assets/RELEASE_NOTES.md "${prerelease_args[@]}"
           else
             gh release create "v${VERSION}" \
-              release-assets/*.tar.gz \
-              release-assets/*.tar.gz.sha256 \
-              release-assets/*.zip \
-              release-assets/*.zip.sha256 \
-              release-assets/*.spdx.json \
-              release-assets/release-health.json \
-              release-assets/release-health-history.jsonl \
+              "${release_assets[@]}" \
               --title "looprs v${VERSION}" \
               --notes-file release-assets/RELEASE_NOTES.md \
               --verify-tag \

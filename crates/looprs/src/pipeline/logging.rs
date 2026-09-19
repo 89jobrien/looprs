@@ -4,12 +4,25 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Receives structured events emitted during expanded pipeline execution.
+///
+/// Implementations may persist events, forward them to telemetry, or collect
+/// them in memory for tests. Sink errors are represented in the returned
+/// [`crate::pipeline::types::PipelineReport`] as a failed `logging` step.
+pub trait PipelineEventSink {
+    /// Record one named event and its JSON payload.
+    fn record(&mut self, step: &str, data: serde_json::Value) -> io::Result<()>;
+}
+
+/// JSONL event sink that appends pipeline events to `events.jsonl`.
+#[derive(Debug)]
 pub struct PipelineLogger {
     run_id: Option<String>,
     file: Mutex<File>,
 }
 
 impl PipelineLogger {
+    /// Create a logger rooted at `log_dir`, creating the directory if needed.
     pub fn new(log_dir: PathBuf) -> io::Result<Self> {
         create_dir_all(&log_dir)?;
         let path = log_dir.join("events.jsonl");
@@ -51,6 +64,12 @@ impl PipelineLogger {
         file.write_all(b"\n")?;
         file.flush()?;
         Ok(())
+    }
+}
+
+impl PipelineEventSink for PipelineLogger {
+    fn record(&mut self, step: &str, data: serde_json::Value) -> io::Result<()> {
+        self.log_event(step, data)
     }
 }
 

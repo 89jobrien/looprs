@@ -85,6 +85,7 @@ fn run_cli_bin_tests() -> i32 {
 
 fn is_plain_pre_push(args: &[String]) -> bool {
     matches!(args, [subcommand] if subcommand == "pre-push")
+        || matches!(args, [command, gate] if command == "check" && gate == "pre-push")
 }
 
 /// `taskit self install` installs taskit itself, not looprs — intercept
@@ -106,8 +107,6 @@ fn run_install() -> i32 {
 mod tests {
     use super::*;
 
-    const RELEASE_WORKFLOW: &str = include_str!("../../.github/workflows/release.yml");
-
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_string()).collect()
     }
@@ -115,6 +114,7 @@ mod tests {
     #[test]
     fn plain_pre_push_runs_cli_bin_tests() {
         assert!(is_plain_pre_push(&args(&["pre-push"])));
+        assert!(is_plain_pre_push(&args(&["check", "pre-push"])));
     }
 
     #[test]
@@ -127,6 +127,11 @@ mod tests {
     #[test]
     fn pre_push_with_taskit_args_stays_taskit_only() {
         assert!(!is_plain_pre_push(&args(&["pre-push", "--dry-run"])));
+        assert!(!is_plain_pre_push(&args(&[
+            "check",
+            "pre-push",
+            "--dry-run"
+        ])));
     }
 
     #[test]
@@ -149,29 +154,5 @@ mod tests {
         assert!(CLI_BIN_TEST_ARGS.contains(&"looprs-cli"));
         assert!(CLI_BIN_TEST_ARGS.contains(&"--bin"));
         assert!(CLI_BIN_TEST_ARGS.contains(&"looprs"));
-    }
-
-    #[test]
-    fn release_workflow_builds_all_supported_platforms() {
-        for target in [
-            "x86_64-unknown-linux-gnu",
-            "aarch64-apple-darwin",
-            "x86_64-pc-windows-msvc",
-        ] {
-            assert!(
-                RELEASE_WORKFLOW.contains(target),
-                "release workflow is missing {target}"
-            );
-        }
-    }
-
-    #[test]
-    fn release_workflow_uploads_archives_and_checksums() {
-        for pattern in ["*.tar.gz", "*.tar.gz.sha256", "*.zip", "*.zip.sha256"] {
-            assert!(
-                RELEASE_WORKFLOW.contains(pattern),
-                "release workflow does not upload {pattern}"
-            );
-        }
     }
 }

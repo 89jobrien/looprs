@@ -25,25 +25,43 @@ pub fn init_logging() {
     }
 }
 
-fn machine_log_enabled() -> bool {
-    automation_protocol::machine_logging_enabled()
-}
-
 fn emit_machine_event(kind: &str, data: serde_json::Value) {
-    if !machine_log_enabled() {
-        return;
-    }
-
-    let Some(event) = automation_protocol::next_envelope(kind, data) else {
-        return;
-    };
-
-    if let Ok(line) = serde_json::to_string(&event) {
-        eprintln!("{line}");
+    let mut stderr = std::io::stderr().lock();
+    let service = automation_protocol::AutomationProtocol::system();
+    if let Ok(Some(event)) = write_machine_event(&service, &mut stderr, kind, data) {
         let _ = observability::append_named_jsonl("ui_events", &event);
     }
 }
 
+fn write_machine_event(
+    service: &automation_protocol::AutomationProtocol<'_>,
+    writer: &mut impl std::io::Write,
+    kind: &str,
+    data: serde_json::Value,
+) -> std::io::Result<Option<serde_json::Value>> {
+    let mut sink = automation_protocol::JsonLineEventSink::new(writer);
+    let Some(record) = service.emit(&mut sink, kind, data)? else {
+        return Ok(None);
+    };
+    let event = serde_json::to_value(record)?;
+    Ok(Some(event))
+}
+
+/// Emits one machine event as JSONL on stderr when machine output is enabled.
+///
+/// `--machine-log` uses the legacy top-level `{kind,data}` shape. An explicit
+/// `--machine-protocol looprs-machine/v1` emits a versioned envelope. Human and
+/// assistant output remains on stdout.
+///
+/// # Examples
+///
+/// ```no_run
+/// use looprs::automation_protocol::{MACHINE_PROTOCOL_ENV, MACHINE_PROTOCOL_V1};
+///
+/// // SAFETY: configure process-global output before starting worker threads.
+/// unsafe { std::env::set_var(MACHINE_PROTOCOL_ENV, MACHINE_PROTOCOL_V1) };
+/// looprs::ui::machine_event("run.started", serde_json::json!({"scriptable": true}));
+/// ```
 pub fn machine_event(kind: &str, data: serde_json::Value) {
     emit_machine_event(kind, data);
 }
@@ -363,26 +381,108 @@ pub fn goodbye() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::automation_protocol::{
+        ClockPort, EnvironmentPort, EventSequencePort, MACHINE_PROTOCOL_ENV, MACHINE_PROTOCOL_V1,
+        RunIdentityPort,
+    };
+    use std::cell::Cell;
+    use std::collections::HashMap;
 
-    #[test]
-    fn machine_log_disabled_by_default() {
-        // SAFETY: test-only environment mutation.
-        unsafe {
-            std::env::remove_var(automation_protocol::MACHINE_LOG_ENV);
-            std::env::remove_var(automation_protocol::MACHINE_PROTOCOL_ENV);
+    #[derive(Default)]
+    struct FakeEnvironment(HashMap<String, String>);
+
+    impl FakeEnvironment {
+        fn with(mut self, name: &str, value: &str) -> Self {
+            self.0.insert(name.to_string(), value.to_string());
+            self
         }
-        assert!(!machine_log_enabled());
+    }
+
+    impl EnvironmentPort for FakeEnvironment {
+        fn var(&self, name: &str) -> Option<String> {
+            self.0.get(name).cloned()
+        }
+    }
+
+    struct FixedClock;
+
+    impl ClockPort for FixedClock {
+        fn epoch_millis(&self) -> u128 {
+            1_000
+        }
+
+        fn rfc3339_utc(&self) -> String {
+            "2026-01-01T00:00:00+00:00".to_string()
+        }
+    }
+
+    struct FixedIdentity;
+
+    impl RunIdentityPort for FixedIdentity {
+        fn run_id(&self, _environment: &dyn EnvironmentPort, _clock: &dyn ClockPort) -> String {
+            "ui-test".to_string()
+        }
+    }
+
+    #[derive(Default)]
+    struct LocalSequence(Cell<u64>);
+
+    impl EventSequencePort for LocalSequence {
+        fn next_sequence(&self) -> u64 {
+            let next = self.0.get() + 1;
+            self.0.set(next);
+            next
+        }
     }
 
     #[test]
-    fn machine_log_enabled_with_true_like_values() {
-        for v in &["1", "true", "True", "TRUE"] {
-            // SAFETY: test-only environment mutation.
-            unsafe {
-                std::env::set_var(automation_protocol::MACHINE_LOG_ENV, v);
-                std::env::remove_var(automation_protocol::MACHINE_PROTOCOL_ENV);
-            }
-            assert!(machine_log_enabled(), "value {v} should enable machine log");
-        }
+    fn machine_event_writes_one_json_line_to_injected_sink() {
+        let environment =
+            FakeEnvironment::default().with(MACHINE_PROTOCOL_ENV, MACHINE_PROTOCOL_V1);
+        let sequence = LocalSequence::default();
+        let service = automation_protocol::AutomationProtocol::new(
+            &environment,
+            &FixedClock,
+            &FixedIdentity,
+            &sequence,
+        );
+        let mut output = Vec::new();
+
+        let event = write_machine_event(
+            &service,
+            &mut output,
+            "run.started",
+            serde_json::json!({"ok": true}),
+        )
+        .expect("event should serialize")
+        .expect("enabled protocol should emit an event");
+
+        assert_eq!(output.iter().filter(|byte| **byte == b'\n').count(), 1);
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&output).unwrap(),
+            event
+        );
+        assert_eq!(event["protocol"], MACHINE_PROTOCOL_V1);
+        assert_eq!(event["run_id"], "ui-test");
+        assert_eq!(event["event"]["kind"], "run.started");
+    }
+
+    #[test]
+    fn machine_event_is_silent_when_injected_protocol_is_disabled() {
+        let environment = FakeEnvironment::default();
+        let sequence = LocalSequence::default();
+        let service = automation_protocol::AutomationProtocol::new(
+            &environment,
+            &FixedClock,
+            &FixedIdentity,
+            &sequence,
+        );
+        let mut output = Vec::new();
+
+        let event = write_machine_event(&service, &mut output, "ignored", serde_json::Value::Null)
+            .expect("disabled output should succeed");
+
+        assert!(event.is_none());
+        assert!(output.is_empty());
     }
 }

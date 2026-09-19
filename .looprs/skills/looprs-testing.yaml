@@ -38,7 +38,8 @@ content: |
   ## Port Conformance Tests (looprs-core)
   - `assert_user_output_contract(impl)` — smoke-tests all UserOutput methods
   - `assert_inference_provider_contract(impl)` — checks name/model/supports_tool_use
-  - `assert_inference_provider_live_contract(impl, rt)` — full round-trip (live, gated)
+  - `assert_inference_provider_live_contract(impl)` — one-request live smoke test (gated)
+  - `assert_inference_provider_live_matrix(impl)` — 2-4 charged live requests; may fail on credentials, quotas, networking, model availability, or model nondeterminism
   - `assert_session_store_contract(impl)` — log/replay contract
   - `assert_message_broker_contract(impl)` — publish/subscribe contract
 
