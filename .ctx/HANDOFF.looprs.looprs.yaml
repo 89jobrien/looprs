@@ -1,26 +1,35 @@
 project: looprs
 id: looprs
-updated: 2026-09-16
+updated: 2026-09-19
 items:
-- id: uncommitted-work
-  name: uncommitted-work
-  priority: P1
-  status: open
-  title: Uncommitted changes (5 files)
+- id: kani-proof-redesign
+  name: kani-proof-redesign
+  priority: P2
+  status: blocked
+  title: Redesign ANSI sanitizer Kani proof for bounded CI execution
   description: |-
-    Working tree has uncommitted changes:
-    .gitignore
-    IDEAS.md
-    scripts/README.md
-    scripts/serve-site.sh
-    site/
+    Four completed Kani attempts exceeded practical 5-10 minute limits because
+    symbolic String/Vec processing caused state-space explosion. Replace the
+    current strip_ansi_no_oob harness with a smaller state-machine invariant and
+    require a local proof to finish within five minutes before enabling nightly CI.
   files:
-  - .gitignore
-  - IDEAS.md
-  - scripts/README.md
-  - scripts/serve-site.sh
-  - site/
+  - crates/looprs/src/sanitize.rs
+  - .github/workflows/nightly.yml
 log:
+- date: '20260919.221500'
+  summary: |-
+    Session: shipped the reviewed looprs 0.6.0 branch slice.
+    - Integrated the issue wave for machine automation, parallel dispatch, MCP,
+      plugin supervision, observation replay, streaming, and capabilities.
+    - Resolved all 57 five-lens MoA findings across isolated worktree waves.
+    - Verified 677 workspace tests, 90.3% looprs-core coverage, formatting,
+      clippy, compilation, pre-commit, pre-push, and release-health gates.
+    - Added migration guidance, expanded changelog, human-facing release notes,
+      and a validated static documentation site.
+    - Stabilized the machine-protocol mock server under loaded full-suite runs.
+  commits:
+  - 3b894a85
+  - 81c46a53
 - date: '20260916.084215'
   summary: done=22 running=0 pending=12 blocked=0
   commits:
