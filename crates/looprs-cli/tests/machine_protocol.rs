@@ -24,19 +24,17 @@ fn fake_ollama(response: FakeResponse) -> (String, Receiver<()>, thread::JoinHan
     let address = format!("http://{}", listener.local_addr().expect("local address"));
     let (request_tx, request_rx) = mpsc::channel();
     let handle = thread::spawn(move || {
-        let mut idle = 0;
-        while idle < 200 {
+        for _ in 0..3_000 {
             match listener.accept() {
                 Ok((mut stream, _)) => {
-                    idle = 0;
                     let _ = request_tx.send(());
                     serve_response(&mut stream, response);
+                    return;
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                    idle += 1;
                     thread::sleep(Duration::from_millis(10));
                 }
-                Err(_) => break,
+                Err(_) => return,
             }
         }
     });
