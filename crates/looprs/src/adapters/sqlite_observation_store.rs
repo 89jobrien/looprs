@@ -138,7 +138,17 @@ impl ObservationStore for SqliteObservationStore {
                 .prepare(
                     "INSERT INTO observations
                      (session_id, tool_name, input, output, tool_use_id, timestamp, context)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+                     WHERE NOT EXISTS (
+                         SELECT 1 FROM observations
+                         WHERE session_id = ?1
+                           AND tool_name = ?2
+                           AND input = ?3
+                           AND output = ?4
+                           AND tool_use_id IS ?5
+                           AND timestamp = ?6
+                           AND context IS ?7
+                     )",
                 )
                 .context("failed to prepare observation insert")?;
             for observation in observations {
@@ -258,4 +268,17 @@ fn validate_schema(connection: &Connection) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn satisfies_observation_store_contract() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = SqliteObservationStore::new(directory.path().join("observations.db"));
+
+        looprs_core::ports::test_contracts::assert_observation_store_contract(&store);
+    }
 }

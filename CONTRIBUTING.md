@@ -16,7 +16,7 @@ changes and what we expect in pull requests.
 
 ## Development Setup
 
-- Rust 1.88+ is required.
+- Rust 1.95+ is required.
 - `cargo-nextest` is required to run the test suite.
 - Optional tools:
   - `bacon` for watch mode

@@ -28,7 +28,7 @@ content: |
   ```rust
   // in agent.rs test module
   struct MockProvider { response: InferenceResponse }
-  // construct with Agent::new_test_agent(MockProvider { ... })
+  // construct with Agent::new(Box::new(MockProvider { ... }))
   ```
 
   ## Output Adapters for Tests

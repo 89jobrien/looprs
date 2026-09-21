@@ -5,7 +5,7 @@
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use sysinfo::{Pid, System};
+use sysinfo::{Pid, ProcessesToUpdate, System};
 
 const ERROR_WINDOW_SECS: u64 = 60;
 const CPU_LOW_THRESHOLD: f32 = 50.0;
@@ -51,10 +51,10 @@ impl SystemMonitor {
 
     /// Refresh and return current system metrics.
     pub fn collect_metrics(&mut self) -> SystemMetrics {
-        self.sys.refresh_cpu();
+        self.sys.refresh_cpu_all();
         self.sys.refresh_memory();
 
-        let cpu_usage = self.sys.global_cpu_info().cpu_usage() as f64;
+        let cpu_usage = self.sys.global_cpu_usage() as f64;
 
         let total = self.sys.total_memory() as f64;
         let used = self.sys.used_memory() as f64;
@@ -85,7 +85,8 @@ impl SystemMonitor {
     /// Return current process CPU/memory info.
     pub fn process_info(&mut self) -> Option<ProcessInfo> {
         let pid = Pid::from_u32(std::process::id());
-        self.sys.refresh_process(pid);
+        self.sys
+            .refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
         self.sys.process(pid).map(|p| ProcessInfo {
             cpu_usage: p.cpu_usage() as f64,
             memory_bytes: p.memory(),
@@ -114,7 +115,7 @@ impl SystemMonitor {
     }
 
     fn estimate_response_time(&self) -> f64 {
-        let cpu = self.sys.global_cpu_info().cpu_usage();
+        let cpu = self.sys.global_cpu_usage();
         if cpu < CPU_LOW_THRESHOLD {
             RESPONSE_LOW_MS
         } else if cpu < CPU_HIGH_THRESHOLD {

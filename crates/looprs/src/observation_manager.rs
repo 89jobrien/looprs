@@ -235,6 +235,26 @@ mod tests {
     }
 
     #[test]
+    fn repeated_persist_does_not_duplicate_observations() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("obs.db");
+
+        let mut manager = ObservationManager::new();
+        manager.capture(
+            "read".to_string(),
+            serde_json::json!({"file": "foo.rs"}),
+            "contents".to_string(),
+            None,
+        );
+
+        manager.persist(&path).unwrap();
+        manager.persist(&path).unwrap();
+
+        let loaded = ObservationManager::load_from(manager.session_id(), &path).unwrap();
+        assert_eq!(loaded.count(), 1);
+    }
+
+    #[test]
     fn test_observation_manager_creation() {
         let mgr = ObservationManager::new();
         assert_eq!(mgr.count(), 0);

@@ -21,9 +21,9 @@ dirs = { workspace = true } #unified
 looprs = { workspace = true } #unified
 looprs-tui = { workspace = true } #unified
 miette = { workspace = true } #unified
-rustyline = { version = "14.0", features = ["custom-bindings"] }
+rustyline = { version = "18.0.1", features = ["custom-bindings"] }
 serde_json = { workspace = true } #unified
-toml = "0.8"
+toml = "1.1.6"
 tokio = { workspace = true, features = ["sync"] } #unified
 
 [dev-dependencies]

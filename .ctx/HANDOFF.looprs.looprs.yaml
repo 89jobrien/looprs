@@ -1,21 +1,46 @@
 project: looprs
 id: looprs
-updated: 2026-09-19
+updated: 2026-09-21
 items:
 - id: kani-proof-redesign
+  doob_uuid: 4b68ab19-c94e-4794-af00-b4ce5db6d5a1
   name: kani-proof-redesign
   priority: P2
-  status: blocked
+  status: done
   title: Redesign ANSI sanitizer Kani proof for bounded CI execution
   description: |-
-    Four completed Kani attempts exceeded practical 5-10 minute limits because
-    symbolic String/Vec processing caused state-space explosion. Replace the
-    current strip_ansi_no_oob harness with a smaller state-machine invariant and
-    require a local proof to finish within five minutes before enabling nightly CI.
+    Replaced the unbounded String/Vec proof with bounded production-kernel proofs
+    for output growth, ESC removal, CSI, OSC, and DCS handling. All replacement
+    harnesses now complete within five minutes.
   files:
   - crates/looprs/src/sanitize.rs
   - .github/workflows/nightly.yml
+  extra: []
+- id: pty-terminal-contracts
+  doob_uuid: c88928d4-b6e1-4bc2-8f62-c63640600d13
+  name: pty-terminal-contracts
+  priority: P2
+  status: blocked
+  title: Add deterministic PTY contracts for the chat TUI
+  description: |-
+    Three harness attempts raced terminal readiness before input submission.
+    Add an explicit ready signal before retrying restoration and transcript tests.
+  files:
+  - crates/looprs-tui/src/chat.rs
+  - crates/looprs-tui/tests/terminal_contract.rs
+  extra: []
 log:
+- date: '20260921.143500'
+  summary: |-
+    Session: completed and verified the v0.7.0 health-remediation slice.
+    - Added CLI help/version contracts and synchronized tracked documentation.
+    - Removed confirmed dead APIs while preserving supported embedding adapters.
+    - Modernized provider, storage, terminal, BAML, and system dependencies.
+    - Raised the workspace, mise, CI, and release MSRV to Rust 1.95.0.
+    - Added idempotent observation persistence and bounded sanitizer Kani proofs.
+    - Verified formatting, Clippy, fuzz builds, mdBook, dependency policy, and
+      687 workspace tests; deterministic PTY coverage remains blocked.
+  commits: []
 - date: '20260919.221500'
   summary: |-
     Session: shipped the reviewed looprs 0.6.0 branch slice.

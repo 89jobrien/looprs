@@ -2,6 +2,34 @@ use anyhow::{Result, anyhow};
 use looprs::automation_protocol::{MACHINE_PROTOCOL_V1, MachineProtocol};
 use std::env;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CliMetaAction {
+    Help,
+    Version,
+}
+
+pub(crate) fn meta_action(args: &[String]) -> Option<CliMetaAction> {
+    let mut version_requested = false;
+    let mut index = 0;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "-p" | "--prompt" | "-f" | "--file" | "-m" | "--model" | "--machine-protocol"
+            | "--run-id" | "--deadline-seconds" | "--cancel-file" => {
+                index += 2;
+            }
+            "-h" | "--help" => return Some(CliMetaAction::Help),
+            "-V" | "--version" => {
+                version_requested = true;
+                index += 1;
+            }
+            _ => index += 1,
+        }
+    }
+
+    version_requested.then_some(CliMetaAction::Version)
+}
+
 #[derive(Debug, Clone)]
 pub struct CliArgs {
     pub prompt: Option<String>,           // -p/--prompt
@@ -202,6 +230,32 @@ mod tests {
 
     fn args(strs: &[&str]) -> Vec<String> {
         strs.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn meta_action_recognizes_help_flags() {
+        assert_eq!(meta_action(&args(&["-h"])), Some(CliMetaAction::Help));
+        assert_eq!(
+            meta_action(&args(&["provider", "--help"])),
+            Some(CliMetaAction::Help)
+        );
+    }
+
+    #[test]
+    fn meta_action_recognizes_version_flags() {
+        assert_eq!(meta_action(&args(&["-V"])), Some(CliMetaAction::Version));
+        assert_eq!(
+            meta_action(&args(&["--version"])),
+            Some(CliMetaAction::Version)
+        );
+    }
+
+    #[test]
+    fn meta_action_prefers_help_over_version() {
+        assert_eq!(
+            meta_action(&args(&["--version", "--help"])),
+            Some(CliMetaAction::Help)
+        );
     }
 
     #[test]
@@ -547,6 +601,18 @@ mod tests {
         let result = CliArgs::parse_from(&args(&["--unknown"]));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Unknown argument"));
+    }
+
+    #[test]
+    fn meta_action_ignores_flag_shaped_option_values() {
+        for case in [
+            vec!["--prompt", "--help"],
+            vec!["--file", "--version"],
+            vec!["--model", "-h"],
+            vec!["--run-id", "-V"],
+        ] {
+            assert_eq!(meta_action(&args(&case)), None, "case: {case:?}");
+        }
     }
 
     #[test]

@@ -155,7 +155,7 @@ Design principle: **extend without modifying core** - all customization via `.lo
 
 ### Rust Edition and Version
 - Edition: 2024 (latest Rust edition)
-- Minimum Rust version: 1.88
+- Minimum Rust version: 1.95
 - Check with `make verify-rust`
 
 ### Module Structure

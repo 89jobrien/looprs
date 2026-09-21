@@ -1,3 +1,5 @@
+//! Provides the `looprs` command-line entry point.
+
 use anyhow::Result;
 use colored::*;
 use rustyline::Editor;
@@ -24,7 +26,7 @@ mod args;
 mod cli;
 mod repl;
 mod runtime;
-use args::CliArgs;
+use args::{CliArgs, CliMetaAction, meta_action};
 use cli::{CliCommand, parse_input};
 use repl::{MatchSets, ReplHelper, bind_repl_keys};
 
@@ -76,8 +78,20 @@ fn apply_nu_env(path: &std::path::Path) {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    load_nu_env();
     let args: Vec<String> = env::args().collect();
+    match meta_action(&args[1..]) {
+        Some(CliMetaAction::Help) => {
+            print_help();
+            return Ok(());
+        }
+        Some(CliMetaAction::Version) => {
+            println!("looprs {}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
+        None => {}
+    }
+
+    load_nu_env();
     if matches!(args.get(1).map(String::as_str), Some("provider")) {
         return run_provider_menu();
     }
@@ -685,9 +699,7 @@ async fn run_interactive(
     Ok(())
 }
 
-fn print_usage() {
-    ui::error_full(
-        r#"Usage: looprs [OPTIONS] | looprs seed [DIR] | looprs provider | looprs tui
+const HELP_TEXT: &str = r#"Usage: looprs [OPTIONS] | looprs seed [DIR] | looprs provider | looprs tui
 
 COMMANDS:
   seed [DIR]             Write example config files to DIR (default: .looprs).
@@ -699,6 +711,8 @@ COMMANDS:
                          an input box, instead of the default REPL.
 
 OPTIONS:
+  -h, --help             Print help and exit
+  -V, --version          Print version and exit
   -p, --prompt <TEXT>    Run with single prompt and exit (scriptable mode)
   -f, --file <FILE>      Read prompt from file
   -m, --model <MODEL>    Override default model
@@ -718,8 +732,14 @@ EXAMPLES:
   looprs provider                  # Choose provider/model interactively
   looprs tui                       # Launch the alternate chat TUI
   looprs -p "explain closures"     # Run single prompt and exit
-"#,
-    );
+"#;
+
+fn print_help() {
+    print!("{HELP_TEXT}");
+}
+
+fn print_usage() {
+    ui::error_full(HELP_TEXT);
 }
 
 /// List locally installed Ollama models via `ollama list`. Returns an

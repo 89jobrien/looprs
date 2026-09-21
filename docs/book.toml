@@ -1,0 +1,13 @@
+[book]
+title = "looprs"
+authors = []
+language = "en"
+src = "src"
+
+[build]
+build-dir = "dist"
+
+[output.html]
+git-repository-url = ""
+default-theme = "rust"
+preferred-dark-theme = "ayu"

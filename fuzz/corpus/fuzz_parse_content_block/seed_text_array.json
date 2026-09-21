@@ -1,0 +1,1 @@
+[{"type":"tool_use","id":"seed-tool","name":"read","input":{"path":"README.md"}}]

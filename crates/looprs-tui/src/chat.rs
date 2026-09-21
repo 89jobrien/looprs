@@ -33,8 +33,9 @@ struct TerminalGuard;
 impl TerminalGuard {
     fn enter() -> Result<Self> {
         enable_raw_mode()?;
+        let guard = Self;
         execute!(std::io::stdout(), EnterAlternateScreen)?;
-        Ok(Self)
+        Ok(guard)
     }
 }
 
@@ -155,22 +156,10 @@ type TurnResult = (Agent, Result<(), looprs::errors::AgentError>);
 /// the user quits (Esc). Consumes the agent since streaming requires
 /// swapping its output adapter for the lifetime of the session.
 pub async fn run(agent: Agent) -> Result<()> {
-    // Restore the terminal even on panic, before the default hook prints
-    // its message — otherwise a raw-mode alternate-screen panic leaves
-    // the shell unusable until the user reruns `reset`. Kept in an Arc so
-    // the original hook can be reinstalled once this function returns.
-    let previous_hook = std::sync::Arc::new(std::panic::take_hook());
-    let hook_for_panic = std::sync::Arc::clone(&previous_hook);
-    std::panic::set_hook(Box::new(move |info| {
-        let _ = disable_raw_mode();
-        let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
-        hook_for_panic(info);
-    }));
-
     let (tx, mut rx) = mpsc::unbounded_channel::<OutputEvent>();
     let mut agent_slot = Some(agent.with_output(Box::new(ChannelOutput(tx))));
 
-    let _guard = TerminalGuard::enter()?;
+    let guard = TerminalGuard::enter()?;
     let backend = CrosstermBackend::new(std::io::stdout());
     let mut terminal = Terminal::new(backend)?;
 
@@ -181,13 +170,15 @@ pub async fn run(agent: Agent) -> Result<()> {
     let mut reader = EventStream::new();
 
     let result: Result<()> = loop {
-        draw(
+        if let Err(error) = draw(
             &mut terminal,
             &static_transcript,
             &live_text,
             &input,
             turn_handle.is_some(),
-        )?;
+        ) {
+            break Err(error);
+        }
 
         tokio::select! {
             maybe_ev = reader.next() => {
@@ -260,8 +251,7 @@ pub async fn run(agent: Agent) -> Result<()> {
         }
     };
 
-    drop(_guard); // restore terminal before returning/printing any error
-    std::panic::set_hook(Box::new(move |info| previous_hook(info)));
+    drop(guard); // restore terminal before returning/printing any error
     result
 }
 

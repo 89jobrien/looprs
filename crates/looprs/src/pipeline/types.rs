@@ -1,12 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-/// Context metadata associated with one pipeline run.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PipelineContext {
-    /// Optional identifier included in persisted events.
-    pub run_id: Option<String>,
-}
-
 /// Outcome of one named pipeline step.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StepResult {

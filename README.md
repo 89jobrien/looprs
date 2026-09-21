@@ -50,6 +50,43 @@ looprs
 
 Persistent config: `.looprs/provider.json`. All env options: `.env.example`.
 
+## CLI
+
+looprs 0.7 provides interactive, one-shot, setup, and alternate-TUI entry points:
+
+```text
+looprs [-h|--help] [-V|--version]
+       [-p|--prompt TEXT] [-f|--file FILE] [-m|--model MODEL]
+       [-q|--quiet] [--no-hooks] [--json] [--machine-log]
+       [--machine-protocol looprs-machine/v1] [--run-id ID]
+       [--deadline-seconds N] [--cancel-file PATH]
+looprs seed [DIR]
+looprs provider
+looprs tui
+```
+
+`seed` writes example configuration without overwriting existing files. `provider`
+opens the provider/model selector and writes `.looprs/provider.json`. `tui` opens
+the alternate-screen chat UI, which streams assistant output into its transcript,
+keeps submitted user messages visible, ignores new input while a turn is running,
+and exits with Esc or Ctrl-C while restoring the terminal.
+
+### Machine-readable runs
+
+Scriptable `--prompt`/`--file` runs keep human and assistant output on stdout.
+`--machine-log` adds legacy `{kind,data}` JSONL records on stderr.
+`--machine-protocol looprs-machine/v1` instead emits versioned stderr envelopes
+with `protocol`, stable `run_id`, increasing `seq`, RFC 3339 `ts`, and an `event`.
+The run lifecycle kinds are `run.started`, `run.succeeded`, `run.failed`, and
+`run.cancelled`; UI activity can additionally emit `info`, `warn`, `error`,
+`header`, `assistant_text`, `write_chunk`, `tool_call`, `tool_ok`, `tool_err`,
+`running_command`, and `goodbye`.
+
+`--run-id`, `--deadline-seconds`, and `--cancel-file` require the versioned
+protocol. A positive deadline interrupts an in-flight turn; a cancellation-file
+run stops when the named path exists. Cancellation emits one `run.cancelled`
+terminal event and returns a non-zero exit status.
+
 ## Built-in Tools
 
 These are tool capabilities exposed to the model during a session (not slash commands typed at the REPL).
@@ -74,7 +111,7 @@ cargo install ripgrep fd-find
 
 Reference files in prompts with `@filename` syntax — contents are injected into the conversation.
 
-```
+```text
 Refactor @crates/looprs-cli/src/main.rs for better error handling
 Compare @crates/looprs/src/agent.rs and @crates/looprs/src/api.rs
 ```
@@ -83,7 +120,7 @@ Compare @crates/looprs/src/agent.rs and @crates/looprs/src/api.rs
 
 The `.looprs/` directory defines repo-local agent configuration. All extension points support dual-source loading: user-level (`~/.looprs/`) and repo-level (`.looprs/`), with repo taking precedence.
 
-```
+```text
 .looprs/
 ├── provider.json          # Provider/model settings
 ├── config.json            # Runtime defaults, file refs, pipeline, agents, paths
@@ -133,7 +170,10 @@ Skills follow progressive disclosure: YAML frontmatter with name/description/tri
 
 ### Agents
 
-YAML role definitions in `.looprs/agents/`. Agent dispatcher switches roles during a session.
+YAML role definitions in `.looprs/agents/` select role instructions, skills, and
+capabilities. Explicit or automatic delegation fires `DelegationStart` before the
+delegated turn and `DelegationComplete` after successful completion; both are available
+to hooks.
 
 ### Rules
 
@@ -167,7 +207,6 @@ execution failures, while provider errors and timeouts return directly.
 
 Action types: `command` (Nushell command, optional `inject_as` and `requires_approval`), `message`, `conditional`.
 
-
 ## Observability
 
 looprs writes structured JSONL traces and events under `~/.looprs/observability/`
@@ -176,6 +215,13 @@ current directory has its own `.looprs/config.json` (project-scoped setup):
 
 - `<root>/traces/*.jsonl` — turn traces
 - `<root>/ui_events.jsonl` — UI/machine events
+
+Successful tool executions are also captured as observations. At the end of each
+successfully completed non-streaming turn, non-empty observation sets are persisted
+idempotently to
+`$HOME/.looprs/observations.db`. The public observation API can load one session,
+query recent or tool-specific records across sessions, and replay a previous
+session into the current in-memory cache.
 
 Override the root explicitly:
 

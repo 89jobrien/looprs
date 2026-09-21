@@ -141,7 +141,5 @@ pub use crate::trace::{
 };
 /// Shared typed IDs.
 pub use crate::types::{ModelId, ToolId, ToolName};
-/// AI analysis domain types from `looprs-core`.
-pub use looprs_core::ai_types;
 /// `/models` overview types and render/build entry points.
 pub use model_catalog::{ModelsOverview, build_models_overview, render_models_overview};

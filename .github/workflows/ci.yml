@@ -62,7 +62,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable action
         with:
-          toolchain: 1.88.0
+          toolchain: 1.95.0
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: msrv-test
@@ -73,7 +73,7 @@ jobs:
       - uses: hustcer/setup-nu@9215c80adb545a85c419d5085b76eb6d082f49e7 # v3.27
         with:
           version: 0.108.0
-      - run: cargo +1.88.0 nextest run --locked --workspace --all-targets --all-features --profile ci
+      - run: cargo +1.95.0 nextest run --locked --workspace --all-targets --all-features --profile ci
 
   stable:
     name: latest-stable

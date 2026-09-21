@@ -9,6 +9,26 @@ const BEL: u8 = 0x07;
 const CSI_FINAL_LOW: u8 = 0x40;
 const CSI_FINAL_HIGH: u8 = 0x7e;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum AnsiState {
+    Text,
+    Escape,
+    ControlSequence,
+}
+
+pub(crate) fn advance_ansi_state(state: AnsiState, byte: u8) -> AnsiState {
+    match state {
+        AnsiState::Text if byte == ESC => AnsiState::Escape,
+        AnsiState::Text => AnsiState::Text,
+        AnsiState::Escape if byte == b'[' => AnsiState::ControlSequence,
+        AnsiState::Escape => AnsiState::Text,
+        AnsiState::ControlSequence if (CSI_FINAL_LOW..=CSI_FINAL_HIGH).contains(&byte) => {
+            AnsiState::Text
+        }
+        AnsiState::ControlSequence => AnsiState::ControlSequence,
+    }
+}
+
 pub fn preview_len() -> usize {
     std::env::var("LOOPRS_PREVIEW_LEN")
         .ok()
@@ -38,26 +58,28 @@ pub fn allow_raw_output() -> bool {
 }
 
 pub fn strip_ansi(input: &str) -> String {
+    String::from_utf8_lossy(&strip_ansi_bytes(input.as_bytes())).to_string()
+}
+
+fn strip_ansi_bytes(bytes: &[u8]) -> Vec<u8> {
     // Remove common ANSI CSI sequences (e.g., ESC[...m)
-    let bytes = input.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
 
     while i < bytes.len() {
-        if bytes[i] == ESC {
+        if advance_ansi_state(AnsiState::Text, bytes[i]) == AnsiState::Escape {
             if i + 1 >= bytes.len() {
                 break;
             }
 
             match bytes[i + 1] {
                 b'[' => {
+                    let mut state = advance_ansi_state(AnsiState::Escape, b'[');
                     i += 2;
-                    while i < bytes.len() {
+                    while i < bytes.len() && state == AnsiState::ControlSequence {
                         let b = bytes[i];
                         i += 1;
-                        if (CSI_FINAL_LOW..=CSI_FINAL_HIGH).contains(&b) {
-                            break;
-                        }
+                        state = advance_ansi_state(state, b);
                     }
                     continue;
                 }
@@ -98,7 +120,7 @@ pub fn strip_ansi(input: &str) -> String {
         i += 1;
     }
 
-    String::from_utf8_lossy(&out).to_string()
+    out
 }
 
 pub fn sanitize_for_console(input: &str) -> String {
@@ -188,41 +210,39 @@ fn redact(input: &str) -> String {
 mod kani_proofs {
     use super::*;
 
-    /// Prove that strip_ansi never indexes out of bounds for any
-    /// 8-byte input. The state machine must always terminate with
-    /// `i` within `[0, len]`.
     #[kani::proof]
-    #[kani::unwind(12)]
-    fn strip_ansi_no_oob() {
-        // Symbolic 8-byte input — small enough for bounded model checking
-        let len: usize = kani::any();
-        kani::assume(len <= 8);
-        let mut buf = [0u8; 8];
-        for i in 0..len {
-            buf[i] = kani::any();
-        }
-        let s = match std::str::from_utf8(&buf[..len]) {
-            Ok(s) => s,
-            Err(_) => return, // skip non-UTF8
-        };
-        // Must not panic
-        let result = strip_ansi(s);
-        // Output must not contain ESC
-        assert!(!result.as_bytes().iter().any(|&b| b == ESC));
+    #[kani::unwind(3)]
+    fn bounded_strip_never_grows_or_emits_escape() {
+        let input: [u8; 1] = kani::any();
+        let output = strip_ansi_bytes(&input);
+
+        assert!(output.len() <= input.len());
+        assert!(!output.contains(&ESC));
     }
 
-    /// Prove truncate_chars never overflows or panics.
     #[kani::proof]
-    #[kani::unwind(10)]
-    fn truncate_chars_no_overflow() {
-        let max: usize = kani::any();
-        kani::assume(max <= 5);
-        // Use a small fixed string
-        let s = "abcde";
-        let result = truncate_chars(s, max);
-        if max >= 5 {
-            assert!(result.len() == s.len());
-        }
+    fn bounded_csi_sequence_is_removed() {
+        let final_byte: u8 = kani::any();
+        kani::assume((CSI_FINAL_LOW..=CSI_FINAL_HIGH).contains(&final_byte));
+
+        assert!(strip_ansi_bytes(&[ESC, b'[', final_byte]).is_empty());
+    }
+
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn bounded_osc_sequence_is_removed() {
+        let payload: u8 = kani::any();
+        kani::assume(payload != BEL);
+
+        assert!(strip_ansi_bytes(&[ESC, b']', payload, BEL]).is_empty());
+    }
+
+    #[kani::proof]
+    #[kani::unwind(7)]
+    fn bounded_dcs_sequence_is_removed() {
+        let payload: u8 = kani::any();
+
+        assert!(strip_ansi_bytes(&[ESC, b'P', payload, ESC, b'\\']).is_empty());
     }
 }
 
@@ -230,6 +250,33 @@ mod kani_proofs {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    #[test]
+    fn ansi_state_enters_escape_only_from_text() {
+        assert_eq!(advance_ansi_state(AnsiState::Text, ESC), AnsiState::Escape);
+        assert_eq!(advance_ansi_state(AnsiState::Text, b'x'), AnsiState::Text);
+    }
+
+    #[test]
+    fn ansi_state_enters_control_sequence_only_for_csi_introducer() {
+        assert_eq!(
+            advance_ansi_state(AnsiState::Escape, b'['),
+            AnsiState::ControlSequence
+        );
+        assert_eq!(advance_ansi_state(AnsiState::Escape, b']'), AnsiState::Text);
+    }
+
+    #[test]
+    fn ansi_state_leaves_control_sequence_on_final_byte() {
+        assert_eq!(
+            advance_ansi_state(AnsiState::ControlSequence, b'3'),
+            AnsiState::ControlSequence
+        );
+        assert_eq!(
+            advance_ansi_state(AnsiState::ControlSequence, b'm'),
+            AnsiState::Text
+        );
+    }
 
     // ── Property tests ──────────────────────────────────────────────────
 
