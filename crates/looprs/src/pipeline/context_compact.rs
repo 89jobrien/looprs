@@ -1,3 +1,5 @@
+//! Selects repository files and renders bounded context for pipeline prompts.
+
 use crate::app_config::PipelineCompactionConfig;
 use anyhow::Result;
 use glob::{Pattern, glob};
@@ -18,6 +20,7 @@ pub struct CompactedContext {
 }
 
 // qual:allow(iosp) reason: "I/O boundary — reads files and runs git commands for context compaction"
+/// Selects configured repository files and renders them within compaction limits.
 pub fn compact_context(
     repo_root: &Path,
     config: &PipelineCompactionConfig,

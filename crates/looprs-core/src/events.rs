@@ -1,3 +1,5 @@
+//! Defines agent lifecycle events and the context passed to event handlers.
+
 use std::collections::HashMap;
 
 domain_event!(Event {

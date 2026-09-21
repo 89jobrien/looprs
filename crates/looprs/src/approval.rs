@@ -1,3 +1,5 @@
+//! Implements fail-closed interactive approval prompts for sensitive actions.
+
 /// Approval utilities for interactive prompts
 use std::io::{self, Write};
 

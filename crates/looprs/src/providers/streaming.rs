@@ -1,3 +1,5 @@
+//! Decodes provider SSE frames and assembles streamed text, tool calls, and usage.
+
 use std::collections::BTreeMap;
 
 use looprs_core::ports::{InferenceDelta, InferenceResponse, InferenceStreamEvent, Usage};

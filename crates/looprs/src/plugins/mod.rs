@@ -1,3 +1,5 @@
+//! Resolves, caches, and executes optional external CLI plugins.
+
 pub mod binaries;
 pub mod manifests;
 mod registry;
@@ -24,6 +26,7 @@ pub struct Plugins {
 }
 
 impl Plugins {
+    /// Creates a plugin service from injectable process and PATH adapters.
     pub fn new(runner: Arc<dyn Runner>, resolver: Arc<dyn ToolResolver>) -> Self {
         Self {
             runner,
@@ -31,6 +34,7 @@ impl Plugins {
         }
     }
 
+    /// Returns the process-wide plugin service backed by the OS PATH and runner.
     pub fn system() -> &'static Plugins {
         static INSTANCE: OnceLock<Plugins> = OnceLock::new();
         INSTANCE.get_or_init(|| Plugins::new(Arc::new(OsRunner), Arc::new(PathResolver)))
@@ -61,6 +65,7 @@ impl Plugins {
     }
 }
 
+/// Returns the process-wide external-plugin service.
 pub fn system() -> &'static Plugins {
     Plugins::system()
 }

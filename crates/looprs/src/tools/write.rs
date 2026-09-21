@@ -1,3 +1,5 @@
+//! Implements sandboxed file creation and replacement.
+
 use super::ToolArgs;
 use super::ToolContext;
 use super::error::ToolError;

@@ -1,3 +1,5 @@
+//! Verifies the binary's command-line help, version, and argument error contract.
+
 use std::process::Command;
 
 fn looprs(args: &[&str]) -> std::process::Output {

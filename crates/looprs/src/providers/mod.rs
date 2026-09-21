@@ -1,3 +1,5 @@
+//! Defines provider contracts, configuration resolution, and provider construction.
+
 use std::env;
 use std::time::Duration;
 
@@ -229,6 +231,7 @@ pub(crate) struct ProviderHttpClient {
 }
 
 impl ProviderHttpClient {
+    /// Builds a provider HTTP client with the requested timeout.
     pub fn new(timeout_secs: u64) -> Result<Self, ProviderError> {
         let client = Client::builder()
             .timeout(Duration::from_secs(timeout_secs))
@@ -236,10 +239,12 @@ impl ProviderHttpClient {
         Ok(Self { client })
     }
 
+    /// Builds a provider HTTP client with the standard request timeout.
     pub fn default() -> Result<Self, ProviderError> {
         Self::new(DEFAULT_TIMEOUT_SECS)
     }
 
+    /// Borrows the configured reqwest client.
     pub fn client(&self) -> &Client {
         &self.client
     }
@@ -437,6 +442,7 @@ pub async fn create_provider_from_config(
     Err(ProviderError::NoProviderConfigured)
 }
 
+// TODO(feature-idea 4): Validate provider documentation examples against registry defaults. (#51)
 /// Resolve the effective model id from overrides, env, and config file.
 fn resolve_model(
     config_section: &str,
@@ -482,6 +488,8 @@ async fn create_provider_by_name(
 ) -> Result<Box<dyn LLMProvider>, ProviderError> {
     let descriptor = provider_descriptor(name)
         .ok_or_else(|| ProviderError::Config(format!("Unknown provider: {name}")))?;
+    // TODO(feature-idea 5): Apply all provider settings during construction. (#52)
+    // Include timeout_secs and provider-specific extra settings.
     let model = resolve_model(descriptor.settings_section, config_file, &overrides);
     descriptor.create(model)
 }

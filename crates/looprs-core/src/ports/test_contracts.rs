@@ -13,7 +13,7 @@ use crate::ports::plugin_runtime::{
 use crate::ports::session_store::{SessionEvent, SessionStore};
 use crate::ports::user_output::UserOutput;
 
-// ── PluginSupervisorPort ────────────────────────────────────────────────
+// Plugin supervisor lifecycle and error contracts.
 
 /// Assert that a managed daemon satisfies the shared supervision contract.
 ///
@@ -95,7 +95,7 @@ pub fn assert_plugin_supervisor_error_contract(
     assert!(disabled_status.pid.is_none());
 }
 
-// ── MessageBroker ───────────────────────────────────────────────────────
+// Message delivery, fan-out, isolation, and closure contracts.
 
 /// Assert that a `MessageBroker` implementation satisfies the full contract.
 ///
@@ -144,7 +144,7 @@ pub fn assert_message_broker_contract(broker: impl MessageBroker + Clone) {
     assert_eq!(n, 0, "publish after close should return 0");
 }
 
-// ── SessionStore ────────────────────────────────────────────────────────
+// Session identity, event logging, and path stability contracts.
 
 /// Assert that a `SessionStore` implementation satisfies the full contract.
 ///
@@ -198,7 +198,7 @@ pub fn assert_session_store_contract(store: &mut dyn SessionStore) {
     assert_eq!(p1, p2, "path() must return consistent value");
 }
 
-// ── InferenceProvider ───────────────────────────────────────────────────
+// Inference provider metadata, error, and response contracts.
 
 /// Assert that an `InferenceProvider` implementation satisfies the structural contract.
 ///
@@ -301,7 +301,7 @@ pub async fn assert_inference_provider_response_contract(
     Ok(())
 }
 
-// ── UserOutput ──────────────────────────────────────────────────────────
+// User output method safety contract.
 
 /// Assert that a `UserOutput` implementation satisfies the full contract.
 ///
@@ -326,7 +326,7 @@ pub fn assert_user_output_contract(output: &dyn UserOutput) {
     output.write_chunk("");
 }
 
-// ── ObservationStore ────────────────────────────────────────────────────
+// Observation persistence and repeated-save contracts.
 
 /// Assert that an `ObservationStore` implementation satisfies the full contract.
 ///
@@ -369,7 +369,7 @@ pub fn assert_observation_store_contract(store: &dyn ObservationStore) {
         .expect("repeated save() of identical observations must not error");
 }
 
-// ── RemoteModelCatalogPort ──────────────────────────────────────────────
+// Remote model catalog source and result-validation contracts.
 
 /// Assert that a `RemoteModelCatalogPort` implementation satisfies the full contract.
 ///
@@ -719,12 +719,14 @@ mod tests {
     }
 
     impl MemObservationStore {
+        /// Creates an empty in-memory observation store.
         pub fn new() -> Self {
             Self {
                 saved: std::sync::Mutex::new(Vec::new()),
             }
         }
 
+        /// Returns the number of observation batches saved by the store.
         pub fn batch_count(&self) -> usize {
             self.saved.lock().unwrap().len()
         }

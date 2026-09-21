@@ -1,3 +1,5 @@
+//! Loads and resolves declarative agent definitions from user and repository YAML files.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;

@@ -1,3 +1,5 @@
+//! Adapts MCP discovery and execution into the runtime's tool catalog and dispatcher ports.
+
 use serde_json::Value;
 
 use std::collections::HashSet;
@@ -52,6 +54,8 @@ fn merge_tool_definitions(
     mut local: Vec<ToolDefinition>,
     remote: Vec<ToolDefinition>,
 ) -> Vec<ToolDefinition> {
+    // TODO(feature-idea 12): Make tool registration origin-aware and collision-safe. (#59)
+    // Reject or namespace schema/dispatcher collisions.
     let mut known = local
         .iter()
         .map(|tool| tool.name.clone())

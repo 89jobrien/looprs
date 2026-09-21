@@ -1,3 +1,5 @@
+//! Buffers tool observations, persists batches, and recalls relevant prior activity.
+
 use anyhow::Result;
 use serde_json::Value;
 use std::collections::HashSet;

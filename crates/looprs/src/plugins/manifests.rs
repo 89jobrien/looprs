@@ -1,3 +1,5 @@
+//! Loads plugin manifests and supervises plugin processes by declared kind.
+
 use looprs_core::ports::{
     OrchestrationPluginPort, OrchestrationSupervisorPort, PluginAgentSelection,
     PluginExecutionMode, PluginHealthState, PluginKind, PluginSupervisorError,

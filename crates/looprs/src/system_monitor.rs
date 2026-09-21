@@ -42,6 +42,7 @@ pub struct SystemMonitor {
 }
 
 impl SystemMonitor {
+    /// Creates a fully initialized system sampler with an empty error window.
     pub fn new() -> Self {
         Self {
             sys: System::new_all(),

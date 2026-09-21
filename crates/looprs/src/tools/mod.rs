@@ -1,3 +1,5 @@
+//! Defines built-in tools, JSON schemas, filesystem policy, and MCP discovery.
+
 mod availability;
 mod bash;
 mod edit;
@@ -399,6 +401,7 @@ impl Tool {
         }
     }
 
+    /// Dispatches this built-in tool to its concrete implementation.
     pub fn execute(&self, args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
         match self {
             Tool::Read => read::tool_read(args, ctx),
@@ -473,6 +476,7 @@ fn enforce_fs_mode(tool: Tool, args: &Value, ctx: &ToolContext) -> Result<(), To
     }
 }
 
+/// Enforces filesystem mode and executes a named built-in tool.
 pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
     match Tool::from_name(name) {
         Some(tool) => {
@@ -483,6 +487,7 @@ pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<Strin
     }
 }
 
+/// Returns provider-facing JSON schemas for every built-in tool.
 pub fn get_tool_definitions() -> Vec<ToolDefinition> {
     Tool::ALL.iter().map(|tool| tool.definition()).collect()
 }

@@ -1,3 +1,5 @@
+//! Loads the top-level looprs configuration and derives runtime policies from it.
+
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -258,6 +260,7 @@ pub struct PersistenceConfig {
     pub session_store: SessionStoreBackend,
 }
 
+// TODO(feature-idea 6): Centralize user/repository extension source resolution for every loader. (#53)
 /// Filesystem locations for user/repo extension assets.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]

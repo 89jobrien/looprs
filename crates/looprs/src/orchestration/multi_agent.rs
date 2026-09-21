@@ -1,3 +1,5 @@
+//! Coordinates multi-agent delegation, broker events, artifact sharing, and cancellation.
+
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
@@ -273,6 +275,8 @@ impl BrokerAgentOrchestrator {
         tasks: Vec<DelegatedTask>,
         cancellation: DelegationCancellation,
     ) -> Result<DelegationReport, OrchestrationError> {
+        // TODO(feature-idea 10): Expose multi-agent plans through public surfaces. (#57)
+        // Support dependency-aware plans through the CLI and machine protocol.
         self.validate(&tasks)?;
         let run_id = uuid::Uuid::new_v4().to_string();
         let indexes = tasks

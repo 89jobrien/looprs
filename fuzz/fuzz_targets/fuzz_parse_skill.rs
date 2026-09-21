@@ -1,3 +1,5 @@
+//! Fuzzes skill frontmatter and body parsing with arbitrary UTF-8 input.
+
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 use std::path::PathBuf;

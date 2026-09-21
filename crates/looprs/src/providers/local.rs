@@ -1,3 +1,5 @@
+//! Implements local Ollama inference, model selection, and health checks.
+
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -17,6 +19,7 @@ pub struct LocalProvider {
 }
 
 impl LocalProvider {
+    /// Creates an Ollama provider from environment-based model configuration.
     pub fn new() -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL")
             .or_else(|_| std::env::var("OLLAMA_MODEL"))
@@ -25,6 +28,7 @@ impl LocalProvider {
         Self::new_with_model(model)
     }
 
+    /// Creates an Ollama client for the selected model and configured host.
     pub fn new_with_model(model: Option<ModelId>) -> Result<Self, ProviderError> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(OLLAMA_TIMEOUT_SECS))
@@ -55,6 +59,7 @@ impl LocalProvider {
         })
     }
 
+    /// Returns whether the configured Ollama host answers its tags endpoint.
     pub async fn is_available() -> bool {
         let host =
             std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://localhost:11434".to_string());

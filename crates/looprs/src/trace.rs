@@ -1,3 +1,5 @@
+//! Persists per-session inference traces and evaluates trace freshness.
+
 use anyhow::Result;
 use serde_json::json;
 use std::fs::{self, OpenOptions};

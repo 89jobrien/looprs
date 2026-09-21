@@ -1,3 +1,5 @@
+//! Verifies versioned and legacy machine-readable CLI event output.
+
 use serde_json::{Value, json};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};

@@ -1,3 +1,5 @@
+//! Loads provider selection and per-provider settings from configuration files.
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;

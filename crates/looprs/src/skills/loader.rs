@@ -1,3 +1,5 @@
+//! Loads skill definitions and merges repository skills over user-level skills.
+
 // Loader for skills from directories
 
 use anyhow::{Context, Result};

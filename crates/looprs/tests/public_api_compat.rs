@@ -1,3 +1,5 @@
+//! Compile-checks compatibility aliases and the supported public embedding API.
+
 use looprs::adapters::{PluginsAdapter, RetryProvider, TerminalOutput};
 use looprs::app_config::DefaultsConfig;
 use looprs::file_refs::FileRefPolicy;

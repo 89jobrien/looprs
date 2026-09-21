@@ -1,3 +1,5 @@
+//! Implements bounded filesystem pattern matching with `fd` and a Rust fallback.
+
 use super::ToolArgs;
 use super::ToolContext;
 use super::error::ToolError;

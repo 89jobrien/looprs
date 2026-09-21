@@ -1,3 +1,5 @@
+//! Implements bounded content search with ripgrep and a Rust fallback.
+
 use super::ToolArgs;
 use super::ToolContext;
 use super::error::ToolError;

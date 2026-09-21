@@ -7,6 +7,7 @@
 
 use std::process::{Command, exit};
 
+// TODO(feature-idea 3): Add doctest and rustdoc-warning checks to the shared CI gate. (#50)
 const CLI_BIN_TEST_ARGS: &[&str] = &[
     "nextest",
     "run",

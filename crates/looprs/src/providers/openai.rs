@@ -1,3 +1,5 @@
+//! Implements OpenAI chat-completions inference and SSE streaming.
+
 use futures::{StreamExt, stream};
 use serde_json::{Value, json};
 
@@ -21,11 +23,13 @@ pub struct OpenAIProvider {
 }
 
 impl OpenAIProvider {
+    /// Creates an OpenAI provider using `MODEL` or the default GPT model.
     pub fn new(key: String) -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL").ok().map(ModelId::new);
         Self::new_with_model(key, model)
     }
 
+    /// Creates an OpenAI provider with an explicit or default GPT model.
     pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self, ProviderError> {
         let http = ProviderHttpClient::default()?;
 

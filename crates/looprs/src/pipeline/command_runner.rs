@@ -1,3 +1,5 @@
+//! Runs external pipeline commands and distinguishes spawn failures from non-zero exits.
+
 use std::io;
 use std::process::Command;
 

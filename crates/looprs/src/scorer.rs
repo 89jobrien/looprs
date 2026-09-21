@@ -1,3 +1,5 @@
+//! Extracts Ollama interaction pairs and scores them through OpenAI and MAGI.
+
 use anyhow::Result;
 use serde::Deserialize;
 use std::path::Path;

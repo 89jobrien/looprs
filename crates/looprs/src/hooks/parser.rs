@@ -1,3 +1,5 @@
+//! Deserializes a hook definition from a YAML file.
+
 use super::Hook;
 use std::fs;
 use std::path::Path;

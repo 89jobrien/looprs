@@ -1,3 +1,5 @@
+//! Defines provider-neutral conversation messages, content blocks, and tool schemas.
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

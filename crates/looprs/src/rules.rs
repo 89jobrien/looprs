@@ -1,3 +1,5 @@
+//! Loads Markdown rule files and renders active constraints for prompts.
+
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -95,6 +97,7 @@ pub struct ExecutionRequest {
 }
 
 impl ExecutionRequest {
+    /// Creates an execution request for the given boundary, target, and input.
     pub fn new(
         boundary: ExecutionBoundary,
         target: impl Into<String>,
@@ -166,6 +169,7 @@ pub struct RuleRegistry {
 }
 
 impl RuleRegistry {
+    /// Creates an empty rule registry.
     pub fn new() -> Self {
         Self {
             rules: HashMap::new(),

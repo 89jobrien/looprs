@@ -1,3 +1,5 @@
+//! Sanitizes control characters and truncates text on Unicode character boundaries.
+
 /// Remove control characters (except LF/CR/TAB) and cap content length.
 pub fn sanitize_and_truncate(input: &str, max_len: usize) -> String {
     if max_len == 0 {

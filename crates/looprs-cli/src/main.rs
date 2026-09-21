@@ -1,4 +1,4 @@
-//! Provides the `looprs` command-line entry point.
+//! Runs `looprs` in one-shot, interactive REPL, provider-selection, or chat TUI mode.
 
 use anyhow::Result;
 use colored::*;
@@ -302,6 +302,8 @@ async fn main() -> Result<()> {
     let repo_plugins = repo_plugins_dir.filter(|d| d.exists());
     let plugin_runtime = PluginRuntimeRegistry::load_dual_source(user_plugins, repo_plugins)
         .map_err(|error| anyhow::anyhow!("failed to initialize plugin runtime: {error}"))?;
+    // TODO(feature-idea 11): Compose manifest plugins into CLI bootstrap. (#58)
+    // Include tool and runtime plugins instead of limiting them to orchestration routing.
     let orchestrator = RuntimeOrchestrator::new(
         app_config.agents.clone(),
         agent_registry,
@@ -579,6 +581,8 @@ async fn run_interactive(
                             }
                         } else {
                             ui::warn(format!("Skill not found: {skill_name}"));
+                            // TODO(feature-idea 1): Add generated extension listing commands. (#48)
+                            // Cover /skills, /agents, /commands, and /plugins from their registries.
                             ui::info("Available skills: /skills (not yet implemented)");
                         }
                     }

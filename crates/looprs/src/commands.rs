@@ -1,3 +1,5 @@
+//! Loads custom slash-command definitions and resolves command invocations.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -13,6 +15,7 @@ pub struct Command {
     pub action: CommandAction,
 }
 
+// TODO(feature-idea 8): Add session and observation recall/replay command actions. (#55)
 /// Action to execute when command is invoked
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -49,6 +52,7 @@ pub struct CommandRegistry {
 }
 
 impl CommandRegistry {
+    /// Creates an empty custom-command registry.
     pub fn new() -> Self {
         CommandRegistry {
             commands: HashMap::new(),

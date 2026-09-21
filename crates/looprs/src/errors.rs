@@ -1,3 +1,5 @@
+//! Defines diagnostic errors for provider setup, inference, tools, and agent execution.
+
 use miette::Diagnostic;
 use thiserror::Error;
 

@@ -1,3 +1,5 @@
+//! Defines serializable reports for pipeline steps, tools, rewards, and full runs.
+
 use serde::{Deserialize, Serialize};
 
 /// Outcome of one named pipeline step.

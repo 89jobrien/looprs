@@ -1,3 +1,5 @@
+//! Aggregates live, fallback, configured, and local model catalogs for display.
+
 use crate::models_config::ModelsConfig;
 use looprs_core::ports::{CatalogSource, RemoteModel, RemoteModelCatalogPort};
 
@@ -27,6 +29,7 @@ pub struct ModelsOverview {
     pub warnings: Vec<String>,
 }
 
+/// Aggregates configured providers with live, fallback, and local model discovery.
 pub async fn build_models_overview(
     current_provider: &str,
     current_model: &str,
@@ -75,6 +78,7 @@ pub async fn build_models_overview(
     }
 }
 
+/// Renders a model overview as deterministic human-readable sections.
 pub fn render_models_overview(overview: &ModelsOverview) -> String {
     let mut out = String::new();
     out.push_str("Current\n");

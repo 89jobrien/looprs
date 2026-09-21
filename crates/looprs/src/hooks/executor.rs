@@ -1,3 +1,5 @@
+//! Evaluates hook conditions and executes command, prompt, and context actions.
+
 use super::{Action, Hook, PromptCallback};
 use crate::app_config::AppConfig;
 use crate::events::EventContext;
@@ -309,6 +311,7 @@ impl HookExecutor {
     }
 
     /// Evaluate simple conditions (very basic for now)
+    // TODO(feature-idea 7): Replace ad hoc hook conditions with a typed expression evaluator. (#54)
     // qual:allow(iosp) reason: "I/O boundary — evaluates conditions with shell commands"
     fn eval_condition(
         condition: &str,
@@ -317,7 +320,7 @@ impl HookExecutor {
         // Simple condition evaluation: "on_branch:main" or "has_tool:git"
         if condition.starts_with("on_branch:") {
             let branch = condition.strip_prefix("on_branch:").unwrap_or("");
-            // Would check actual branch here
+            // TODO(feature-idea 2): Evaluate on_branch against the repository's actual branch. (#49)
             return Ok(branch == "main" || branch == "*"); // For now, accept main or wildcard
         }
 

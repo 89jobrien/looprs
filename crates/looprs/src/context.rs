@@ -1,3 +1,5 @@
+//! Collects git state and pending project todos for session-start context.
+
 use crate::{doob, git_info};
 use serde::{Deserialize, Serialize};
 

@@ -1,3 +1,5 @@
+//! Defines command-line arguments and subcommands for the `looprs` binary.
+
 use anyhow::{Result, anyhow};
 use looprs::automation_protocol::{MACHINE_PROTOCOL_V1, MachineProtocol};
 use std::env;

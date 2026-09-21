@@ -1,3 +1,5 @@
+//! Discovers skill directories, parses frontmatter, and resolves skill precedence.
+
 use regex::Regex;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -24,6 +26,7 @@ pub struct ResolvedSkillPath {
     pub skill_path: String,
 }
 
+/// Reads a skill file and extracts its name and description frontmatter.
 pub fn extract_frontmatter(file_path: &Path) -> SkillFrontmatterSummary {
     let Ok(content) = fs::read_to_string(file_path) else {
         return SkillFrontmatterSummary::default();
@@ -31,6 +34,7 @@ pub fn extract_frontmatter(file_path: &Path) -> SkillFrontmatterSummary {
     extract_frontmatter_from_content(&content)
 }
 
+/// Extracts `name` and `description` from a Markdown frontmatter block.
 pub fn extract_frontmatter_from_content(content: &str) -> SkillFrontmatterSummary {
     let mut in_frontmatter = false;
     let mut name = String::new();
@@ -69,6 +73,7 @@ pub fn extract_frontmatter_from_content(content: &str) -> SkillFrontmatterSummar
 }
 
 // qual:allow(iosp) reason: "I/O boundary — walks filesystem to discover skill files"
+/// Recursively discovers skill files up to the requested directory depth.
 pub fn find_skills_in_dir(dir: &Path, source_type: &str, max_depth: usize) -> Vec<DiscoveredSkill> {
     let mut skills = Vec::new();
     if !dir.exists() {
@@ -78,6 +83,7 @@ pub fn find_skills_in_dir(dir: &Path, source_type: &str, max_depth: usize) -> Ve
     skills
 }
 
+/// Resolves a skill by precedence, with optional forced superpowers lookup.
 pub fn resolve_skill_path(
     skill_name: &str,
     superpowers_dir: Option<&Path>,
@@ -117,6 +123,7 @@ pub fn resolve_skill_path(
     None
 }
 
+/// Removes the leading frontmatter block and returns trimmed skill content.
 pub fn strip_frontmatter(content: &str) -> String {
     let mut in_frontmatter = false;
     let mut frontmatter_ended = false;

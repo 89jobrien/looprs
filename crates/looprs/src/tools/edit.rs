@@ -1,3 +1,5 @@
+//! Implements exact-match file editing within the tool filesystem sandbox.
+
 use super::ToolArgs;
 use super::ToolContext;
 use super::error::ToolError;

@@ -1,3 +1,5 @@
+//! Implements Anthropic Messages API inference and SSE streaming.
+
 use futures::StreamExt as _;
 use futures::stream;
 use serde_json::{Value, json};
@@ -17,11 +19,13 @@ pub struct AnthropicProvider {
 }
 
 impl AnthropicProvider {
+    /// Creates an Anthropic provider using `MODEL` or the default Claude model.
     pub fn new(key: String) -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL").ok().map(ModelId::new);
         Self::new_with_model(key, model)
     }
 
+    /// Creates an Anthropic provider with an explicit or default Claude model.
     pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self, ProviderError> {
         let http = ProviderHttpClient::default()?;
 

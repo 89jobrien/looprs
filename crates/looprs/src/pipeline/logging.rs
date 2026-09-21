@@ -1,3 +1,5 @@
+//! Defines structured pipeline event sinks and JSONL logging adapters.
+
 use std::fs::{File, OpenOptions, create_dir_all};
 use std::io::{self, Write};
 use std::path::PathBuf;

@@ -1,3 +1,5 @@
+//! Parses skill Markdown into metadata, invocation rules, and prompt content.
+
 // Parser for SKILL.md files with YAML frontmatter
 
 use anyhow::{Context, Result};

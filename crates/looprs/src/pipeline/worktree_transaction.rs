@@ -1,3 +1,5 @@
+//! Captures and rolls back Git worktree state around tool execution.
+
 use std::collections::HashSet;
 use std::fs;
 use std::io::Write;

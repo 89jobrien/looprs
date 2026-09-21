@@ -1,3 +1,5 @@
+//! Collects best-effort branch, ahead, modified, and untracked repository state.
+
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 
@@ -13,6 +15,7 @@ pub struct GitInfo {
     pub untracked: u32,
 }
 
+/// Collects best-effort branch, ahead, modified, and untracked repository state.
 pub fn collect() -> GitInfo {
     let branch = branch_name();
     let ahead = commits_ahead();

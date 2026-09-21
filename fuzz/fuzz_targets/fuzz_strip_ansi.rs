@@ -1,3 +1,5 @@
+//! Fuzzes ANSI-sequence stripping and validates output safety invariants.
+
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 

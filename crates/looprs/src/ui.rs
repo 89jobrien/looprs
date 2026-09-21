@@ -1,9 +1,12 @@
+//! Renders sanitized human-facing CLI output and optional machine-readable events.
+
 use colored::*;
 
 use crate::automation_protocol;
 use crate::observability;
 use crate::sanitize;
 
+/// Initializes opt-in internal logging and records the observability root.
 pub fn init_logging() {
     // C2a: internal logs are opt-in via RUST_LOG. UI output remains separate.
     let mut builder = env_logger::Builder::from_default_env();
@@ -66,28 +69,33 @@ pub fn machine_event(kind: &str, data: serde_json::Value) {
     emit_machine_event(kind, data);
 }
 
+/// Prints a sanitized, bounded informational message and emits its machine event.
 pub fn info(msg: impl AsRef<str>) {
     let raw = msg.as_ref();
     println!("{}", sanitize::sanitize_preview_for_console(raw));
     emit_machine_event("info", serde_json::json!({ "message": raw }));
 }
 
+/// Prints a sanitized informational message without preview truncation.
 pub fn info_full(msg: impl AsRef<str>) {
     println!("{}", sanitize::sanitize_for_console(msg.as_ref()));
 }
 
+/// Prints a sanitized warning to stderr and emits its machine event.
 pub fn warn(msg: impl AsRef<str>) {
     let raw = msg.as_ref();
     eprintln!("{}", sanitize::sanitize_preview_for_console(raw));
     emit_machine_event("warn", serde_json::json!({ "message": raw }));
 }
 
+/// Prints a sanitized error to stderr and emits its machine event.
 pub fn error(msg: impl AsRef<str>) {
     let raw = msg.as_ref();
     eprintln!("{}", sanitize::sanitize_preview_for_console(raw));
     emit_machine_event("error", serde_json::json!({ "message": raw }));
 }
 
+/// Prints a sanitized error to stderr without preview truncation.
 pub fn error_full(msg: impl AsRef<str>) {
     eprintln!("{}", sanitize::sanitize_for_console(msg.as_ref()));
 }
@@ -268,6 +276,7 @@ fn shorten_model(model: &str) -> String {
     }
 }
 
+/// Prints the provider, model, and working-directory header and emits its event.
 pub fn header(provider: &str, model: &str, cwd: &str) {
     // provider/model/cwd are not secrets typically, but treat as untrusted strings.
     let p = sanitize::sanitize_preview_for_console(provider);
@@ -291,6 +300,7 @@ pub fn header(provider: &str, model: &str, cwd: &str) {
     );
 }
 
+/// Prints a sanitized assistant response and emits its machine event.
 pub fn assistant_text(text: &str) {
     let safe = sanitize::sanitize_preview_for_console(text);
     println!("\n{} {}", "●".blue().bold(), safe.blue());
@@ -313,6 +323,7 @@ pub fn write_chunk(text: &str) {
     emit_machine_event("write_chunk", serde_json::json!({ "text": text }));
 }
 
+/// Prints a sanitized tool invocation preview and emits its machine event.
 pub fn tool_call(tool_name: &str, input_preview: &str) {
     let safe_name = sanitize::sanitize_preview_for_console(tool_name);
     let safe_preview = sanitize::sanitize_preview_for_console(input_preview);
@@ -332,34 +343,40 @@ pub fn tool_call(tool_name: &str, input_preview: &str) {
     );
 }
 
+/// Prints a successful tool completion marker and emits its machine event.
 pub fn tool_ok() {
     println!("  {} {}", "└─".green(), "OK".green());
     emit_machine_event("tool_ok", serde_json::json!({}));
 }
 
+/// Prints a sanitized tool failure and emits its machine event.
 pub fn tool_err(err_msg: &str) {
     let safe = sanitize::sanitize_preview_for_console(err_msg);
     println!("  {} {}", "└─".red(), safe.red());
     emit_machine_event("tool_err", serde_json::json!({ "error": err_msg }));
 }
 
+/// Prints a sanitized dimmed section heading.
 pub fn section_title(title: &str) {
     let safe = sanitize::sanitize_preview_for_console(title);
     println!("\n{}", safe.dimmed());
 }
 
+/// Prints a sanitized key and abbreviated value pair.
 pub fn kv_preview(key: &str, value_preview: &str) {
     let k = sanitize::sanitize_preview_for_console(key);
     let v = sanitize::sanitize_preview_for_console(value_preview);
     println!("  {} {}", k.cyan(), v.dimmed());
 }
 
+/// Prints a sanitized command-start message and emits its machine event.
 pub fn running_command(command: &str) {
     let safe = sanitize::sanitize_preview_for_console(command);
     println!("{} Running: {}", "●".dimmed(), safe.dimmed());
     emit_machine_event("running_command", serde_json::json!({ "command": command }));
 }
 
+/// Prints sanitized command output bounded by the preview limit.
 pub fn output_preview(text: &str) {
     let safe = sanitize::sanitize_preview_for_console(text);
     println!("{safe}");
@@ -373,6 +390,7 @@ pub fn output_preview_colored(text: &str) -> String {
     sanitize::strip_ansi(&truncated)
 }
 
+/// Prints the REPL farewell and emits its machine event.
 pub fn goodbye() {
     println!("\n{}", "Goodbye!".dimmed());
     emit_machine_event("goodbye", serde_json::json!({}));

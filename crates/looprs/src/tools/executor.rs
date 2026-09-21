@@ -1,3 +1,5 @@
+//! Defines injectable tool catalog and dispatch ports with built-in adapters.
+
 use serde_json::Value;
 
 use std::sync::Arc;
@@ -49,6 +51,7 @@ impl ToolCatalog for StaticToolCatalog {
 /// with a stub executor instead of a real subprocess/filesystem backend.
 #[async_trait::async_trait]
 pub trait ToolDispatcher: Send + Sync {
+    /// Dispatches a named tool call with validated JSON arguments and runtime context.
     async fn execute(
         &self,
         name: &str,

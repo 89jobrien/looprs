@@ -1,3 +1,5 @@
+//! Strips terminal controls, redacts secrets, and bounds console previews.
+
 use regex::Regex;
 use std::sync::OnceLock;
 
@@ -29,6 +31,7 @@ pub(crate) fn advance_ansi_state(state: AnsiState, byte: u8) -> AnsiState {
     }
 }
 
+/// Returns the positive `LOOPRS_PREVIEW_LEN` override or the default limit.
 pub fn preview_len() -> usize {
     std::env::var("LOOPRS_PREVIEW_LEN")
         .ok()
@@ -37,6 +40,7 @@ pub fn preview_len() -> usize {
         .unwrap_or(DEFAULT_PREVIEW_LEN)
 }
 
+/// Returns whether raw output is explicitly enabled in a non-production debug build.
 pub fn allow_raw_output() -> bool {
     if !cfg!(debug_assertions) {
         return false;
@@ -57,6 +61,7 @@ pub fn allow_raw_output() -> bool {
     !matches!(env.as_str(), "prod" | "production")
 }
 
+/// Removes ANSI control sequences from text while preserving printable content.
 pub fn strip_ansi(input: &str) -> String {
     String::from_utf8_lossy(&strip_ansi_bytes(input.as_bytes())).to_string()
 }
@@ -123,6 +128,7 @@ fn strip_ansi_bytes(bytes: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Strips ANSI controls and redacts secrets unless debug raw output is allowed.
 pub fn sanitize_for_console(input: &str) -> String {
     if allow_raw_output() {
         return input.to_string();
@@ -132,6 +138,7 @@ pub fn sanitize_for_console(input: &str) -> String {
     redact(&no_ansi)
 }
 
+/// Sanitizes console text and truncates it to the configured preview length.
 pub fn sanitize_preview_for_console(input: &str) -> String {
     let sanitized = sanitize_for_console(input);
     truncate_chars(&sanitized, preview_len())

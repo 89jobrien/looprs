@@ -1,3 +1,5 @@
+//! Bootstraps the configured provider and agent runtime for CLI front ends.
+
 use looprs::Agent;
 use looprs::ModelId;
 use looprs::ProviderConfig;
@@ -16,6 +18,7 @@ pub struct BootstrappedRuntime {
     pub agent: Agent,
 }
 
+/// Loads configuration, creates the selected provider, and constructs an agent runtime.
 pub async fn bootstrap_runtime(
     model_override: Option<ModelId>,
 ) -> anyhow::Result<BootstrappedRuntime> {
@@ -58,6 +61,7 @@ pub async fn bootstrap_runtime(
     })
 }
 
+/// Converts a missing Ollama model error into an actionable diagnostic report.
 pub fn provider_bootstrap_report(error: &anyhow::Error) -> Option<miette::Report> {
     let provider_error = error.downcast_ref::<looprs::ProviderError>()?;
 

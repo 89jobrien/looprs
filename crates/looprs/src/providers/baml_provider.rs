@@ -1,3 +1,5 @@
+//! Adapts generated BAML chat clients to the looprs inference provider port.
+
 use async_trait::async_trait;
 use serde_json::Value;
 
@@ -20,6 +22,7 @@ pub struct BamlProvider {
 }
 
 impl BamlProvider {
+    /// Creates a BAML provider for a generated client name and model.
     pub fn new(client_name: impl Into<String>, model: ModelId) -> Self {
         Self {
             client_name: client_name.into(),

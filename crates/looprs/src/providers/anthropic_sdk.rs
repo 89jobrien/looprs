@@ -1,3 +1,5 @@
+//! Implements Anthropic inference through the Claudius SDK.
+
 use claudius::{Anthropic, MessageCreateParams};
 use serde_json::{Value, json};
 
@@ -14,11 +16,13 @@ pub struct AnthropicSdkProvider {
 }
 
 impl AnthropicSdkProvider {
+    /// Creates an SDK-backed Anthropic provider using `MODEL` when set.
     pub fn new(key: String) -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL").ok().map(ModelId::new);
         Self::new_with_model(key, model)
     }
 
+    /// Configures the Anthropic SDK client with the key and selected model.
     pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self, ProviderError> {
         let model = model.unwrap_or_else(ModelId::claude_opus);
         let client = Anthropic::new(Some(key.clone()))

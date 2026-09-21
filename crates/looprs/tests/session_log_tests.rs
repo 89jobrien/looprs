@@ -1,3 +1,5 @@
+//! Verifies session JSONL persistence, replay, append behavior, and failure handling.
+
 use looprs::session_log::{SessionEvent, SessionLogger, SessionStore};
 use std::io::BufRead;
 use tempfile::tempdir;

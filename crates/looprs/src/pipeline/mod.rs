@@ -1,3 +1,5 @@
+//! Executes configured checks, tools, scoring, and reward steps as a pipeline.
+
 mod command_runner;
 pub mod context_compact;
 pub mod logging;

@@ -1,3 +1,5 @@
+//! Resolves executable names against the current process PATH.
+
 use std::path::{Path, PathBuf};
 
 use super::registry::ToolResolver;

@@ -1,3 +1,5 @@
+//! Verifies CLI, environment, project, user, and default model precedence.
+
 use std::sync::{Mutex, OnceLock};
 
 use tempfile::TempDir;

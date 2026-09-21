@@ -1,3 +1,5 @@
+//! Orchestrates provider inference, tool calls, hooks, observations, and conversation state.
+
 use crate::api::ContentBlock;
 use crate::api::Message;
 use crate::app_config::DefaultsConfig;
@@ -600,6 +602,8 @@ impl Agent {
     /// Drives one structured stream per inference step, emits text deltas, and
     /// continues tool turns until the provider returns terminal assistant text.
     pub async fn run_turn_streaming(&mut self) -> Result<(), AgentError> {
+        // TODO(feature-idea 9): Unify streaming and buffered turn engines. (#56)
+        // Share safety, pipeline, rollback, scoring, and persistence behavior.
         let result = self.run_turn_streaming_inner().await;
         if let Err(error) = &result {
             let event_ctx = EventContext::new().with_error(error.to_string());

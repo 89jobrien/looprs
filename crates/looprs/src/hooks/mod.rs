@@ -1,3 +1,5 @@
+//! Defines YAML hooks and merges user and repository hook registries by lifecycle event.
+
 use crate::events::Event;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -62,6 +64,7 @@ pub struct HookRegistry {
 }
 
 impl HookRegistry {
+    /// Creates an empty hook registry with separate user and repository sources.
     pub fn new() -> Self {
         HookRegistry {
             hooks_by_event: HashMap::new(),
@@ -70,6 +73,7 @@ impl HookRegistry {
         }
     }
 
+    /// Loads all YAML hook definitions from one directory, skipping invalid files.
     pub fn load_from_directory(dir: &PathBuf) -> anyhow::Result<Self> {
         let mut registry = HookRegistry::new();
 
