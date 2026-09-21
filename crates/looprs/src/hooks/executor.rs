@@ -1,6 +1,7 @@
 use super::{Action, Hook, PromptCallback};
 use crate::app_config::AppConfig;
 use crate::events::EventContext;
+use crate::rules::{ExecutionBoundary, ExecutionRequest, PolicyEffect, RuleRegistry};
 use crate::state::AppState;
 use std::collections::HashMap;
 
@@ -15,6 +16,12 @@ pub struct HookResult {
     pub action_index: usize,
     pub output: String,
     pub inject_key: Option<String>,
+}
+
+#[derive(Clone, Copy)]
+struct ExecutionControls<'a> {
+    timeout_secs: Option<u64>,
+    policy: Option<(&'a RuleRegistry, &'a str)>,
 }
 
 impl HookExecutor {
@@ -41,6 +48,43 @@ impl HookExecutor {
         prompt_fn: Option<&PromptCallback>,
         secret_prompt_fn: Option<&PromptCallback>,
     ) -> anyhow::Result<Vec<HookResult>> {
+        Self::execute_hook_with_optional_policy(
+            hook,
+            context,
+            approval_fn,
+            prompt_fn,
+            secret_prompt_fn,
+            None,
+        )
+    }
+
+    /// Execute a hook while enforcing runtime execution policies.
+    pub fn execute_hook_with_policy(
+        hook: &Hook,
+        context: &EventContext,
+        approval_fn: Option<&ApprovalCallback>,
+        prompt_fn: Option<&PromptCallback>,
+        secret_prompt_fn: Option<&PromptCallback>,
+        rules: &RuleRegistry,
+    ) -> anyhow::Result<Vec<HookResult>> {
+        Self::execute_hook_with_optional_policy(
+            hook,
+            context,
+            approval_fn,
+            prompt_fn,
+            secret_prompt_fn,
+            Some(rules),
+        )
+    }
+
+    fn execute_hook_with_optional_policy(
+        hook: &Hook,
+        context: &EventContext,
+        approval_fn: Option<&ApprovalCallback>,
+        prompt_fn: Option<&PromptCallback>,
+        secret_prompt_fn: Option<&PromptCallback>,
+        rules: Option<&RuleRegistry>,
+    ) -> anyhow::Result<Vec<HookResult>> {
         let timeout_secs = AppConfig::load()
             .ok()
             .and_then(|c| c.defaults.timeout_seconds);
@@ -64,7 +108,10 @@ impl HookExecutor {
                 prompt_fn,
                 secret_prompt_fn,
                 &mut local_ctx,
-                timeout_secs,
+                ExecutionControls {
+                    timeout_secs,
+                    policy: rules.map(|registry| (registry, hook.name.as_str())),
+                },
             )? {
                 results.push(HookResult {
                     hook_name: hook.name.clone(),
@@ -104,7 +151,7 @@ impl HookExecutor {
         prompt_fn: Option<&PromptCallback>,
         secret_prompt_fn: Option<&PromptCallback>,
         local_ctx: &mut HashMap<String, String>,
-        timeout_secs: Option<u64>,
+        controls: ExecutionControls<'_>,
     ) -> anyhow::Result<Option<(String, Option<String>)>> {
         match action {
             Action::Command {
@@ -113,6 +160,22 @@ impl HookExecutor {
                 requires_approval,
                 approval_prompt,
             } => {
+                if let Some((rules, hook_name)) = controls.policy {
+                    let request =
+                        ExecutionRequest::new(ExecutionBoundary::Hook, hook_name, command);
+                    let decision = rules.evaluate(&request)?;
+                    log::info!(
+                        "execution_policy {}",
+                        serde_json::to_string(&decision).unwrap_or_else(|_| "{}".to_string())
+                    );
+                    let approved = if decision.effect == PolicyEffect::Approval {
+                        approval_fn.is_some_and(|callback| callback(&decision.reason))
+                    } else {
+                        false
+                    };
+                    rules.authorize(&request, approved)?;
+                }
+
                 // Check if approval is required
                 if *requires_approval {
                     let prompt = approval_prompt
@@ -135,7 +198,7 @@ impl HookExecutor {
                     }
                 }
 
-                let output = Self::run_command(command, timeout_secs)?;
+                let output = Self::run_command(command, controls.timeout_secs)?;
                 Ok(Some((output, inject_as.clone())))
             }
             Action::Message { text } => {
@@ -156,7 +219,7 @@ impl HookExecutor {
                             prompt_fn,
                             secret_prompt_fn,
                             local_ctx,
-                            timeout_secs,
+                            controls,
                         )? {
                             last_result = Some(result);
                         }
@@ -792,5 +855,47 @@ actions:
 
         let saved = std::fs::read_to_string(".looprs/state.json").unwrap();
         assert!(saved.contains("\"demo_seen\": true"));
+    }
+
+    #[test]
+    fn denied_hook_command_never_executes() {
+        use crate::rules::{
+            ExecutionBoundary, ExecutionPolicy, PolicyEffect, PolicySource, RuleRegistry,
+        };
+
+        let yaml = r#"name: denied
+trigger: SessionStart
+actions:
+  - type: command
+    command: touch policy-bypass
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let cwd = TempDir::new().unwrap();
+        let _guard = DirGuard::change_to(cwd.path());
+        let mut rules = RuleRegistry::new();
+        rules.register_policy(ExecutionPolicy {
+            id: "deny-hooks".to_string(),
+            effect: PolicyEffect::Deny,
+            boundary: ExecutionBoundary::Hook,
+            target: "*".to_string(),
+            input_contains: None,
+            reason: "hooks disabled".to_string(),
+            audit: Default::default(),
+            source: PolicySource::Repository,
+        });
+
+        let error = HookExecutor::execute_hook_with_policy(
+            &hook,
+            &EventContext::new(),
+            None,
+            None,
+            None,
+            &rules,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("hooks disabled"));
+        assert!(!cwd.path().join("policy-bypass").exists());
     }
 }

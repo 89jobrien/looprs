@@ -17,8 +17,8 @@ use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
 use looprs::ui;
 use looprs::{
     Agent, AgentRegistry, ApprovalCallback, Command, CommandRegistry, Event, EventContext,
-    HookRegistry, PromptCallback, SessionContext, SkillRegistry, console_approval_prompt,
-    console_prompt, console_secret_prompt,
+    ExecutionBoundary, ExecutionRequest, HookRegistry, PolicyEffect, PromptCallback,
+    SessionContext, SkillRegistry, console_approval_prompt, console_prompt, console_secret_prompt,
 };
 use looprs::{ProviderConfig, ProviderSettings};
 
@@ -1159,6 +1159,17 @@ async fn execute_command(
     let provider_name = &mut state.provider_name;
     let model = &mut state.model;
     use looprs::CommandAction;
+
+    let policy_request =
+        ExecutionRequest::new(ExecutionBoundary::CustomCommand, cmd.name.as_str(), input);
+    let decision = agent.evaluate_execution(&policy_request)?;
+    let approved = decision.effect == PolicyEffect::Approval
+        && console_approval_prompt(&format!(
+            "Policy '{}' requires approval: {}",
+            decision.matched_policy.as_deref().unwrap_or("default"),
+            decision.reason
+        ));
+    agent.authorize_execution(&policy_request, approved)?;
 
     match &cmd.action {
         CommandAction::Prompt { template, .. } => {

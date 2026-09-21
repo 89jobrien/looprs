@@ -12,7 +12,9 @@ use crate::orchestration::DelegationContext;
 use crate::ports::{SessionStore, UserOutput};
 use crate::providers::LLMProvider;
 use crate::providers::{InferenceRequest, InferenceResponse};
-use crate::rules::RuleRegistry;
+use crate::rules::{
+    ExecutionBoundary, ExecutionRequest, PolicyDecision, PolicyError, RuleRegistry,
+};
 use crate::session_log::SessionEvent;
 use crate::system_monitor::SystemMonitor;
 use crate::tools::{ToolCatalog, ToolContext, ToolDispatcher, ToolExecutor, ToolPorts};
@@ -290,6 +292,45 @@ impl Agent {
         self
     }
 
+    /// Evaluate a runtime execution request without performing the action.
+    pub fn evaluate_execution(
+        &self,
+        request: &ExecutionRequest,
+    ) -> Result<PolicyDecision, PolicyError> {
+        self.rules.evaluate(request)
+    }
+
+    /// Enforce a runtime execution request before the caller performs side effects.
+    pub fn authorize_execution(
+        &self,
+        request: &ExecutionRequest,
+        approved: bool,
+    ) -> Result<PolicyDecision, PolicyError> {
+        self.rules.authorize(request, approved)
+    }
+
+    fn tool_policy_error(
+        &self,
+        name: &str,
+        input: &serde_json::Value,
+    ) -> Option<crate::tools::ToolError> {
+        let request = ExecutionRequest::new(ExecutionBoundary::Tool, name, input.to_string());
+        match self.rules.authorize(&request, false) {
+            Ok(decision) => {
+                log::info!(
+                    "execution_policy {}",
+                    serde_json::to_string(&decision).unwrap_or_else(|_| "{}".to_string())
+                );
+                None
+            }
+            Err(error) => Some(crate::tools::ToolError::ModeDenied {
+                tool: name.to_string(),
+                mode: "policy".to_string(),
+                reason: error.to_string(),
+            }),
+        }
+    }
+
     /// Fire one event through the internal event manager.
     pub fn fire_event(&self, event: Event, context: &EventContext) {
         self.events.fire(event, context);
@@ -468,12 +509,13 @@ impl Agent {
 
         if let Some(hooks) = self.hooks.hooks_for_event(event) {
             for hook in hooks {
-                if let Ok(results) = HookExecutor::execute_hook_with_callbacks(
+                if let Ok(results) = HookExecutor::execute_hook_with_policy(
                     hook,
                     &hook_context,
                     approval_fn,
                     prompt_fn,
                     secret_prompt_fn,
+                    &self.rules,
                 ) {
                     // Inject hook outputs into context metadata
                     for result in results {
@@ -753,6 +795,8 @@ impl Agent {
                         mode: "delegated".to_string(),
                         reason: "not in agent tool allowlist".to_string(),
                     })
+                } else if let Some(error) = self.tool_policy_error(name.as_str(), &input) {
+                    Err(error)
                 } else {
                     self.tool_dispatcher
                         .execute(name.as_str(), &input, &self.tool_ctx)
@@ -991,6 +1035,7 @@ impl Agent {
                 id: crate::types::ToolId,
                 name: crate::types::ToolName,
                 input: serde_json::Value,
+                policy_error: Option<crate::tools::ToolError>,
             }
 
             struct ToolCallOutcome {
@@ -1045,6 +1090,7 @@ impl Agent {
                     id: id.clone(),
                     name: name.clone(),
                     input: input.clone(),
+                    policy_error: self.tool_policy_error(name.as_str(), input),
                 });
             }
 
@@ -1066,16 +1112,18 @@ impl Agent {
                         async move {
                             let name = call.name.clone();
                             let input = call.input.clone();
-                            let result =
-                                if denied_by_policy(tool_policy_for_exec.as_ref(), name.as_str()) {
-                                    Err(crate::tools::ToolError::ModeDenied {
-                                        tool: name.to_string(),
-                                        mode: "delegated".to_string(),
-                                        reason: "not in agent tool allowlist".to_string(),
-                                    })
-                                } else {
-                                    executor.execute(name.as_str(), &input, &tool_ctx).await
-                                };
+                            let result = if let Some(error) = call.policy_error {
+                                Err(error)
+                            } else if denied_by_policy(tool_policy_for_exec.as_ref(), name.as_str())
+                            {
+                                Err(crate::tools::ToolError::ModeDenied {
+                                    tool: name.to_string(),
+                                    mode: "delegated".to_string(),
+                                    reason: "not in agent tool allowlist".to_string(),
+                                })
+                            } else {
+                                executor.execute(name.as_str(), &input, &tool_ctx).await
+                            };
 
                             ToolCallOutcome {
                                 position: call.position,
@@ -1092,7 +1140,9 @@ impl Agent {
             } else {
                 let mut outcomes = Vec::with_capacity(pending_calls.len());
                 for call in pending_calls {
-                    let result = if denied_by_policy(tool_policy.as_ref(), call.name.as_str()) {
+                    let result = if let Some(error) = call.policy_error {
+                        Err(error)
+                    } else if denied_by_policy(tool_policy.as_ref(), call.name.as_str()) {
                         Err(crate::tools::ToolError::ModeDenied {
                             tool: call.name.to_string(),
                             mode: "delegated".to_string(),
@@ -2163,6 +2213,84 @@ actions:
                 if content.contains("not in agent tool allowlist"))
                 ))
         );
+    }
+
+    #[tokio::test]
+    async fn runtime_policy_denies_tool_before_dispatch() {
+        use crate::rules::{
+            ExecutionBoundary, ExecutionPolicy, PolicyEffect, PolicySource, RuleRegistry,
+        };
+        use crate::tools::ToolExecutor;
+        use serde_json::json;
+        use std::sync::{Arc, Mutex};
+
+        struct RecordingToolExecutor {
+            calls: Arc<Mutex<Vec<String>>>,
+        }
+
+        #[async_trait::async_trait]
+        impl ToolExecutor for RecordingToolExecutor {
+            async fn execute(
+                &self,
+                name: &str,
+                _args: &serde_json::Value,
+                _ctx: &ToolContext,
+            ) -> Result<String, crate::tools::ToolError> {
+                self.calls.lock().unwrap().push(name.to_string());
+                Ok("executed".to_string())
+            }
+        }
+
+        let provider = MockProvider::new(vec![
+            InferenceResponse {
+                content: vec![ContentBlock::ToolUse {
+                    id: crate::types::ToolId::new("tool_1"),
+                    name: crate::types::ToolName::new("bash"),
+                    input: json!({"command": "pwd"}),
+                }],
+                stop_reason: "tool_use".to_string(),
+                usage: Usage {
+                    input_tokens: 1,
+                    output_tokens: 1,
+                },
+            },
+            InferenceResponse {
+                content: vec![ContentBlock::Text {
+                    text: "done".to_string(),
+                }],
+                stop_reason: "end_turn".to_string(),
+                usage: Usage {
+                    input_tokens: 1,
+                    output_tokens: 1,
+                },
+            },
+        ]);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let executor = RecordingToolExecutor {
+            calls: Arc::clone(&calls),
+        };
+        let mut rules = RuleRegistry::new();
+        rules.register_policy(ExecutionPolicy {
+            id: "deny-bash".to_string(),
+            effect: PolicyEffect::Deny,
+            boundary: ExecutionBoundary::Tool,
+            target: "bash".to_string(),
+            input_contains: None,
+            reason: "shell access denied".to_string(),
+            audit: Default::default(),
+            source: PolicySource::Repository,
+        });
+        let mut agent = agent_for_test(provider)
+            .with_tool_executor(Box::new(executor))
+            .with_rules(rules);
+        agent.add_user_message("run pwd");
+
+        agent.run_turn().await.unwrap();
+
+        assert!(calls.lock().unwrap().is_empty());
+        assert!(agent.messages.iter().any(|message| message.content.iter().any(
+            |block| matches!(block, ContentBlock::ToolResult { content, .. } if content.contains("shell access denied"))
+        )));
     }
 
     #[tokio::test]
