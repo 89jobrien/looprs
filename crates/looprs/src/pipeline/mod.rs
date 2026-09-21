@@ -1,3 +1,5 @@
+//! Runs configurable Cargo quality checks and reports each check's exit status.
+
 pub mod context_compact;
 pub mod logging;
 pub mod types;

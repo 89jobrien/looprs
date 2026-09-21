@@ -1,3 +1,5 @@
+//! Tests model precedence across overrides, environment variables, and configuration.
+
 use std::sync::{Mutex, OnceLock};
 
 use tempfile::TempDir;

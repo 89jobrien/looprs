@@ -1,3 +1,5 @@
+//! Provides console prompts for approvals, text input, and hidden input.
+
 /// Approval utilities for interactive prompts
 use std::io::{self, Write};
 

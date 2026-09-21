@@ -1,3 +1,5 @@
+//! Core library for agent inference, tools, hooks, configuration, and extensibility.
+
 pub mod adapters;
 mod agent;
 pub mod agents;

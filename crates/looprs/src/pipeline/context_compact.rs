@@ -1,3 +1,5 @@
+//! Builds bounded repository context from Git changes, globs, and recent files.
+
 use crate::app_config::PipelineCompactionConfig;
 use anyhow::Result;
 use glob::{Pattern, glob};

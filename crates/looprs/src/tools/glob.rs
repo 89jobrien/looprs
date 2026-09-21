@@ -1,3 +1,5 @@
+//! Implements sandboxed glob search with modification-time ordering and output caps.
+
 use super::ToolArgs;
 use super::ToolContext;
 use super::error::ToolError;

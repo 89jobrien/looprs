@@ -1,3 +1,5 @@
+//! Provider-neutral message, content-block, request, and tool-definition types.
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -10,6 +12,7 @@ pub struct Message {
 }
 
 impl Message {
+    /// Creates a user message containing one text block.
     pub fn user(text: impl Into<String>) -> Self {
         Self {
             role: "user".to_string(),
@@ -17,6 +20,7 @@ impl Message {
         }
     }
 
+    /// Creates an assistant message from the supplied content blocks.
     pub fn assistant(content: Vec<ContentBlock>) -> Self {
         Self {
             role: "assistant".to_string(),
@@ -24,6 +28,7 @@ impl Message {
         }
     }
 
+    /// Wraps tool-result blocks in a user-role message.
     pub fn tool_results(results: Vec<ContentBlock>) -> Self {
         Self {
             role: "user".to_string(),

@@ -1,3 +1,5 @@
+//! Collects best-effort repository context from Jujutsu.
+
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 

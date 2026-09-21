@@ -1,3 +1,5 @@
+//! Loads and matches path-scoped instruction files for prompt injection.
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};

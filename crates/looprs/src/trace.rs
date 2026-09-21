@@ -1,3 +1,5 @@
+//! Appends inference request and response turns to per-session JSONL traces.
+
 use anyhow::Result;
 use serde_json::json;
 use std::fs::{self, OpenOptions};

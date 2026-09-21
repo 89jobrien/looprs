@@ -1,3 +1,5 @@
+//! Parses lifecycle-hook definitions from YAML files.
+
 use super::Hook;
 use std::fs;
 use std::path::Path;

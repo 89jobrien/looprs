@@ -1,3 +1,5 @@
+//! Defines lifecycle hooks and loads user and repository hook registries.
+
 use crate::events::Event;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -62,6 +64,7 @@ pub struct HookRegistry {
 }
 
 impl HookRegistry {
+    /// Creates an empty hook registry.
     pub fn new() -> Self {
         HookRegistry {
             hooks_by_event: HashMap::new(),
@@ -70,6 +73,10 @@ impl HookRegistry {
         }
     }
 
+    /// Loads `.yaml` and `.yml` hooks from `dir`, grouped by trigger.
+    ///
+    /// Returns an empty registry if `dir` does not exist. Malformed hook files
+    /// are reported and skipped.
     pub fn load_from_directory(dir: &PathBuf) -> anyhow::Result<Self> {
         let mut registry = HookRegistry::new();
 

@@ -1,3 +1,5 @@
+//! Defines diagnostic errors returned by built-in tool execution.
+
 use miette::Diagnostic;
 use thiserror::Error;
 

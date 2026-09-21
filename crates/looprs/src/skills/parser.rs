@@ -1,3 +1,5 @@
+//! Parses `SKILL.md` YAML frontmatter and body content into skills.
+
 // Parser for SKILL.md files with YAML frontmatter
 
 use anyhow::{Context, Result};

@@ -1,3 +1,5 @@
+//! Locates observability storage and appends timestamped JSONL records.
+
 use serde_json::Value;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};

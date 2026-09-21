@@ -1,3 +1,5 @@
+//! Provider selection, message conversion, secret resolution, and shared HTTP support.
+
 use std::env;
 use std::time::Duration;
 
@@ -26,6 +28,7 @@ pub(crate) struct ProviderHttpClient {
 }
 
 impl ProviderHttpClient {
+    /// Builds an HTTP client with a whole-request timeout of `timeout_secs`.
     pub fn new(timeout_secs: u64) -> Result<Self, ProviderError> {
         let client = Client::builder()
             .timeout(Duration::from_secs(timeout_secs))
@@ -33,10 +36,12 @@ impl ProviderHttpClient {
         Ok(Self { client })
     }
 
+    /// Builds an HTTP client with the default 120-second request timeout.
     pub fn default() -> Result<Self, ProviderError> {
         Self::new(DEFAULT_TIMEOUT_SECS)
     }
 
+    /// Returns the underlying `reqwest` client.
     pub fn client(&self) -> &Client {
         &self.client
     }

@@ -1,3 +1,5 @@
+//! Shared runtime bootstrap, turn execution, and metadata helpers for CLI front ends.
+
 pub mod events;
 pub mod facade;
 pub mod session;

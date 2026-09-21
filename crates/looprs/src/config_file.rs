@@ -1,3 +1,5 @@
+//! Loads, saves, and merges provider settings from `.looprs/provider.json`.
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;

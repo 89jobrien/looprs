@@ -1,3 +1,5 @@
+//! Probes whether external `rg` and `fd` binaries are available.
+
 use std::ffi::OsString;
 
 use crate::plugins::NamedTool;

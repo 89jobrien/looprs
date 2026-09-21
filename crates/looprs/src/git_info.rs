@@ -1,3 +1,5 @@
+//! Collects best-effort Git status information for the UI statusline.
+
 use std::process::Command;
 
 /// A snapshot of the current repo's git state, for display in the

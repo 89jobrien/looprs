@@ -1,3 +1,5 @@
+//! Fuzzes `SKILL.md` parsing with arbitrary UTF-8 input to detect panics.
+
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 use std::path::PathBuf;

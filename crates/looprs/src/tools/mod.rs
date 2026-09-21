@@ -1,3 +1,5 @@
+//! Defines tool schemas, sandboxed dispatch, filesystem modes, and MCP calls.
+
 mod availability;
 mod bash;
 mod edit;

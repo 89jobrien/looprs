@@ -30,6 +30,7 @@ fn read_username(path: &str) -> Result<String, io::Error> {
 ```
 
 The `?` operator:
+
 - Returns early on `Err`
 - Automatically converts errors via `From` trait
 - Only works in functions returning `Result` or `Option`
@@ -101,6 +102,7 @@ fn parse_port(s: &str) -> Result<u16> {
 ## Advanced Patterns
 
 See `references/error_patterns.md` for:
+
 - Error downcasting
 - Multiple error types
 - Error recovery strategies

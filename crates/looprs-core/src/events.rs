@@ -1,3 +1,5 @@
+//! Lifecycle event types, event context, and synchronous in-process dispatch.
+
 use std::collections::HashMap;
 
 domain_event!(Event {
@@ -26,6 +28,7 @@ pub struct EventContext {
 }
 
 impl EventContext {
+    /// Creates an empty event context.
     pub fn new() -> Self {
         EventContext {
             session_context: None,
@@ -38,31 +41,37 @@ impl EventContext {
         }
     }
 
+    /// Sets the session context.
     pub fn with_session_context(mut self, ctx: String) -> Self {
         self.session_context = Some(ctx);
         self
     }
 
+    /// Sets the submitted user message.
     pub fn with_user_message(mut self, msg: String) -> Self {
         self.user_message = Some(msg);
         self
     }
 
+    /// Sets the tool name.
     pub fn with_tool_name(mut self, name: String) -> Self {
         self.tool_name = Some(name);
         self
     }
 
+    /// Sets the tool output.
     pub fn with_tool_output(mut self, output: String) -> Self {
         self.tool_output = Some(output);
         self
     }
 
+    /// Sets the error message.
     pub fn with_error(mut self, error: String) -> Self {
         self.error = Some(error);
         self
     }
 
+    /// Inserts a metadata entry.
     pub fn with_metadata(mut self, key: String, value: String) -> Self {
         self.metadata.insert(key, value);
         self
@@ -84,12 +93,14 @@ pub struct EventManager {
 }
 
 impl EventManager {
+    /// Creates an event manager with no handlers.
     pub fn new() -> Self {
         EventManager {
             handlers: HashMap::new(),
         }
     }
 
+    /// Registers a handler for an event.
     pub fn on<F>(&mut self, event: Event, handler: F)
     where
         F: Fn(Event, &EventContext) + Send + Sync + 'static,
@@ -100,6 +111,7 @@ impl EventManager {
             .push(Box::new(handler));
     }
 
+    /// Invokes every handler registered for an event.
     pub fn fire(&self, event: Event, context: &EventContext) {
         if let Some(handlers) = self.handlers.get(&event) {
             for handler in handlers {
@@ -108,6 +120,7 @@ impl EventManager {
         }
     }
 
+    /// Removes every handler registered for an event.
     pub fn clear(&mut self, event: Event) {
         self.handlers.remove(&event);
     }

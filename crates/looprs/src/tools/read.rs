@@ -1,3 +1,5 @@
+//! Implements sandboxed, line-numbered file reads with offset and limit pagination.
+
 use super::ToolArgs;
 use super::ToolContext;
 use super::error::ToolError;

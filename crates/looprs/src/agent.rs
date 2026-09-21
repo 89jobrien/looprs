@@ -1,3 +1,5 @@
+//! Orchestrates provider inference, tool execution, hooks, observations, and session logging.
+
 use crate::api::ContentBlock;
 use crate::api::Message;
 use crate::app_config::DefaultsConfig;
@@ -560,7 +562,6 @@ impl Agent {
     //   3. Collect results and merge into a single `InferenceResponse`.
     //   4. Guard with `agents.orchestration = "parallel"` config flag so
     //      sequential remains the default.
-    //
     // Blocked by: stable AgentBuilder and AgentRuntime Clone impls.
     /// Runs one full agent turn: sends the current conversation (plus
     /// system prompt and any hook-injected context) to the provider, then

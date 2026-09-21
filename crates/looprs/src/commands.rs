@@ -1,3 +1,5 @@
+//! Defines YAML-backed slash commands and their registry.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -6,10 +8,14 @@ use std::path::PathBuf;
 /// A custom command definition loaded from YAML
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Command {
+    /// The command's primary invocation name (without leading `/`).
     pub name: String,
+    /// Short description shown in command listings/help.
     pub description: String,
+    /// Additional names that also invoke this command.
     #[serde(default)]
     pub aliases: Vec<String>,
+    /// Action executed when the command is invoked.
     pub action: CommandAction,
 }
 
@@ -17,18 +23,24 @@ pub struct Command {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum CommandAction {
+    /// Submits `template` as a user prompt. `variables` is loaded from YAML
+    /// but is not currently applied during command execution.
     #[serde(rename = "prompt")]
     Prompt {
         template: String,
         #[serde(default)]
         variables: HashMap<String, String>,
     },
+    /// Runs `command` through Nushell after replacing `{args}` with the
+    /// command-line arguments. When enabled, `inject_output` appends stdout
+    /// to the conversation as user-message context.
     #[serde(rename = "shell")]
     Shell {
         command: String,
         #[serde(default)]
         inject_output: bool,
     },
+    /// Displays `text` directly to the user, without invoking the agent.
     #[serde(rename = "message")]
     Message { text: String },
     /// Switch the active LLM provider/model in-session without restarting.
@@ -46,6 +58,7 @@ pub struct CommandRegistry {
 }
 
 impl CommandRegistry {
+    /// Creates an empty registry.
     pub fn new() -> Self {
         CommandRegistry {
             commands: HashMap::new(),
@@ -140,11 +153,9 @@ impl Default for CommandRegistry {
 // `cargo insta` is available. Snapshot the rendered output of each built-in command
 // (help, model-status, score-session, etc.) and each bundled agent's system_prompt
 // so config drift is caught at test time rather than at runtime.
-//
-// Pattern:
+// Example snapshot test:
 //   use insta::assert_snapshot;
 //   assert_snapshot!("help_command_text", registry.get("help").unwrap().render());
-//
 // Run `cargo insta review` after adding new snapshots to accept the baseline.
 
 #[cfg(test)]

@@ -121,12 +121,15 @@ git push origin v0.1.12  # or whatever version was created
 ### Troubleshooting
 
 **"Could not find [Unreleased] section"**
+
 - Ensure your `CHANGELOG.md` has a `## [Unreleased]` section at the top
 
 **"You have uncommitted changes"**
+
 - Commit or stash your changes before running the script
 - Or use `--dry-run` to preview without committing
 
 **"No commits found"**
+
 - The script will add a generic "Version bump" entry
 - Consider using conventional commit format for better changelog organization

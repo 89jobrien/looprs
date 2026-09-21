@@ -38,6 +38,7 @@ mod tests {
 ```
 
 Run tests with:
+
 ```bash
 cargo test              # Run all tests
 cargo test test_name    # Run specific test
@@ -47,16 +48,19 @@ cargo test -- --nocapture  # Show println output
 ## Test Organization
 
 **Unit tests** - In the same file as the code:
+
 - Use `#[cfg(test)]` module
 - Test private functions
 - Fast, isolated
 
 **Integration tests** - In `tests/` directory:
+
 - Test public API only
 - Each file is a separate crate
 - Example: `tests/integration_test.rs`
 
 **Doc tests** - In documentation comments:
+
 ```rust
 /// Adds two numbers
 ///
@@ -71,6 +75,7 @@ pub fn add(a: i32, b: i32) -> i32 {
 ## Common Patterns
 
 **Testing Results:**
+
 ```rust
 #[test]
 fn test_result() -> Result<(), String> {
@@ -81,6 +86,7 @@ fn test_result() -> Result<(), String> {
 ```
 
 **Testing with setup/teardown:**
+
 ```rust
 use tempfile::TempDir;
 
@@ -93,6 +99,7 @@ fn test_with_cleanup() {
 ```
 
 **Async tests** (with tokio):
+
 ```rust
 #[tokio::test]
 async fn test_async() {
@@ -119,6 +126,7 @@ async fn test_async() {
 ## Coverage
 
 Generate coverage with `cargo-tarpaulin`:
+
 ```bash
 cargo install cargo-tarpaulin
 cargo tarpaulin --out Html

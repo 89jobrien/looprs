@@ -1,3 +1,5 @@
+//! Loads parsed `SKILL.md` files into a registry with directory precedence.
+
 // Loader for skills from directories
 
 use anyhow::{Context, Result};

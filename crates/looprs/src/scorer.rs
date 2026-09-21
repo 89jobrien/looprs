@@ -1,18 +1,35 @@
+//! Loads Ollama interaction pairs from session logs and scores them through OpenAI.
+
 use anyhow::Result;
 use serde::Deserialize;
 use std::path::Path;
 
+/// What caused a quality-scoring pass to be triggered mid-session (see
+/// `crate::agent::Agent::maybe_score`).
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScoreTrigger {
+    /// A tool call failed.
     OnError,
-    OnRepeat { tool_name: String, count: usize },
+    /// The same tool was called repeatedly in a row.
+    OnRepeat {
+        /// Name of the tool that was repeated.
+        tool_name: String,
+        /// How many times it had been called consecutively.
+        count: usize,
+    },
+    /// Explicitly requested: score the last `n` interaction pairs.
     OnDemand { n: usize },
 }
 
+/// A single user prompt and the assistant's response to it, extracted from
+/// a session log for scoring.
 #[derive(Debug)]
 pub struct InteractionPair {
+    /// The user's message.
     pub prompt: String,
+    /// The assistant's inference response text.
     pub response: String,
+    /// The session the pair was extracted from.
     pub session_id: String,
 }
 

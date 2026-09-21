@@ -1,3 +1,5 @@
+//! Terminal output, prompts, status lines, and optional machine-readable UI events.
+
 use colored::*;
 
 use crate::observability;
@@ -196,7 +198,7 @@ pub fn statusline_prompt_statusline(
         String::new()
     };
 
-    // cost
+    // Omit the cost segment until the session has nonzero spend.
     let cost_seg = if session_cost > 0.0 {
         format!("$ {session_cost:.2}")
     } else {

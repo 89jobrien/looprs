@@ -1,7 +1,10 @@
+//! Executes individual agent turns for non-interactive front ends.
+
 use looprs::Agent;
 use looprs::AgentError;
 use std::collections::HashMap;
 
+/// Runs one agent turn with metadata and returns its latest assistant text.
 #[allow(dead_code)]
 pub async fn run_single_turn(
     agent: &mut Agent,

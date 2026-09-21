@@ -1,3 +1,5 @@
+//! Finds executable files by searching the process `PATH`.
+
 use std::path::{Path, PathBuf};
 
 use super::registry::ToolResolver;

@@ -1,3 +1,5 @@
+//! Loads, registers, and matches agent skills defined by `SKILL.md` files.
+
 // Skills module - loads SKILL.md files with YAML frontmatter
 // Following Anthropic Agent Skills standard
 

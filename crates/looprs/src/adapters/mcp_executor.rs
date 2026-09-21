@@ -1,3 +1,5 @@
+//! Routes tool calls to an HTTP MCP server, with optional local fallback.
+
 use serde_json::Value;
 
 use crate::tools::{ToolContext, ToolError, ToolExecutor};

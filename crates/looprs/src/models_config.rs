@@ -1,3 +1,5 @@
+//! Loads provider, model-tier, and Magi settings from `~/.looprs/models.toml`.
+
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::HashMap;

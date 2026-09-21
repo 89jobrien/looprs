@@ -12,6 +12,13 @@ cargo build --release
 # or: cargo install --path crates/looprs-cli
 ```
 
+## Local env
+
+```bash
+cp .envrc.example .envrc
+direnv allow
+```
+
 ## Configure
 
 Pick a provider:
@@ -60,7 +67,7 @@ cargo install ripgrep fd-find
 
 Reference files in prompts with `@filename` syntax — contents are injected into the conversation.
 
-```
+```text
 Refactor @crates/looprs-cli/src/main.rs for better error handling
 Compare @crates/looprs/src/agent.rs and @crates/looprs/src/api.rs
 ```
@@ -69,7 +76,7 @@ Compare @crates/looprs/src/agent.rs and @crates/looprs/src/api.rs
 
 The `.looprs/` directory defines repo-local agent configuration. All extension points support dual-source loading: user-level (`~/.looprs/`) and repo-level (`.looprs/`), with repo taking precedence.
 
-```
+```text
 .looprs/
 ├── provider.json          # Provider/model settings
 ├── config.json            # Runtime defaults, file refs, pipeline, agents, paths
@@ -141,7 +148,6 @@ actions:
 Events: `SessionStart`, `UserPromptSubmit`, `InferenceComplete`, `PreToolUse`, `PostToolUse`, `OnError`, `OnWarning`, `SessionEnd`.
 
 Action types: `command` (Nushell command, optional `inject_as` and `requires_approval`), `message`, `conditional`.
-
 
 ## Observability
 

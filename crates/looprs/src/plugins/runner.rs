@@ -1,3 +1,5 @@
+//! Subprocess execution abstractions for production and test plugin runners.
+
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::{Command, Output};

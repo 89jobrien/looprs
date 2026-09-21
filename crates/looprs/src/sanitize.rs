@@ -1,3 +1,5 @@
+//! Removes terminal escape sequences and truncates untrusted display text.
+
 use regex::Regex;
 use std::sync::OnceLock;
 

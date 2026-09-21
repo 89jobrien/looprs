@@ -1,3 +1,5 @@
+//! Ollama-backed local inference and service availability probing.
+
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -17,6 +19,7 @@ pub struct LocalProvider {
 }
 
 impl LocalProvider {
+    /// Creates a provider using `MODEL`, then `OLLAMA_MODEL`; errors if neither is set.
     pub fn new() -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL")
             .or_else(|_| std::env::var("OLLAMA_MODEL"))
@@ -25,6 +28,7 @@ impl LocalProvider {
         Self::new_with_model(model)
     }
 
+    /// Creates a provider for `model`, or falls back to `OLLAMA_MODEL` then `MODEL`.
     pub fn new_with_model(model: Option<ModelId>) -> Result<Self, ProviderError> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(OLLAMA_TIMEOUT_SECS))
@@ -55,6 +59,7 @@ impl LocalProvider {
         })
     }
 
+    /// Returns whether the Ollama host answers `/api/tags` within five seconds.
     pub async fn is_available() -> bool {
         let host =
             std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://localhost:11434".to_string());

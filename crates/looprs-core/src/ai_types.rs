@@ -4,9 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-// ---------------------------------------------------------------------------
 // Enums
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AnomalySeverity {
@@ -83,9 +81,7 @@ pub enum WorkflowStage {
     Failed,
 }
 
-// ---------------------------------------------------------------------------
 // Structs
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageAnalysis {

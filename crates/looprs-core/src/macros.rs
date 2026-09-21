@@ -1,3 +1,5 @@
+//! Macros for string-backed identifiers and named domain events.
+
 /// Define a newtype wrapper around `String` with common trait impls.
 ///
 /// Generates a struct with:

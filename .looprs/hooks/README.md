@@ -9,6 +9,7 @@ Repo-level hooks loaded from `.looprs/hooks/*.yaml`. Repo hooks override user ho
 ## Hooks in this repo
 
 ### `SessionStart.yaml`
+
 - **name**: `project_info`
 - **trigger**: `SessionStart`
 - **actions**:
@@ -16,6 +17,7 @@ Repo-level hooks loaded from `.looprs/hooks/*.yaml`. Repo hooks override user ho
   - command: `git --no-pager log -1 --oneline` (injects `last_commit`)
 
 ### `demo_approval.yaml`
+
 - **name**: `demo_approval_gate`
 - **trigger**: `SessionStart`
 - **actions**:
@@ -24,6 +26,7 @@ Repo-level hooks loaded from `.looprs/hooks/*.yaml`. Repo hooks override user ho
   - command: `git --no-pager status --short` (requires approval, injects `git_status`)
 
 ### `demo_onboarding.yaml`
+
 - **name**: `demo_onboarding`
 - **trigger**: `SessionStart`
 - **actions**:

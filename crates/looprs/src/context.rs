@@ -1,3 +1,5 @@
+//! Collects repository and kanban context for injection into session prompts.
+
 use crate::{jj, kan};
 use serde::{Deserialize, Serialize};
 

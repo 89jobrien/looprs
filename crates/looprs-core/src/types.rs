@@ -1,3 +1,5 @@
+//! Identifier newtypes and model-specific token and cost metadata.
+
 newtype_id!(ToolId);
 newtype_id!(ToolName);
 newtype_id!(ModelId);
@@ -11,10 +13,12 @@ const TOKENS_CLAUDE: u32 = 190_000;
 const TOKENS_DEFAULT: u32 = 100_000;
 
 impl ModelId {
+    /// Returns the default Anthropic model identifier, `claude-sonnet-4-6`.
     pub fn claude_opus() -> Self {
         Self::new("claude-sonnet-4-6")
     }
 
+    /// Returns the default OpenAI model identifier, `gpt-5-mini`.
     pub fn gpt_5_mini() -> Self {
         Self::new("gpt-5-mini")
     }
@@ -44,6 +48,7 @@ impl ModelId {
             + (output_tokens as f64 / 1_000_000.0) * output_pm
     }
 
+    /// Returns the token limit selected from the model identifier.
     pub fn max_tokens(&self) -> u32 {
         let model = self.0.to_lowercase();
         match model.as_str() {

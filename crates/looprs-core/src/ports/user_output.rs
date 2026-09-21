@@ -7,12 +7,19 @@
 /// Implementations may render to a terminal, a log file, a TUI widget,
 /// or a machine-readable JSON stream.
 pub trait UserOutput: Send + Sync {
+    /// Emits an informational message.
     fn info(&self, msg: &str);
+    /// Emits a warning message.
     fn warn(&self, msg: &str);
+    /// Emits an error message.
     fn error(&self, msg: &str);
+    /// Emits assistant-generated text.
     fn assistant_text(&self, text: &str);
+    /// Reports a tool call with a preview of its input.
     fn tool_call(&self, tool_name: &str, input_preview: &str);
+    /// Reports successful completion of the current tool call.
     fn tool_ok(&self);
+    /// Reports failure of the current tool call.
     fn tool_err(&self, err_msg: &str);
 
     /// Emit a single streaming chunk of assistant text.

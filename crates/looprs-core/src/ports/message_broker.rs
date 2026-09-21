@@ -17,6 +17,7 @@ pub struct Message {
 }
 
 impl Message {
+    /// Creates a timestamped message for the given source and topic.
     pub fn new(
         source: impl Into<String>,
         topic: impl Into<String>,
@@ -33,14 +34,17 @@ impl Message {
     }
 }
 
-// ── Port ─────────────────────────────────────────────────────────────────
+// Broker port
 
 /// Port: fan-out message broker for inter-component pub/sub.
 ///
 /// Implementations must be cheaply cloneable (`Arc`-backed) so callers
 /// can hold a handle without worrying about lifetimes.
 pub trait MessageBroker: Send + Sync {
+    /// Publishes a message and returns the number of active subscribers.
     fn publish(&self, msg: Message) -> usize;
+    /// Subscribes to messages published on the given topic.
     fn subscribe(&self, topic: &str) -> broadcast::Receiver<Message>;
+    /// Closes the broker and disconnects all topic subscribers.
     fn close(&self);
 }

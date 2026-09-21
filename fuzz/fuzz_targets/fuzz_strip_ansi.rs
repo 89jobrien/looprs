@@ -1,3 +1,5 @@
+//! Fuzzes ANSI stripping for panic freedom, ESC removal, and idempotence.
+
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 

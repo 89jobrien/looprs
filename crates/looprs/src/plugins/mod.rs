@@ -1,3 +1,5 @@
+//! Resolves, caches, and executes named external CLI tools.
+
 pub mod binaries;
 mod registry;
 mod resolve;

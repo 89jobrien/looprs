@@ -1,3 +1,5 @@
+//! Typed adapters for the external `jj`, `kan`, `rg`, `fd`, and `git` binaries.
+
 use super::{NamedTool, Plugins};
 
 /// Thin adapters for named external binaries.

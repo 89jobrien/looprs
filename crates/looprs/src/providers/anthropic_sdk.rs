@@ -1,3 +1,5 @@
+//! Anthropic provider implemented through the `claudius` SDK.
+
 use claudius::{Anthropic, MessageCreateParams};
 use serde_json::{Value, json};
 
@@ -14,11 +16,13 @@ pub struct AnthropicSdkProvider {
 }
 
 impl AnthropicSdkProvider {
+    /// Creates a provider using `MODEL` when set and `claude-sonnet-4-6` otherwise.
     pub fn new(key: String) -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL").ok().map(ModelId::new);
         Self::new_with_model(key, model)
     }
 
+    /// Creates a provider using `model`, or `claude-sonnet-4-6` when omitted.
     pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self, ProviderError> {
         let model = model.unwrap_or_else(ModelId::claude_opus);
         let client = Anthropic::new(Some(key.clone()))

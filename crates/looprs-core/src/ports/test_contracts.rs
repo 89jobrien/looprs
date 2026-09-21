@@ -12,7 +12,7 @@ use crate::ports::message_broker::{Message, MessageBroker};
 use crate::ports::session_store::{SessionEvent, SessionStore};
 use crate::ports::user_output::UserOutput;
 
-// ── MessageBroker ───────────────────────────────────────────────────────
+// MessageBroker contract
 
 /// Assert that a `MessageBroker` implementation satisfies the full contract.
 ///
@@ -61,7 +61,7 @@ pub fn assert_message_broker_contract(broker: impl MessageBroker + Clone) {
     assert_eq!(n, 0, "publish after close should return 0");
 }
 
-// ── SessionStore ────────────────────────────────────────────────────────
+// SessionStore contract
 
 /// Assert that a `SessionStore` implementation satisfies the full contract.
 ///
@@ -115,7 +115,7 @@ pub fn assert_session_store_contract(store: &mut dyn SessionStore) {
     assert_eq!(p1, p2, "path() must return consistent value");
 }
 
-// ── InferenceProvider ───────────────────────────────────────────────────
+// InferenceProvider contract
 
 /// Assert that an `InferenceProvider` implementation satisfies the structural contract.
 ///
@@ -139,7 +139,7 @@ pub fn assert_inference_provider_contract(provider: &dyn crate::ports::Inference
     let _ = provider.validate_config();
 }
 
-// ── UserOutput ──────────────────────────────────────────────────────────
+// UserOutput contract
 
 /// Assert that a `UserOutput` implementation satisfies the full contract.
 ///

@@ -1,3 +1,5 @@
+//! Queries and parses kanban board status from the `kan` CLI.
+
 use serde::{Deserialize, Serialize};
 #[cfg(not(test))]
 use std::ffi::OsString;

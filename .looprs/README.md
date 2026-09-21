@@ -4,7 +4,7 @@ Repo-level configuration for looprs. These files are loaded in addition to user-
 
 ## Structure (this repo)
 
-```
+```text
 .looprs/
 ├── commands/                 # Custom slash commands (YAML)
 │   ├── help.yaml

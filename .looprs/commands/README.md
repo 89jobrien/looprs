@@ -29,7 +29,7 @@ action:
 
 ## Usage
 
-```
+```text
 /help
 /refactor
 /test

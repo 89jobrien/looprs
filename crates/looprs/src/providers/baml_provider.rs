@@ -1,3 +1,5 @@
+//! BAML-backed inference with structured text-or-tool-call responses.
+
 use async_trait::async_trait;
 use serde_json::Value;
 
@@ -20,6 +22,7 @@ pub struct BamlProvider {
 }
 
 impl BamlProvider {
+    /// Creates a BAML provider for the named BAML client and model identifier.
     pub fn new(client_name: impl Into<String>, model: ModelId) -> Self {
         Self {
             client_name: client_name.into(),

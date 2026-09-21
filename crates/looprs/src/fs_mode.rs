@@ -1,3 +1,5 @@
+//! Defines filesystem access modes enforced during tool execution.
+
 use serde::{Deserialize, Serialize};
 
 /// Controls which built-in tools are allowed to modify the filesystem or

@@ -1,3 +1,5 @@
+//! Tests parsing default models, tiers, and Magi paths into `ModelsConfig`.
+
 use looprs::models_config::ModelsConfig;
 use std::io::Write;
 use tempfile::NamedTempFile;

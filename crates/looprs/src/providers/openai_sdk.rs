@@ -1,3 +1,5 @@
+//! OpenAI Chat Completions provider implemented through `async-openai`.
+
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use serde_json::{Value, json};
@@ -15,11 +17,13 @@ pub struct OpenAISdkProvider {
 }
 
 impl OpenAISdkProvider {
+    /// Creates a provider using `MODEL` when set and `gpt-5-mini` otherwise.
     pub fn new(key: String) -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL").ok().map(ModelId::new);
         Self::new_with_model(key, model)
     }
 
+    /// Creates a provider using `model`, or `gpt-5-mini` when omitted.
     pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self, ProviderError> {
         let model = model.unwrap_or_else(ModelId::gpt_5_mini);
         let config = OpenAIConfig::new().with_api_key(&key);

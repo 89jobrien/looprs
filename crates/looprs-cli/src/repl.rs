@@ -1,3 +1,5 @@
+//! Rustyline state, key bindings, and fuzzy hints for the interactive REPL.
+
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicU8, Ordering},
@@ -34,6 +36,7 @@ pub struct ReplState {
 }
 
 impl ReplState {
+    /// Creates state in normal mode with no pending completion.
     pub fn new() -> Self {
         Self {
             mode: ReplMode::Normal,
@@ -41,6 +44,7 @@ impl ReplState {
         }
     }
 
+    /// Returns to normal mode and clears the pending completion.
     pub fn reset(&mut self) {
         self.mode = ReplMode::Normal;
         self.last_completed = None;
@@ -53,6 +57,7 @@ pub struct ReplHelper {
 }
 
 impl ReplHelper {
+    /// Creates a helper backed by the supplied completion candidates.
     pub fn new(sets: MatchSets) -> Self {
         Self {
             state: Arc::new(Mutex::new(ReplState::new())),
@@ -60,14 +65,17 @@ impl ReplHelper {
         }
     }
 
+    /// Returns a shared handle to the current REPL state.
     pub fn state(&self) -> Arc<Mutex<ReplState>> {
         self.state.clone()
     }
 
+    /// Returns the shared completion candidates.
     pub fn sets(&self) -> Arc<MatchSets> {
         self.sets.clone()
     }
 
+    /// Resets the shared REPL state if its lock is available.
     pub fn reset(&self) {
         if let Ok(mut state) = self.state.lock() {
             state.reset();
@@ -110,6 +118,7 @@ impl Hinter for ReplHelper {
 
 impl rustyline::Helper for ReplHelper {}
 
+/// Binds mode, completion, escape, and filesystem-mode keys on the editor.
 pub fn bind_repl_keys(
     editor: &mut Editor<ReplHelper, DefaultHistory>,
     state: Arc<Mutex<ReplState>>,
@@ -524,7 +533,7 @@ mod tests {
         assert!(completion_hint("/refactor", 9, '/', &items).is_none());
     }
 
-    // ── ReplState ────────────────────────────────────────────────────────────
+    // REPL state tests
 
     #[test]
     fn repl_state_starts_in_normal_mode() {

@@ -1,3 +1,5 @@
+//! Tests JSONL session logging and serialization of each session event type.
+
 use looprs::session_log::{SessionEvent, SessionLogger, SessionStore};
 use std::io::BufRead;
 use tempfile::tempdir;

@@ -1,3 +1,5 @@
+//! Captures tool-use observations and renders titles and Markdown descriptions.
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -19,6 +21,7 @@ pub struct Observation {
 }
 
 impl Observation {
+    /// Captures a tool invocation with the current Unix timestamp.
     pub fn new(
         tool_name: String,
         input: Value,
@@ -42,11 +45,13 @@ impl Observation {
         }
     }
 
+    /// Attaches human-readable context to the observation.
     pub fn with_context(mut self, context: String) -> Self {
         self.context = Some(context);
         self
     }
 
+    /// Renders the observation as Markdown with a truncated output preview.
     pub fn to_description(&self) -> String {
         let input_str = serde_json::to_string_pretty(&self.input).unwrap_or_default();
         let output_preview = if self.output.len() > OUTPUT_PREVIEW_LEN {
@@ -80,6 +85,7 @@ impl Observation {
         )
     }
 
+    /// Builds a short title from the context or tool name.
     pub fn to_title(&self) -> String {
         if let Some(ctx) = &self.context {
             format!("Observation: {}", ctx.chars().take(60).collect::<String>())

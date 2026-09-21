@@ -1,3 +1,5 @@
+//! Implements regex file search via ripgrep with a pure-Rust fallback.
+
 use super::ToolArgs;
 use super::ToolContext;
 use super::error::ToolError;

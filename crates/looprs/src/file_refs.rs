@@ -1,3 +1,5 @@
+//! Detects and securely resolves `@file` references in user messages.
+
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};

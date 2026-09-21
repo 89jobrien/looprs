@@ -1,3 +1,5 @@
+//! Bootstraps the agent runtime and maps provider setup failures to CLI diagnostics.
+
 use looprs::Agent;
 use looprs::ModelId;
 use looprs::ProviderConfig;
@@ -16,6 +18,7 @@ pub struct BootstrappedRuntime {
     pub agent: Agent,
 }
 
+/// Loads configuration, creates the selected provider, and constructs an agent runtime.
 pub async fn bootstrap_runtime(
     model_override: Option<ModelId>,
 ) -> anyhow::Result<BootstrappedRuntime> {
@@ -54,6 +57,7 @@ pub async fn bootstrap_runtime(
     })
 }
 
+/// Converts a missing local-model error into an actionable diagnostic.
 pub fn provider_bootstrap_report(error: &anyhow::Error) -> Option<miette::Report> {
     let provider_error = error.downcast_ref::<looprs::ProviderError>()?;
 

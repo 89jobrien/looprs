@@ -1,3 +1,5 @@
+//! Captures, stores, and persists tool-execution observations for a session.
+
 use anyhow::Result;
 use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};

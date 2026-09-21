@@ -9,7 +9,7 @@ top level, where `Cargo.toml` lists `crates/looprs-core`, `crates/looprs`,
 
 ## Prerequisites
 
-```
+```text
 which cargo tmux    # both required; installed via mise/rustup + brew on this machine
 ```
 
@@ -17,13 +17,13 @@ For a real (non-erroring) end-to-end response without touching a paid
 API, use the `local` provider — it shells out to a running `ollama`
 daemon:
 
-```
+```text
 ollama list          # must show at least one model, e.g. functiongemma:latest
 ```
 
 ## Build
 
-```
+```text
 .claude/skills/run-looprs/driver.sh build
 # -> cargo build -p looprs-cli; produces target/debug/looprs
 ```
@@ -38,7 +38,7 @@ surface (`looprs -p "<text>"`). This is the path most PRs touching
 `crates/looprs`'s agent/provider/hook logic actually exercise — no
 terminal needed:
 
-```
+```text
 .claude/skills/run-looprs/driver.sh prompt "reply with the single word OK" local
 # -> 📋 Loaded 3 project rule(s)
 #    >> looprs | ollama/functiongemma:latest | /Users/joe/dev/looprs
@@ -56,7 +56,7 @@ and `looprs tui` (streaming chat TUI). All tmux sessions run on a
 dedicated socket (`-L looprs_driver`) so they don't collide with your
 own tmux.
 
-```
+```text
 .claude/skills/run-looprs/driver.sh tui-launch <session>       # launch `looprs tui`
 .claude/skills/run-looprs/driver.sh provider-launch <session>  # launch `looprs provider`
 .claude/skills/run-looprs/driver.sh type <session> "<text>"    # tmux send-keys -l (literal)
@@ -68,7 +68,7 @@ own tmux.
 
 Verified chat round-trip:
 
-```
+```text
 .claude/skills/run-looprs/driver.sh tui-launch t1
 # (capture once to let it settle — see Gotchas)
 .claude/skills/run-looprs/driver.sh capture t1
@@ -93,7 +93,7 @@ shell already has.)
 
 Verified provider-menu round-trip:
 
-```
+```text
 .claude/skills/run-looprs/driver.sh provider-launch p1
 .claude/skills/run-looprs/driver.sh capture p1     # (settle, then capture again)
 .claude/skills/run-looprs/driver.sh capture p1
@@ -110,7 +110,7 @@ Verified provider-menu round-trip:
 
 ## Run (human path)
 
-```
+```text
 target/debug/looprs            # interactive REPL, real terminal
 target/debug/looprs provider   # interactive menu, real terminal
 target/debug/looprs tui        # alternate chat TUI, real terminal
@@ -119,7 +119,7 @@ target/debug/looprs -p "..."   # scriptable, one-shot — same as driver.sh prom
 
 ## Test
 
-```
+```text
 cargo nextest run --workspace   # 433 tests as of this writing, 8 skipped (macOS-gated linux tests)
 ```
 

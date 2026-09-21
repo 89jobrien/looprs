@@ -1,3 +1,5 @@
+//! Implements the Bash command tool with bounded stdout and stderr capture.
+
 use super::ToolArgs;
 use super::error::ToolError;
 use serde_json::Value;

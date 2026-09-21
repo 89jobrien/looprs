@@ -1,3 +1,5 @@
+//! Defines the tool-dispatch abstraction and its default built-in adapter.
+
 use serde_json::Value;
 
 use crate::tools::{ToolContext, ToolError, execute_tool};
@@ -7,6 +9,7 @@ use crate::tools::{ToolContext, ToolError, execute_tool};
 /// Abstracts the free `execute_tool` function so the Agent can be tested
 /// with a stub executor instead of a real subprocess/filesystem backend.
 pub trait ToolExecutor: Send + Sync {
+    /// Executes a named tool with JSON arguments in the supplied context.
     fn execute(&self, name: &str, args: &Value, ctx: &ToolContext) -> Result<String, ToolError>;
 }
 

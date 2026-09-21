@@ -1,3 +1,5 @@
+//! Evaluates conditions and executes actions for lifecycle hooks.
+
 use super::{Action, Hook, PromptCallback};
 use crate::app_config::AppConfig;
 use crate::events::EventContext;

@@ -1,3 +1,5 @@
+//! Parses command-line options for interactive and scriptable modes.
+
 use anyhow::{Result, anyhow};
 use std::env;
 

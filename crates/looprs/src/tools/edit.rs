@@ -1,3 +1,5 @@
+//! Implements sandboxed exact-text replacement for the edit tool.
+
 use super::ToolArgs;
 use super::ToolContext;
 use super::error::ToolError;

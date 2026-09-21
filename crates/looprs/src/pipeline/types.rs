@@ -1,3 +1,5 @@
+//! Data structures for pipeline runs, check results, tool output, and rewards.
+
 use serde::{Deserialize, Serialize};
 
 /// Identifies a pipeline run, e.g. for correlating log entries.

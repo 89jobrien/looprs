@@ -1,3 +1,5 @@
+//! Classifies REPL input as commands, skill invocations, file references, or messages.
+
 pub enum CliCommand {
     Quit,
     Clear,
@@ -8,6 +10,7 @@ pub enum CliCommand {
     Message(String),
 }
 
+/// Classifies one input line, returning `None` for blank input.
 pub fn parse_input(line: &str) -> Option<CliCommand> {
     let trimmed = line.trim();
 

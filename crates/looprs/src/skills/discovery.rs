@@ -1,3 +1,5 @@
+//! Discovers `SKILL.md` files, extracts frontmatter, and resolves skill paths.
+
 use regex::Regex;
 use std::fs;
 use std::path::{Path, PathBuf};

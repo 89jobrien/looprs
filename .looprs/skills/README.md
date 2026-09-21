@@ -9,7 +9,7 @@ This repo contains **example** skills under `.looprs/skills/examples/`. They dem
 
 ## Structure (this repo)
 
-```
+```text
 skills/
 └── examples/
     ├── rust-error-handling/
@@ -24,7 +24,7 @@ skills/
 
 `SKILL.md` includes YAML frontmatter plus concise instructions:
 
-Current, concise: 
+Current, concise:
 
 ```markdown
 ---
@@ -36,7 +36,7 @@ triggers:
 ---
 ```
 
-```
+```text
 hooks: list[str]
 commands: list[str]
 tools: list[str]

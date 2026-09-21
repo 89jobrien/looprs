@@ -1,3 +1,5 @@
+//! Gemini provider using Google's OpenAI-compatible chat-completions endpoint.
+
 use serde_json::{Value, json};
 
 use crate::api::ContentBlock;
@@ -16,11 +18,13 @@ pub struct GeminiProvider {
 }
 
 impl GeminiProvider {
+    /// Creates a provider using `MODEL` when set and `gemini-2.0-flash` otherwise.
     pub fn new(key: String) -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL").ok().map(ModelId::new);
         Self::new_with_model(key, model)
     }
 
+    /// Creates a provider using `model`, or `gemini-2.0-flash` when omitted.
     pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self, ProviderError> {
         let http = ProviderHttpClient::default()?;
         let model = model.unwrap_or_else(|| ModelId::new("gemini-2.0-flash"));

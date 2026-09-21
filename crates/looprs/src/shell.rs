@@ -1,3 +1,5 @@
+//! Runs Nushell and Bash commands with optional wall-clock timeouts.
+
 use std::io;
 use std::process::{Command, Output, Stdio};
 use std::time::Duration;

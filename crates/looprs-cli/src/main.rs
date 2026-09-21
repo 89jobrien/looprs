@@ -1,3 +1,5 @@
+//! Entry point for the `looprs` REPL, one-shot runner, provider selector, seeder, and TUI.
+
 use anyhow::Result;
 use colored::*;
 use rustyline::Editor;

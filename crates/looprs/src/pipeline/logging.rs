@@ -1,3 +1,5 @@
+//! Appends structured pipeline events to a thread-safe JSONL log.
+
 use std::fs::{File, OpenOptions, create_dir_all};
 use std::io::{self, Write};
 use std::path::PathBuf;
