@@ -2,6 +2,9 @@ mod command_runner;
 pub mod context_compact;
 pub mod logging;
 pub mod types;
+mod worktree_transaction;
+
+pub(crate) use worktree_transaction::WorktreeTransaction;
 
 use std::io;
 

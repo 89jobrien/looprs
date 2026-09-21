@@ -133,7 +133,11 @@ pub struct PipelineConfig {
     pub reward_threshold: f32,
     /// Fail preflight when `cargo`, the tool required by enabled checks, is unavailable.
     pub require_tools: bool,
-    /// Restore the pre-check in-memory conversation snapshot on blocking failure.
+    /// Restore the pre-turn conversation, Git index, tracked files, and non-ignored
+    /// untracked files when a blocking pipeline check fails.
+    ///
+    /// The baseline is captured immediately before the first tool dispatch. Ignored
+    /// files, nested repositories, and external side effects are not rolled back.
     pub auto_revert: bool,
     /// Stop the ordered build, test, lint, typecheck, benchmark suite at its first failure.
     pub fail_fast: bool,

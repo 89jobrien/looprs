@@ -808,6 +808,12 @@ impl Agent {
 
     /// Run one full agent turn (inference plus any requested tool loop).
     pub async fn run_turn(&mut self) -> Result<(), AgentError> {
+        let turn_messages_snapshot = self.messages.clone();
+        let pipeline_config = crate::app_config::AppConfig::load()
+            .ok()
+            .map(|config| config.pipeline)
+            .filter(|config| config.enabled);
+        let mut worktree_transaction = None;
         let delegated_agent = self
             .pending_delegation
             .as_ref()
@@ -1052,6 +1058,21 @@ impl Agent {
                 && self.runtime.max_parallel > 1
                 && pending_calls.len() > 1;
 
+            if worktree_transaction.is_none()
+                && pipeline_config
+                    .as_ref()
+                    .is_some_and(|config| config.auto_revert && config.block_on_failure)
+            {
+                worktree_transaction = Some(
+                    crate::pipeline::WorktreeTransaction::capture(&self.tool_ctx.working_dir)
+                        .map_err(|error| {
+                            AgentError::PipelineFailure(format!(
+                                "unable to capture rollback baseline before tool execution: {error}"
+                            ))
+                        })?,
+                );
+            }
+
             let mut outcomes = if parallel_enabled {
                 let max_parallel = self.runtime.max_parallel.max(1).min(pending_calls.len());
                 let executor = Arc::clone(&self.tool_dispatcher);
@@ -1180,24 +1201,25 @@ impl Agent {
             self.messages.push(Message::tool_results(tool_results));
 
             // M1: pipeline self-check after successful tool-use round-trip
-            if let Ok(app_cfg) = crate::app_config::AppConfig::load()
-                && app_cfg.pipeline.enabled
-            {
-                let snapshot = self.messages.clone();
-                let report = crate::pipeline::PipelineRunner::run(&app_cfg.pipeline);
+            if let Some(pipeline_config) = pipeline_config.as_ref() {
+                let report = crate::pipeline::PipelineRunner::run(pipeline_config);
                 let failures: Vec<String> = report
                     .steps
                     .iter()
                     .filter(|s| !s.success)
                     .map(|s| s.step.clone())
                     .collect();
-                if crate::pipeline::PipelineRunner::should_block(&app_cfg.pipeline, &report) {
-                    if app_cfg.pipeline.auto_revert {
-                        self.messages = snapshot;
+                if crate::pipeline::PipelineRunner::should_block(pipeline_config, &report) {
+                    let mut failure = failures.join(", ");
+                    if pipeline_config.auto_revert {
+                        self.messages = turn_messages_snapshot;
+                        if let Some(transaction) = worktree_transaction.take()
+                            && let Err(error) = transaction.rollback()
+                        {
+                            failure.push_str(&format!("; {error}"));
+                        }
                     }
-                    return Err(crate::errors::AgentError::PipelineFailure(
-                        failures.join(", "),
-                    ));
+                    return Err(crate::errors::AgentError::PipelineFailure(failure));
                 }
             }
         }
