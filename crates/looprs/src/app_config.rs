@@ -173,6 +173,8 @@ pub struct AgentsConfig {
     pub context_sharing: bool,
     /// Maximum number of concurrent delegated agents.
     pub max_parallel: usize,
+    /// Per-agent execution timeout in seconds; `None` disables the timeout.
+    pub timeout_seconds: Option<u64>,
     /// Orchestration strategy label.
     pub orchestration: String,
     /// Delegate automatically when no explicit agent is requested.
@@ -188,6 +190,7 @@ impl Default for AgentsConfig {
         Self {
             context_sharing: true,
             max_parallel: 3,
+            timeout_seconds: Some(120),
             orchestration: "sequential".to_string(),
             delegate_by_default: true,
             fs_mode: FsMode::Write,

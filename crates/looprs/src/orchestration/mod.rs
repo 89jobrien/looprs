@@ -1,5 +1,14 @@
 //! Runtime-owned prompt orchestration for agents, skills, and plugins.
 
+mod multi_agent;
+
+pub use multi_agent::{
+    BrokerAgentOrchestrator, DELEGATION_FINISHED_TOPIC_V1, DELEGATION_SCHEMA_VERSION,
+    DELEGATION_STARTED_TOPIC_V1, DelegatedAgentContext, DelegatedAgentOutput, DelegatedAgentRunner,
+    DelegatedArtifact, DelegatedTask, DelegationCancellation, DelegationReport, DelegationResult,
+    DelegationStatus, OrchestrationError,
+};
+
 use std::collections::HashMap;
 
 use anyhow::Result;
