@@ -127,7 +127,10 @@ pub use crate::ports::{ObservationQuery, ObservationStore, PluginExecutor};
 /// Provider override settings and provider factory.
 pub use crate::providers::{ProviderOverrides, create_provider_with_overrides};
 /// Rule schema and registry.
-pub use crate::rules::{Rule, RuleRegistry};
+pub use crate::rules::{
+    ExecutionBoundary, ExecutionPolicy, ExecutionRequest, PolicyDecision, PolicyEffect,
+    PolicyError, PolicySource, Rule, RuleRegistry,
+};
 /// Skill schema and registry.
 pub use crate::skills::{Skill, SkillRegistry};
 /// Injectable tool catalog/dispatcher ports and default composition.
