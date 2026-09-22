@@ -93,6 +93,27 @@ jobs:
           fallback: none
       - run: cargo +stable check --locked --workspace --all-targets --all-features
 
+  shared-gates:
+    name: doctest-rustdoc-cli
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: shared-gates
+      - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
+        with:
+          tool: protoc@3.35.1,cargo-nextest@0.9.137
+          fallback: none
+      - name: Install taskit
+        run: cargo +stable install --locked taskit --version 0.9.0
+      - name: Run shared pre-push gates
+        run: cargo +stable xtask check pre-push
+
   dependency-policy:
     name: dependency-policy
     runs-on: ubuntu-24.04
@@ -142,7 +163,7 @@ jobs:
   required:
     name: required
     if: always()
-    needs: [fmt, clippy, msrv, stable, dependency-policy, coverage]
+    needs: [fmt, clippy, msrv, stable, shared-gates, dependency-policy, coverage]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -152,10 +173,11 @@ jobs:
           CLIPPY_RESULT: ${{ needs.clippy.result }}
           MSRV_RESULT: ${{ needs.msrv.result }}
           STABLE_RESULT: ${{ needs.stable.result }}
+          SHARED_GATES_RESULT: ${{ needs.shared-gates.result }}
           DEPENDENCY_RESULT: ${{ needs.dependency-policy.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
         run: |
-          for result in "$FMT_RESULT" "$CLIPPY_RESULT" "$MSRV_RESULT" "$STABLE_RESULT" "$DEPENDENCY_RESULT" "$COVERAGE_RESULT"; do
+          for result in "$FMT_RESULT" "$CLIPPY_RESULT" "$MSRV_RESULT" "$STABLE_RESULT" "$SHARED_GATES_RESULT" "$DEPENDENCY_RESULT" "$COVERAGE_RESULT"; do
             if [[ "$result" != "success" ]]; then
               echo "A required CI job finished with status: $result" >&2
               exit 1
