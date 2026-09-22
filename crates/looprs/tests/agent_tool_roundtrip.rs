@@ -1,3 +1,5 @@
+//! Verifies an agent inference turn dispatches a tool and returns its result to the provider.
+
 use std::sync::{Arc, Mutex};
 
 use looprs::providers::{InferenceRequest, InferenceResponse, LLMProvider, Usage};

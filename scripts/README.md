@@ -2,6 +2,55 @@
 
 This directory contains automation scripts for the looprs project.
 
+## serve-site.sh
+
+Serve the local static site in `site/` for quick preview.
+
+### Usage
+
+```bash
+./scripts/serve-site.sh
+./scripts/serve-site.sh 8080
+```
+
+Default port is `4173`.
+
+Pass `0` to let the operating system select an ephemeral port. The server prints
+the resolved URL before accepting requests. `LOOPRS_SITE_DIR` can override the
+default `site/` directory for smoke tests.
+
+## check-site.py
+
+Validate every committed site `href` and `src`, reject local path escapes or
+missing assets, and fetch every local target from a running preview server:
+
+```bash
+./scripts/serve-site.sh 0
+python3 scripts/check-site.py site http://127.0.0.1:PORT
+```
+
+## CI and release helpers
+
+The reusable scripts under `scripts/ci/` keep workflow behavior executable and
+fixture-tested:
+
+- `coverage-summary.sh` calculates and validates workspace LCOV totals.
+- `package-release-unix.py` creates reproducible Unix archives and checksums.
+- `package-release-windows.ps1` creates Windows archives and checksums.
+- `release-binary-path.sh` selects the built binary used for SBOM generation.
+- `validate-release-assets.sh` requires the complete version-scoped release set.
+- `verify-release-health.sh` validates persisted health data for a release.
+
+Run their success and failure fixtures, site smoke test, and linters with:
+
+```bash
+scripts/tests/release-health.sh
+scripts/tests/workflow-contracts.sh
+scripts/tests/site-smoke.sh
+actionlint
+git ls-files 'scripts/*.sh' 'scripts/**/*.sh' | xargs shellcheck
+```
+
 ## bump-version.sh
 
 Version bumping and changelog organization script for looprs releases.
@@ -61,10 +110,21 @@ make version-major   # 0.1.11 -> 1.0.0
    - `refactor:`, `perf:` → Changed section
    - Other commits → Other section
 5. **Updates CHANGELOG.md** with new version section and organized entries
-6. **Updates Cargo.toml** with new version
+6. **Updates Cargo.toml** workspace version and internal crate requirements
 7. **Updates Cargo.lock** to match
 8. **Commits changes** with message: `chore: bump version to X.Y.Z`
 9. **Creates git tag** `vX.Y.Z` (unless `--no-tag` specified)
+
+Before dispatching a release, refresh and verify the version-scoped health artifacts:
+
+```bash
+taskit health check --with-coverage --update
+jq -c . .health-baseline.json >> .health-history.jsonl
+scripts/verify-release-health.sh X.Y.Z
+scripts/tests/release-health.sh
+```
+
+Minor and major releases also run public API compatibility checks in CI. Document intentional breaking changes in `docs/migration-X.Y.md` before release.
 
 ### Conventional Commits
 

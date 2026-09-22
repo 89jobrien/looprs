@@ -1,11 +1,11 @@
+//! Verifies CLI, environment, project, user, and default model precedence.
+
 use std::sync::{Mutex, OnceLock};
 
 use tempfile::TempDir;
 
 use looprs::{ModelId, ProviderOverrides, create_provider_with_overrides};
 
-// TODO(feature-idea-2): Move root integration tests into a workspace package so
-// `cargo nextest run --workspace` discovers and executes them.
 static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 struct EnvDirGuard {

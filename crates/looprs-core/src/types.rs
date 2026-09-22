@@ -1,3 +1,5 @@
+//! Defines typed model and tool identifiers plus model cost and token metadata.
+
 newtype_id!(ToolId);
 newtype_id!(ToolName);
 newtype_id!(ModelId);

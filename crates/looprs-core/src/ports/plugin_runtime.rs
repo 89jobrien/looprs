@@ -38,12 +38,14 @@ pub struct PluginAgentSelection {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PluginHealthState {
-    /// Plugin is running and healthy.
+    /// Managed process is running with no observed liveness or probe failure.
     Healthy,
-    /// Plugin is running but unhealthy.
+    /// Managed plugin process exited or its configured probe failed.
     Unhealthy,
     /// Plugin is intentionally disabled.
     Disabled,
+    /// Managed plugin process was explicitly shut down.
+    Stopped,
 }
 
 /// Supervisor snapshot for a single plugin.
@@ -57,6 +59,87 @@ pub struct PluginSupervisorStatus {
     pub state: PluginHealthState,
     /// Number of restart attempts performed.
     pub restart_count: u32,
+    /// Operating-system process identifier while the daemon is running.
+    pub pid: Option<u32>,
+    /// Most recent launch, exit, or probe error.
+    pub last_error: Option<String>,
+    /// Human-readable reason associated with the most recent restart.
+    pub last_restart_reason: Option<String>,
+}
+
+/// Structured plugin supervision failures.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum PluginSupervisorError {
+    /// The requested manifest does not exist for its kind.
+    #[error("unknown {kind:?} plugin '{plugin_name}'")]
+    UnknownPlugin {
+        /// Requested plugin category.
+        kind: PluginKind,
+        /// Requested plugin identifier.
+        plugin_name: String,
+    },
+    /// The requested manifest is not a managed daemon.
+    #[error("cannot supervise {kind:?} plugin '{plugin_name}' because it is not in daemon mode")]
+    NotDaemon {
+        /// Requested plugin category.
+        kind: PluginKind,
+        /// Requested plugin identifier.
+        plugin_name: String,
+    },
+    /// The requested manifest is intentionally disabled.
+    #[error("cannot supervise disabled {kind:?} plugin '{plugin_name}'")]
+    Disabled {
+        /// Requested plugin category.
+        kind: PluginKind,
+        /// Requested plugin identifier.
+        plugin_name: String,
+    },
+    /// The configured daemon command cannot be resolved or launched.
+    #[error("failed to launch {kind:?} plugin '{plugin_name}': {message}")]
+    LaunchFailed {
+        /// Requested plugin category.
+        kind: PluginKind,
+        /// Requested plugin identifier.
+        plugin_name: String,
+        /// Actionable process launch error.
+        message: String,
+    },
+    /// The configured health probe failed to execute.
+    #[error("failed to probe {kind:?} plugin '{plugin_name}': {message}")]
+    ProbeFailed {
+        /// Requested plugin category.
+        kind: PluginKind,
+        /// Requested plugin identifier.
+        plugin_name: String,
+        /// Actionable probe error.
+        message: String,
+    },
+    /// The configured restart budget is exhausted.
+    #[error("restart limit ({limit}) reached for {kind:?} plugin '{plugin_name}'")]
+    RestartLimitReached {
+        /// Requested plugin category.
+        kind: PluginKind,
+        /// Requested plugin identifier.
+        plugin_name: String,
+        /// Maximum restart attempts allowed for this process.
+        limit: u32,
+    },
+    /// The operating system rejected process shutdown.
+    #[error("failed to shut down {kind:?} plugin '{plugin_name}': {message}")]
+    ShutdownFailed {
+        /// Requested plugin category.
+        kind: PluginKind,
+        /// Requested plugin identifier.
+        plugin_name: String,
+        /// Actionable shutdown error.
+        message: String,
+    },
+    /// Manifest refresh failed before the lifecycle operation could run.
+    #[error("failed to refresh plugin manifests: {message}")]
+    RefreshFailed {
+        /// Actionable manifest loading error.
+        message: String,
+    },
 }
 
 /// Port for orchestration plugins that choose agents from prompts.
@@ -68,26 +151,68 @@ pub trait OrchestrationPluginPort: Send + Sync {
     ) -> anyhow::Result<Option<PluginAgentSelection>>;
 }
 
-/// Port for supervising tool plugins.
-pub trait ToolSupervisorPort: Send + Sync {
-    /// Return current supervisor status for `plugin_name`.
-    fn status(&self, plugin_name: &str) -> Option<PluginSupervisorStatus>;
-    /// Request a plugin restart with a human-readable `reason`.
-    fn restart(&mut self, plugin_name: &str, reason: &str) -> anyhow::Result<()>;
+/// Port for managed daemon lifecycle operations across every plugin kind.
+///
+/// One-shot manifests are intentionally outside this contract: they execute at
+/// their request site and cannot be restarted or shut down as resident processes.
+pub trait PluginSupervisorPort: Send + Sync {
+    /// Return the latest process status, refreshing liveness before returning.
+    fn status(
+        &mut self,
+        kind: PluginKind,
+        plugin_name: &str,
+    ) -> Result<PluginSupervisorStatus, PluginSupervisorError>;
+
+    /// Check process liveness and run the optional manifest health probe.
+    fn probe(
+        &mut self,
+        kind: PluginKind,
+        plugin_name: &str,
+    ) -> Result<PluginSupervisorStatus, PluginSupervisorError>;
+
+    /// Replace a managed process within its bounded restart budget.
+    fn restart(
+        &mut self,
+        kind: PluginKind,
+        plugin_name: &str,
+        reason: &str,
+    ) -> Result<(), PluginSupervisorError>;
+
+    /// Stop a managed process and retain an observable stopped status.
+    fn shutdown(
+        &mut self,
+        kind: PluginKind,
+        plugin_name: &str,
+    ) -> Result<(), PluginSupervisorError>;
 }
 
-/// Port for supervising runtime plugins.
-pub trait RuntimeSupervisorPort: Send + Sync {
-    /// Return current supervisor status for `plugin_name`.
-    fn status(&self, plugin_name: &str) -> Option<PluginSupervisorStatus>;
-    /// Request a plugin restart with a human-readable `reason`.
-    fn restart(&mut self, plugin_name: &str, reason: &str) -> anyhow::Result<()>;
-}
+/// Capability marker for supervisors that manage tool plugin manifests.
+pub trait ToolSupervisorPort: PluginSupervisorPort {}
 
-/// Port for supervising orchestration plugins.
-pub trait OrchestrationSupervisorPort: Send + Sync {
-    /// Return current supervisor status for `plugin_name`.
-    fn status(&self, plugin_name: &str) -> Option<PluginSupervisorStatus>;
-    /// Request a plugin restart with a human-readable `reason`.
-    fn restart(&mut self, plugin_name: &str, reason: &str) -> anyhow::Result<()>;
+/// Capability marker for supervisors that manage runtime plugin manifests.
+pub trait RuntimeSupervisorPort: PluginSupervisorPort {}
+
+/// Capability marker for supervisors that manage orchestration plugin manifests.
+pub trait OrchestrationSupervisorPort: PluginSupervisorPort {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn supervisor_errors_preserve_kind_name_and_limits() {
+        let unknown = PluginSupervisorError::UnknownPlugin {
+            kind: PluginKind::Tool,
+            plugin_name: "missing".to_string(),
+        };
+        assert_eq!(unknown.to_string(), "unknown Tool plugin 'missing'");
+
+        let saturated = PluginSupervisorError::RestartLimitReached {
+            kind: PluginKind::Runtime,
+            plugin_name: "worker".to_string(),
+            limit: 3,
+        };
+        assert!(saturated.to_string().contains("restart limit (3)"));
+        assert!(saturated.to_string().contains("Runtime plugin 'worker'"));
+    }
 }

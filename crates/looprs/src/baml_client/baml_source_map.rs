@@ -19,7 +19,7 @@ pub fn get_baml_files() -> &'static HashMap<String, String> {
 
         m.insert("clients.baml".to_string(), "client<llm> Anthropic {\n    provider anthropic\n    retry_policy Retry\n    options {\n        model \"claude-sonnet-4-6\"\n        api_key env.ANTHROPIC_API_KEY\n        max_tokens 8096\n    }\n}\n\nclient<llm> OpenAI {\n    provider openai\n    retry_policy Retry\n    options {\n        model \"gpt-4o\"\n        api_key env.OPENAI_API_KEY\n    }\n}\n\nclient<llm> Ollama {\n    provider openai-generic\n    options {\n        base_url \"http://localhost:11434/v1\"\n        model \"llama3.2\"\n    }\n}\n\nclient<llm> DefaultClient {\n    provider fallback\n    options {\n        strategy [OpenAI, Anthropic]\n    }\n}\n\nretry_policy Retry {\n    max_retries 2\n    strategy {\n        type exponential_backoff\n        delay_ms 500\n        multiplier 2\n        max_delay_ms 10000\n    }\n}\n".to_string());
 
-        m.insert("generators.baml".to_string(), "generator target {\n    output_type \"rust\"\n    output_dir \"../src\"\n    version \"0.219.0\"\n    default_client_mode async\n}\n".to_string());
+        m.insert("generators.baml".to_string(), "generator target {\n    output_type \"rust\"\n    output_dir \"../src\"\n    version \"0.221.0\"\n    default_client_mode async\n}\n".to_string());
 
         m
     })

@@ -1,9 +1,12 @@
+//! Implements OpenAI chat-completions inference and SSE streaming.
+
 use futures::{StreamExt, stream};
 use serde_json::{Value, json};
 
 use crate::api::ContentBlock;
 use crate::errors::ProviderError;
 
+use super::streaming::{OpenAiStreamState, SseDecoder};
 use super::{InferenceRequest, InferenceResponse, LLMProvider, ProviderHttpClient, Usage};
 use crate::types::ModelId;
 
@@ -20,11 +23,13 @@ pub struct OpenAIProvider {
 }
 
 impl OpenAIProvider {
+    /// Creates an OpenAI provider using `MODEL` or the default GPT model.
     pub fn new(key: String) -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL").ok().map(ModelId::new);
         Self::new_with_model(key, model)
     }
 
+    /// Creates an OpenAI provider with an explicit or default GPT model.
     pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self, ProviderError> {
         let http = ProviderHttpClient::default()?;
 
@@ -37,6 +42,7 @@ impl OpenAIProvider {
         super::convert_to_openai_messages(msg)
     }
 
+    #[cfg(test)]
     fn extract_stream_text(payload: &Value) -> Option<String> {
         let choices = payload.get("choices")?.as_array()?;
         let first = choices.first()?;
@@ -244,6 +250,7 @@ impl LLMProvider for OpenAIProvider {
             "tools": tools,
             "tool_choice": if tools.is_empty() { "none" } else { "auto" },
             "stream": true,
+            "stream_options": {"include_usage": true},
         });
 
         if uses_completion_tokens {
@@ -287,29 +294,52 @@ impl LLMProvider for OpenAIProvider {
             }
         };
 
-        let byte_stream = resp.bytes_stream();
-        let text_stream = byte_stream.flat_map(|chunk_result| {
-            let lines: Vec<Result<String, Box<dyn std::error::Error + Send + Sync>>> =
-                match chunk_result {
-                    Err(e) => vec![Err(Box::new(e) as _)],
-                    Ok(bytes) => {
-                        let raw = String::from_utf8_lossy(&bytes);
-                        raw.lines()
-                            .filter_map(|line| {
-                                let data = line.strip_prefix("data: ")?;
-                                if data == "[DONE]" {
-                                    return None;
-                                }
-                                let payload: Value = serde_json::from_str(data).ok()?;
-                                Self::extract_stream_text(&payload).map(Ok)
-                            })
-                            .collect()
+        let output = async_stream::stream! {
+            let mut bytes = resp.bytes_stream();
+            let mut decoder = SseDecoder::default();
+            let mut state = OpenAiStreamState::default();
+            while let Some(chunk) = bytes.next().await {
+                let chunk = match chunk {
+                    Ok(chunk) => chunk,
+                    Err(error) => {
+                        yield Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>);
+                        return;
                     }
                 };
-            stream::iter(lines)
-        });
+                for data in decoder.push(&chunk) {
+                    if data == "[DONE]" {
+                        match std::mem::take(&mut state).finish() {
+                            Ok(response) => yield Ok(looprs_core::ports::InferenceStreamEvent::Final(response)),
+                            Err(error) => yield Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>),
+                        }
+                        return;
+                    }
+                    let payload: Value = match serde_json::from_str(&data) {
+                        Ok(payload) => payload,
+                        Err(error) => {
+                            yield Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>);
+                            return;
+                        }
+                    };
+                    match state.ingest(&payload) {
+                        Ok(events) => {
+                            for event in events {
+                                yield Ok(event);
+                            }
+                        }
+                        Err(error) => {
+                            yield Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>);
+                            return;
+                        }
+                    }
+                }
+            }
+            yield Err(Box::new(ProviderError::InvalidResponse(
+                "OpenAI stream ended without [DONE]".to_string(),
+            )) as Box<dyn std::error::Error + Send + Sync>);
+        };
 
-        Box::pin(text_stream)
+        Box::pin(output)
     }
 
     fn model(&self) -> &ModelId {

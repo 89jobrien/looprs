@@ -1,3 +1,5 @@
+//! Resolves sandboxed `@` file and directory references into prompt content.
+
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -13,6 +15,7 @@ pub struct FileRefPolicy {
 }
 
 impl FileRefPolicy {
+    /// Builds a reference policy from configured extensions and size limits.
     pub fn from_config(config: &FileReferencesConfig) -> Self {
         Self {
             allowed_extensions: config
@@ -24,6 +27,7 @@ impl FileRefPolicy {
         }
     }
 
+    /// Builds a reference policy from the default file-reference configuration.
     pub fn default_policy() -> Self {
         let defaults = FileReferencesConfig::default();
         Self::from_config(&defaults)
@@ -164,6 +168,7 @@ fn resolve_reference(filename: &str, base_dir: &Path, policy: &FileRefPolicy) ->
     Ok(content)
 }
 
+/// Resolves one sandboxed `@` reference as UTF-8 file content or a directory listing.
 pub fn resolve_at_reference(
     reference: &str,
     base_dir: &Path,

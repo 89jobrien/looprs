@@ -1,3 +1,5 @@
+//! Implements Anthropic Messages API inference and SSE streaming.
+
 use futures::StreamExt as _;
 use futures::stream;
 use serde_json::{Value, json};
@@ -6,6 +8,7 @@ use crate::api::ContentBlock;
 use crate::errors::ProviderError;
 use crate::ports::InferStream;
 
+use super::streaming::{AnthropicStreamState, SseDecoder};
 use super::{InferenceRequest, InferenceResponse, LLMProvider, ProviderHttpClient, Usage};
 use crate::types::ModelId;
 
@@ -16,11 +19,13 @@ pub struct AnthropicProvider {
 }
 
 impl AnthropicProvider {
+    /// Creates an Anthropic provider using `MODEL` or the default Claude model.
     pub fn new(key: String) -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL").ok().map(ModelId::new);
         Self::new_with_model(key, model)
     }
 
+    /// Creates an Anthropic provider with an explicit or default Claude model.
     pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self, ProviderError> {
         let http = ProviderHttpClient::default()?;
 
@@ -206,46 +211,53 @@ impl LLMProvider for AnthropicProvider {
             }
         };
 
-        // Drive the SSE byte stream, emitting text_delta chunks.
-        let byte_stream = resp.bytes_stream();
-        let text_stream = byte_stream.flat_map(|chunk_result| {
-            let lines: Vec<Result<String, Box<dyn std::error::Error + Send + Sync>>> =
-                match chunk_result {
-                    Err(e) => vec![Err(Box::new(e) as _)],
-                    Ok(bytes) => {
-                        let raw = String::from_utf8_lossy(&bytes);
-                        raw.lines()
-                            .filter_map(|line| {
-                                let data = line.strip_prefix("data: ")?;
-                                if data == "[DONE]" {
-                                    return None;
-                                }
-                                let v: Value = serde_json::from_str(data).ok()?;
-                                // content_block_delta → text_delta
-                                if v.get("type").and_then(|t| t.as_str())
-                                    == Some("content_block_delta")
-                                {
-                                    let text = v
-                                        .pointer("/delta/text")
-                                        .and_then(|t| t.as_str())
-                                        .unwrap_or("")
-                                        .to_string();
-                                    if text.is_empty() {
-                                        None
-                                    } else {
-                                        Some(Ok(text))
-                                    }
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect()
+        let output = async_stream::stream! {
+            let mut bytes = resp.bytes_stream();
+            let mut decoder = SseDecoder::default();
+            let mut state = AnthropicStreamState::default();
+            while let Some(chunk) = bytes.next().await {
+                let chunk = match chunk {
+                    Ok(chunk) => chunk,
+                    Err(error) => {
+                        yield Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>);
+                        return;
                     }
                 };
-            stream::iter(lines)
-        });
+                for data in decoder.push(&chunk) {
+                    let payload: Value = match serde_json::from_str(&data) {
+                        Ok(payload) => payload,
+                        Err(error) => {
+                            yield Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>);
+                            return;
+                        }
+                    };
+                    let is_final = payload.get("type").and_then(Value::as_str) == Some("message_stop");
+                    match state.ingest(&payload) {
+                        Ok(events) => {
+                            for event in events {
+                                yield Ok(event);
+                            }
+                        }
+                        Err(error) => {
+                            yield Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>);
+                            return;
+                        }
+                    }
+                    if is_final {
+                        match std::mem::take(&mut state).finish() {
+                            Ok(response) => yield Ok(looprs_core::ports::InferenceStreamEvent::Final(response)),
+                            Err(error) => yield Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>),
+                        }
+                        return;
+                    }
+                }
+            }
+            yield Err(Box::new(ProviderError::InvalidResponse(
+                "Anthropic stream ended without message_stop".to_string(),
+            )) as Box<dyn std::error::Error + Send + Sync>);
+        };
 
-        Box::pin(text_stream)
+        Box::pin(output)
     }
 
     fn validate_config(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

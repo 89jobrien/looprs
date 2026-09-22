@@ -1,3 +1,5 @@
+//! Defines built-in tools, JSON schemas, filesystem policy, and MCP discovery.
+
 mod availability;
 mod bash;
 mod edit;
@@ -9,7 +11,10 @@ mod nu;
 mod read;
 mod write;
 
-pub use executor::{DefaultToolExecutor, ToolExecutor};
+pub use executor::{
+    BuiltinToolCatalog, DefaultToolExecutor, StaticToolCatalog, ToolCatalog, ToolDispatcher,
+    ToolExecutor, ToolPorts,
+};
 
 use serde_json::{Value, json};
 use std::env;
@@ -18,6 +23,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicU8, Ordering},
 };
+use std::time::Duration;
 
 use crate::fs_mode::FsMode;
 
@@ -26,17 +32,24 @@ use crate::errors::ToolContextError;
 
 pub use error::ToolError;
 
+const MCP_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(10);
+
+#[derive(Clone)]
+/// Shared execution context for all built-in tools.
 pub struct ToolContext {
+    /// Repository-scoped working directory used as a filesystem jail root.
     pub working_dir: PathBuf,
     fs_mode: Arc<AtomicU8>,
 }
 
 impl ToolContext {
     #[allow(dead_code)]
+    /// Build a context from the process working directory and default mode.
     pub fn new() -> Result<Self, ToolContextError> {
         Self::new_with_mode(FsMode::default())
     }
 
+    /// Build a context from the process working directory and explicit mode.
     pub fn new_with_mode(mode: FsMode) -> Result<Self, ToolContextError> {
         Ok(Self {
             working_dir: env::current_dir().map_err(ToolContextError::WorkingDirUnavailable)?,
@@ -45,6 +58,7 @@ impl ToolContext {
     }
 
     #[allow(dead_code)]
+    /// Build a context with an explicit working directory.
     pub fn from_working_dir(working_dir: PathBuf, mode: FsMode) -> Self {
         Self {
             working_dir,
@@ -52,14 +66,17 @@ impl ToolContext {
         }
     }
 
+    /// Return the current filesystem mode snapshot.
     pub fn fs_mode(&self) -> FsMode {
         FsMode::from_u8(self.fs_mode.load(Ordering::Relaxed))
     }
 
+    /// Update the active filesystem mode for future tool calls.
     pub fn set_fs_mode(&self, mode: FsMode) {
         self.fs_mode.store(mode.to_u8(), Ordering::Relaxed);
     }
 
+    /// Return a shared mode handle for components that coordinate mode changes.
     pub fn fs_mode_handle(&self) -> Arc<AtomicU8> {
         self.fs_mode.clone()
     }
@@ -104,6 +121,7 @@ pub(crate) struct ToolArgs<'a> {
 }
 
 impl<'a> ToolArgs<'a> {
+    /// Wrap raw JSON tool arguments.
     pub fn new(args: &'a Value) -> Self {
         Self { args }
     }
@@ -123,6 +141,7 @@ impl<'a> ToolArgs<'a> {
             .ok_or_else(|| ToolError::MissingParameter(key.to_string()))
     }
 
+    /// Read a required string argument.
     pub fn get_str(&self, key: &str) -> Result<&str, ToolError> {
         let value = self.get_value(key)?;
         value
@@ -153,6 +172,7 @@ impl<'a> ToolArgs<'a> {
         }
     }
 
+    /// Read an optional string argument.
     pub fn get_str_optional(&self, key: &str) -> Result<Option<&str>, ToolError> {
         // Can't use get_optional due to lifetime constraints on as_str()
         let map = self.object()?;
@@ -170,6 +190,7 @@ impl<'a> ToolArgs<'a> {
         }
     }
 
+    /// Read an optional boolean argument with a default fallback.
     pub fn get_bool(&self, key: &str, default: bool) -> bool {
         let map = match self.args.as_object() {
             Some(map) => map,
@@ -181,12 +202,14 @@ impl<'a> ToolArgs<'a> {
         }
     }
 
+    /// Read an optional `u64` argument.
     pub fn get_u64(&self, key: &str) -> Result<Option<u64>, ToolError> {
         self.get_optional(key, Value::as_u64, "u64")
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Built-in tool identifiers exposed to providers.
 pub enum Tool {
     Read,
     Write,
@@ -209,6 +232,7 @@ impl Tool {
     ];
 
     #[allow(dead_code)]
+    /// Return the canonical wire name for this tool.
     pub fn name(&self) -> &'static str {
         match self {
             Tool::Read => "read",
@@ -221,6 +245,7 @@ impl Tool {
         }
     }
 
+    /// Parse a tool from its wire name.
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "read" => Some(Tool::Read),
@@ -234,6 +259,7 @@ impl Tool {
         }
     }
 
+    /// Return this tool's JSON schema and prompt description.
     pub fn definition(&self) -> ToolDefinition {
         match self {
             Tool::Read => ToolDefinition {
@@ -375,6 +401,7 @@ impl Tool {
         }
     }
 
+    /// Dispatches this built-in tool to its concrete implementation.
     pub fn execute(&self, args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
         match self {
             Tool::Read => read::tool_read(args, ctx),
@@ -449,6 +476,7 @@ fn enforce_fs_mode(tool: Tool, args: &Value, ctx: &ToolContext) -> Result<(), To
     }
 }
 
+/// Enforces filesystem mode and executes a named built-in tool.
 pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<String, ToolError> {
     match Tool::from_name(name) {
         Some(tool) => {
@@ -459,6 +487,7 @@ pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result<Strin
     }
 }
 
+/// Returns provider-facing JSON schemas for every built-in tool.
 pub fn get_tool_definitions() -> Vec<ToolDefinition> {
     Tool::ALL.iter().map(|tool| tool.definition()).collect()
 }
@@ -470,7 +499,16 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
 /// `get_tool_definitions()` so the LLM sees external tools alongside builtins.
 #[allow(dead_code)]
 pub async fn mcp_tool_definitions(server_url: &str) -> anyhow::Result<Vec<ToolDefinition>> {
-    let client = reqwest::Client::new();
+    mcp_tool_definitions_with_timeout(server_url, MCP_DISCOVERY_TIMEOUT).await
+}
+
+async fn mcp_tool_definitions_with_timeout(
+    server_url: &str,
+    request_timeout: Duration,
+) -> anyhow::Result<Vec<ToolDefinition>> {
+    let client = reqwest::Client::builder()
+        .timeout(request_timeout)
+        .build()?;
 
     let body = serde_json::json!({
         "jsonrpc": "2.0",
@@ -565,10 +603,16 @@ fn parse_mcp_tools_response(resp: &serde_json::Value) -> anyhow::Result<Vec<Tool
         .and_then(|v| v.as_array())
         .ok_or_else(|| anyhow::anyhow!("MCP response missing result.tools array"))?;
 
-    let defs = tools
+    tools
         .iter()
-        .filter_map(|t| {
-            let name = t.get("name")?.as_str()?.to_owned();
+        .enumerate()
+        .map(|(index, t)| {
+            let name = t
+                .get("name")
+                .and_then(|value| value.as_str())
+                .filter(|name| !name.is_empty())
+                .ok_or_else(|| anyhow::anyhow!("MCP tool at index {index} is missing a name"))?
+                .to_owned();
             let description = t
                 .get("description")
                 .and_then(|d| d.as_str())
@@ -578,15 +622,13 @@ fn parse_mcp_tools_response(resp: &serde_json::Value) -> anyhow::Result<Vec<Tool
                 .get("inputSchema")
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!({"type": "object", "properties": {}}));
-            Some(ToolDefinition {
+            Ok(ToolDefinition {
                 name,
                 description,
                 input_schema,
             })
         })
-        .collect();
-
-    Ok(defs)
+        .collect()
 }
 
 #[cfg(test)]
@@ -594,7 +636,82 @@ mod tests {
     use super::*;
     use crate::fs_mode::FsMode;
     use proptest::prelude::*;
-    use std::io;
+    use std::io::{self, Read, Write};
+    use std::time::Duration;
+
+    fn start_raw_http_server(
+        response: &'static [u8],
+        delay: Duration,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request);
+            std::thread::sleep(delay);
+            stream.write_all(response).unwrap();
+        });
+        (format!("http://{address}"), handle)
+    }
+
+    #[tokio::test]
+    async fn mcp_discovery_times_out_deterministically() {
+        let (url, server) = start_raw_http_server(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 23\r\n\r\n{\"result\":{\"tools\":[]}}",
+            Duration::from_millis(100),
+        );
+
+        let error = mcp_tool_definitions_with_timeout(&url, Duration::from_millis(10))
+            .await
+            .unwrap_err();
+
+        assert!(
+            error
+                .downcast_ref::<reqwest::Error>()
+                .is_some_and(reqwest::Error::is_timeout)
+        );
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn mcp_discovery_rejects_invalid_http() {
+        let (url, server) = start_raw_http_server(b"not-http", Duration::ZERO);
+
+        let result = mcp_tool_definitions_with_timeout(&url, Duration::from_secs(1)).await;
+
+        assert!(result.is_err());
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn mcp_discovery_rejects_invalid_json() {
+        let (url, server) = start_raw_http_server(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nnot-json",
+            Duration::ZERO,
+        );
+
+        let result = mcp_tool_definitions_with_timeout(&url, Duration::from_secs(1)).await;
+
+        assert!(result.is_err());
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn mcp_discovery_accepts_an_empty_catalog() {
+        let response = serde_json::json!({"result": {"tools": []}});
+
+        assert!(parse_mcp_tools_response(&response).unwrap().is_empty());
+    }
+
+    #[test]
+    fn mcp_discovery_rejects_malformed_tool_entries() {
+        let response = serde_json::json!({
+            "result": {"tools": [{"description": "missing a name"}]}
+        });
+
+        assert!(parse_mcp_tools_response(&response).is_err());
+    }
 
     // ── ToolError tests ─────────────────────────────────────────────────
 

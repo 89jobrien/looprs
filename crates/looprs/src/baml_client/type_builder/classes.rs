@@ -11,22 +11,22 @@
 /// Access fields via methods: `builder.field_name()`
 
 pub struct ChatMessageClassBuilder {
-    inner: baml::ClassBuilder,
+    inner: ::baml::ClassBuilder,
 }
 
 impl ChatMessageClassBuilder {
     /// Create wrapper from runtime ClassBuilder.
-    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+    pub(crate) fn new(inner: ::baml::ClassBuilder) -> Self {
         Self { inner }
     }
 
     /// Get the underlying ClassBuilder.
-    pub fn inner(&self) -> &baml::ClassBuilder {
+    pub fn inner(&self) -> &::baml::ClassBuilder {
         &self.inner
     }
 
     /// Get the class as a type definition.
-    pub fn r#type(&self) -> baml::TypeDef {
+    pub fn r#type(&self) -> ::baml::TypeDef {
         self.inner
             .as_type()
             .expect("ChatMessage is statically defined in .baml and should always have a type")
@@ -37,14 +37,14 @@ impl ChatMessageClassBuilder {
     // =========================================================================
 
     /// Access the `role` field builder.
-    pub fn property_role(&self) -> baml::ClassPropertyBuilder {
+    pub fn property_role(&self) -> ::baml::ClassPropertyBuilder {
         self.inner
             .get_property("role")
             .expect("ChatMessage.role is statically defined in .baml and should always be present")
     }
 
     /// Access the `content` field builder.
-    pub fn property_content(&self) -> baml::ClassPropertyBuilder {
+    pub fn property_content(&self) -> ::baml::ClassPropertyBuilder {
         self.inner.get_property("content").expect(
             "ChatMessage.content is statically defined in .baml and should always be present",
         )
@@ -57,22 +57,22 @@ impl ChatMessageClassBuilder {
 /// Access fields via methods: `builder.field_name()`
 
 pub struct ToolCallClassBuilder {
-    inner: baml::ClassBuilder,
+    inner: ::baml::ClassBuilder,
 }
 
 impl ToolCallClassBuilder {
     /// Create wrapper from runtime ClassBuilder.
-    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+    pub(crate) fn new(inner: ::baml::ClassBuilder) -> Self {
         Self { inner }
     }
 
     /// Get the underlying ClassBuilder.
-    pub fn inner(&self) -> &baml::ClassBuilder {
+    pub fn inner(&self) -> &::baml::ClassBuilder {
         &self.inner
     }
 
     /// Get the class as a type definition.
-    pub fn r#type(&self) -> baml::TypeDef {
+    pub fn r#type(&self) -> ::baml::TypeDef {
         self.inner
             .as_type()
             .expect("ToolCall is statically defined in .baml and should always have a type")
@@ -83,21 +83,21 @@ impl ToolCallClassBuilder {
     // =========================================================================
 
     /// Access the `name` field builder.
-    pub fn property_name(&self) -> baml::ClassPropertyBuilder {
+    pub fn property_name(&self) -> ::baml::ClassPropertyBuilder {
         self.inner
             .get_property("name")
             .expect("ToolCall.name is statically defined in .baml and should always be present")
     }
 
     /// Access the `arguments` field builder.
-    pub fn property_arguments(&self) -> baml::ClassPropertyBuilder {
+    pub fn property_arguments(&self) -> ::baml::ClassPropertyBuilder {
         self.inner.get_property("arguments").expect(
             "ToolCall.arguments is statically defined in .baml and should always be present",
         )
     }
 
     /// Access the `id` field builder.
-    pub fn property_id(&self) -> baml::ClassPropertyBuilder {
+    pub fn property_id(&self) -> ::baml::ClassPropertyBuilder {
         self.inner
             .get_property("id")
             .expect("ToolCall.id is statically defined in .baml and should always be present")
@@ -110,22 +110,22 @@ impl ToolCallClassBuilder {
 /// Access fields via methods: `builder.field_name()`
 
 pub struct ToolDefinitionClassBuilder {
-    inner: baml::ClassBuilder,
+    inner: ::baml::ClassBuilder,
 }
 
 impl ToolDefinitionClassBuilder {
     /// Create wrapper from runtime ClassBuilder.
-    pub(crate) fn new(inner: baml::ClassBuilder) -> Self {
+    pub(crate) fn new(inner: ::baml::ClassBuilder) -> Self {
         Self { inner }
     }
 
     /// Get the underlying ClassBuilder.
-    pub fn inner(&self) -> &baml::ClassBuilder {
+    pub fn inner(&self) -> &::baml::ClassBuilder {
         &self.inner
     }
 
     /// Get the class as a type definition.
-    pub fn r#type(&self) -> baml::TypeDef {
+    pub fn r#type(&self) -> ::baml::TypeDef {
         self.inner
             .as_type()
             .expect("ToolDefinition is statically defined in .baml and should always have a type")
@@ -136,20 +136,20 @@ impl ToolDefinitionClassBuilder {
     // =========================================================================
 
     /// Access the `name` field builder.
-    pub fn property_name(&self) -> baml::ClassPropertyBuilder {
+    pub fn property_name(&self) -> ::baml::ClassPropertyBuilder {
         self.inner.get_property("name").expect(
             "ToolDefinition.name is statically defined in .baml and should always be present",
         )
     }
 
     /// Access the `description` field builder.
-    pub fn property_description(&self) -> baml::ClassPropertyBuilder {
+    pub fn property_description(&self) -> ::baml::ClassPropertyBuilder {
         self.inner.get_property("description")
             .expect("ToolDefinition.description is statically defined in .baml and should always be present")
     }
 
     /// Access the `input_schema` field builder.
-    pub fn property_input_schema(&self) -> baml::ClassPropertyBuilder {
+    pub fn property_input_schema(&self) -> ::baml::ClassPropertyBuilder {
         self.inner.get_property("input_schema")
             .expect("ToolDefinition.input_schema is statically defined in .baml and should always be present")
     }

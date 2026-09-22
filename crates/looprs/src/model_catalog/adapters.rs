@@ -1,3 +1,5 @@
+//! Implements live API and gist-backed adapters for remote model discovery.
+
 use std::time::Duration;
 
 use looprs_core::ports::{CatalogSource, RemoteCatalogError, RemoteModel, RemoteModelCatalogPort};
@@ -10,6 +12,7 @@ pub struct LiveApiCatalogAdapter {
 }
 
 impl LiveApiCatalogAdapter {
+    /// Creates a live provider catalog client with the requested HTTP timeout.
     pub fn new(timeout_secs: u64) -> Result<Self, RemoteCatalogError> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(timeout_secs))
@@ -143,6 +146,7 @@ pub struct PydanticAiGistCatalogAdapter {
 }
 
 impl PydanticAiGistCatalogAdapter {
+    /// Creates a fallback catalog client for the supplied raw gist URL.
     pub fn new(gist_raw_url: String) -> Self {
         Self {
             client: reqwest::Client::new(),
@@ -183,6 +187,7 @@ impl RemoteModelCatalogPort for PydanticAiGistCatalogAdapter {
     }
 }
 
+/// Parses one provider's model entries from the pydantic-ai gist schema.
 pub fn parse_gist_catalog(
     provider: &str,
     body: &str,

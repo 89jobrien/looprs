@@ -1,3 +1,5 @@
+//! Loads provider selection and per-provider settings from configuration files.
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -42,9 +44,17 @@ pub struct ProviderConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub openai: Option<ProviderSettings>,
 
+    /// Gemini-specific settings
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gemini: Option<ProviderSettings>,
+
     /// Local/Ollama-specific settings
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local: Option<ProviderSettings>,
+
+    /// BAML-specific settings
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub baml: Option<ProviderSettings>,
 
     /// Default settings applied to all providers
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -75,12 +85,23 @@ impl ProviderConfig {
 
     /// Get settings for a specific provider
     pub fn get_provider_settings(&self, provider_name: &str) -> Option<&ProviderSettings> {
-        match provider_name {
-            "anthropic" | "anthropic-sdk" | "claude-sdk" => self.anthropic.as_ref(),
-            "openai" | "openai-sdk" => self.openai.as_ref(),
-            "local" | "ollama" => self.local.as_ref(),
-            _ => None,
-        }
+        crate::providers::provider_descriptor(provider_name)?.settings(self)
+    }
+
+    /// Get mutable settings for a specific provider through the descriptor registry.
+    pub fn get_provider_settings_mut(
+        &mut self,
+        provider_name: &str,
+    ) -> Option<&mut ProviderSettings> {
+        crate::providers::provider_descriptor(provider_name)?.settings_mut(self)
+    }
+
+    /// Get or initialize mutable settings for a registered provider or alias.
+    pub fn get_or_insert_provider_settings(
+        &mut self,
+        provider_name: &str,
+    ) -> Option<&mut ProviderSettings> {
+        Some(crate::providers::provider_descriptor(provider_name)?.get_or_insert_settings(self))
     }
 
     /// Merge provider-specific settings with defaults
@@ -238,5 +259,51 @@ mod tests {
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: ProviderConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.provider, Some("openai".to_string()));
+    }
+
+    #[test]
+    fn aliases_share_provider_specific_settings() {
+        let mut config = ProviderConfig {
+            anthropic: Some(ProviderSettings {
+                model: Some("claude-model".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        for alias in ["anthropic", "anthropic-sdk", "claude-sdk"] {
+            assert_eq!(
+                config.merged_settings(alias).model.as_deref(),
+                Some("claude-model")
+            );
+            config
+                .get_or_insert_provider_settings(alias)
+                .expect("registered alias")
+                .max_tokens = Some(42);
+            assert_eq!(
+                config
+                    .get_provider_settings_mut(alias)
+                    .expect("registered alias")
+                    .max_tokens,
+                Some(42)
+            );
+        }
+    }
+
+    #[test]
+    fn every_registered_alias_routes_immutable_and_mutable_settings() {
+        for alias in crate::providers::provider_aliases() {
+            let mut config = ProviderConfig::default();
+            config
+                .get_or_insert_provider_settings(alias)
+                .expect("registry alias should have a settings section")
+                .model = Some(alias.to_string());
+            assert_eq!(
+                config
+                    .get_provider_settings(alias)
+                    .and_then(|settings| settings.model.as_deref()),
+                Some(alias)
+            );
+        }
     }
 }

@@ -1,0 +1,5 @@
+name: test_hook
+trigger: SessionStart
+actions:
+  - type: message
+    text: hello

@@ -10,19 +10,19 @@
 
 use super::*;
 use crate::baml_client::types;
-use baml::BamlDecode;
+use baml::{__internal::serde::Serialize, BamlDecode};
 
 /// A single turn in a multi-turn conversation.
 
-#[derive(Debug, Clone, Default, BamlDecode)]
-
+#[derive(Debug, Clone, Default, BamlDecode, Serialize)]
+#[serde(crate = "::baml::__internal::serde")]
 pub struct ChatMessage {
     pub role: Option<String>,
 
     pub content: Option<String>,
 }
 
-impl AsRef<ChatMessage> for ChatMessage {
+impl ::std::convert::AsRef<ChatMessage> for ChatMessage {
     fn as_ref(&self) -> &ChatMessage {
         self
     }
@@ -30,8 +30,8 @@ impl AsRef<ChatMessage> for ChatMessage {
 
 /// A single tool invocation requested by the model.
 
-#[derive(Debug, Clone, Default, BamlDecode)]
-
+#[derive(Debug, Clone, Default, BamlDecode, Serialize)]
+#[serde(crate = "::baml::__internal::serde")]
 pub struct ToolCall {
     pub name: Option<String>,
 
@@ -40,7 +40,7 @@ pub struct ToolCall {
     pub id: Option<String>,
 }
 
-impl AsRef<ToolCall> for ToolCall {
+impl ::std::convert::AsRef<ToolCall> for ToolCall {
     fn as_ref(&self) -> &ToolCall {
         self
     }
@@ -50,8 +50,8 @@ impl AsRef<ToolCall> for ToolCall {
 /// schema serialized as a string (kept as a string to avoid modeling
 /// arbitrary JSON Schema shapes in BAML).
 
-#[derive(Debug, Clone, Default, BamlDecode)]
-
+#[derive(Debug, Clone, Default, BamlDecode, Serialize)]
+#[serde(crate = "::baml::__internal::serde")]
 pub struct ToolDefinition {
     pub name: Option<String>,
 
@@ -60,7 +60,7 @@ pub struct ToolDefinition {
     pub input_schema: Option<String>,
 }
 
-impl AsRef<ToolDefinition> for ToolDefinition {
+impl ::std::convert::AsRef<ToolDefinition> for ToolDefinition {
     fn as_ref(&self) -> &ToolDefinition {
         self
     }

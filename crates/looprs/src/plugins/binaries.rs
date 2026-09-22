@@ -1,3 +1,5 @@
+//! Declares typed adapters for external CLI tools used as runtime plugins.
+
 use super::{NamedTool, Plugins};
 
 looprs_macros::define_tool!(Doob, "doob");

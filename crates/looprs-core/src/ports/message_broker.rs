@@ -44,7 +44,7 @@ impl Message {
     }
 }
 
-// ── Port ─────────────────────────────────────────────────────────────────
+// Publish-subscribe boundary implemented by runtime message brokers.
 
 /// Port: fan-out message broker for inter-component pub/sub.
 ///

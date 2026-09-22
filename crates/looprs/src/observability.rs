@@ -1,3 +1,5 @@
+//! Resolves observability paths and appends timestamped JSONL event records.
+
 use serde_json::Value;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
@@ -6,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const OBSERVABILITY_DIR_ENV: &str = "LOOPRS_OBSERVABILITY_DIR";
 
+/// Returns the configured observability root or `.looprs/observability`.
 pub fn observability_root() -> PathBuf {
     std::env::var(OBSERVABILITY_DIR_ENV)
         .ok()
@@ -14,15 +17,18 @@ pub fn observability_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".looprs/observability"))
 }
 
+/// Returns the inference-trace directory beneath the observability root.
 pub fn trace_dir() -> PathBuf {
     observability_root().join("traces")
 }
 
+/// Appends an event to a named JSONL stream under the observability root.
 pub fn append_named_jsonl(name: &str, value: &Value) -> io::Result<()> {
     let path = observability_root().join(format!("{name}.jsonl"));
     append_jsonl(&path, value)
 }
 
+/// Appends a timestamped event envelope to a JSONL file, creating parents as needed.
 pub fn append_jsonl(path: &Path, value: &Value) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Feature Matrix - looprs</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <a class="brand" href="index.html"><span>loop</span>rs</a>
+      <a href="index.html">Overview</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="state-model.html">State Model</a>
+      <a class="active" href="feature-matrix.html">Feature Matrix</a>
+      <a href="crate-inventory.html">Crate Inventory</a>
+      <a href="crate-tiers.html">Crate Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main class="page">
+      <h1>Feature Matrix</h1>
+      <p class="subtitle">Current capability surface derived from README and crate layout.</p>
+
+      <table>
+        <thead>
+          <tr><th>Area</th><th>Capability</th><th>Status</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Providers</td><td>Anthropic / OpenAI / Gemini / Local</td><td>Stable</td><td>Selected via env or provider config.</td></tr>
+          <tr><td>Providers</td><td>SDK-backed variants</td><td>Stable</td><td><code>openai-sdk</code>, <code>anthropic-sdk</code>, <code>claude-sdk</code>.</td></tr>
+          <tr><td>Tools</td><td><code>read</code> <code>write</code> <code>edit</code> <code>glob</code> <code>grep</code> <code>nu</code> <code>bash</code></td><td>Stable</td><td>Tool schemas exposed to providers each turn.</td></tr>
+          <tr><td>Prompt UX</td><td><code>@file</code> references</td><td>Stable</td><td>File content injection with extension and size policy controls.</td></tr>
+          <tr><td>Hooks</td><td>Runtime event hooks</td><td>Stable</td><td>10 event variants; emission follows the session, turn, delegation, and tool paths described in the state model.</td></tr>
+          <tr><td>Configuration</td><td>Repo and user override layering</td><td>Stable</td><td><code>.looprs/</code> overrides <code>$HOME/.looprs/</code>.</td></tr>
+          <tr><td>Delegation</td><td>Agent manifests and routed delegation</td><td>Stable</td><td>Role selection and delegated metadata in runtime.</td></tr>
+          <tr><td>Delegation</td><td>Delegated tool allowlists</td><td>Stable</td><td>Allowed tools filtered in request and execution path.</td></tr>
+          <tr><td>Execution</td><td>Parallel tool fan-out</td><td>Evolving</td><td>Bounded by runtime max parallel setting.</td></tr>
+          <tr><td>MCP</td><td>Remote MCP tool discovery/composition</td><td>Evolving</td><td>Remote tools merged with local definitions.</td></tr>
+          <tr><td>Observability</td><td>JSONL traces and UI events</td><td>Stable</td><td>Centralized or project-scoped output roots.</td></tr>
+          <tr><td>UI</td><td>Provider menu and chat TUI</td><td>Stable</td><td>Separate <code>looprs-tui</code> frontend crate.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Status interpretation</h2>
+      <div class="grid-3">
+        <div class="card">
+          <div class="pill stable">Stable</div>
+          <p>Used daily in the default workflow and covered by regular workspace checks.</p>
+        </div>
+        <div class="card">
+          <div class="pill experimental">Evolving</div>
+          <p>Shipping now, but likely to receive behavior and API refinement in near-term releases.</p>
+        </div>
+        <div class="card">
+          <div class="pill experimental">Scoped</div>
+          <p>Available behind configuration choices, provider support, or operational guardrails.</p>
+        </div>
+      </div>
+
+      <h2>Capability by persona</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Persona</th><th>Most-used capabilities</th><th>Typical entrypoint</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Individual developer</td><td>REPL, file references, read/edit/grep/glob, local checks</td><td><code>looprs</code></td></tr>
+            <tr><td>Release maintainer</td><td>Hooked validation, protocol checks, changelog workflows</td><td><code>looprs</code> + <code>cargo xtask</code></td></tr>
+            <tr><td>Tooling engineer</td><td>Skill manifests, command packs, provider tuning</td><td><code>.looprs/</code> customization</td></tr>
+            <tr><td>Ops observer</td><td>JSONL traces, session events, diagnostics review</td><td>Observability outputs</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Known current limits</h2>
+      <ul>
+        <li>Provider behavior differs by tool-calling protocol, so integration coverage matters.</li>
+        <li>Some advanced flows depend on local tools and environment setup.</li>
+        <li>Delegated capabilities are constrained by explicit metadata and runtime mode.</li>
+      </ul>
+
+      <h2>Implementation snippets</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Tool execution dispatch</h3>
+          <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs/src/tools/mod.rs#L470"><code>crates/looprs/src/tools/mod.rs#L470</code></a></p>
+          <pre><code>pub fn execute_tool(name: &str, args: &Value, ctx: &ToolContext) -> Result&lt;String, ToolError&gt; {
+    match Tool::from_name(name) {
+        Some(tool) => {
+            enforce_fs_mode(tool, args, ctx)?;
+            tool.execute(args, ctx)
+        }
+        None => Err(ToolError::UnknownTool(name.to_string())),
+    }
+}</code></pre>
+        </div>
+        <div class="card">
+          <h3>Provider selection switch</h3>
+          <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs/src/providers/mod.rs#L261"><code>crates/looprs/src/providers/mod.rs#L261</code></a></p>
+          <pre><code>match name.to_lowercase().as_str() {
+    "anthropic" => { /* ... */ }
+    "openai" => { /* ... */ }
+    "gemini" | "google" => { /* ... */ }
+    "ollama" | "local" => { /* ... */ }
+    "baml" => { /* ... */ }
+    other => Err(ProviderError::Config(format!("Unknown provider: {other}"))),
+}</code></pre>
+        </div>
+      </div>
+
+      <footer>
+        Status labels are product-facing summaries, not API guarantees.
+      </footer>
+    </main>
+  </body>
+</html>

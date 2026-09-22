@@ -7,8 +7,7 @@
 
 use std::process::{Command, exit};
 
-// TODO(feature-idea-14): Add cross-platform binary packaging, checksums, and
-// release artifacts to the canonical taskit/xtask release path.
+// TODO(feature-idea 3): Add doctest and rustdoc-warning checks to the shared CI gate. (#50)
 const CLI_BIN_TEST_ARGS: &[&str] = &[
     "nextest",
     "run",
@@ -87,6 +86,7 @@ fn run_cli_bin_tests() -> i32 {
 
 fn is_plain_pre_push(args: &[String]) -> bool {
     matches!(args, [subcommand] if subcommand == "pre-push")
+        || matches!(args, [command, gate] if command == "check" && gate == "pre-push")
 }
 
 /// `taskit self install` installs taskit itself, not looprs — intercept
@@ -115,6 +115,7 @@ mod tests {
     #[test]
     fn plain_pre_push_runs_cli_bin_tests() {
         assert!(is_plain_pre_push(&args(&["pre-push"])));
+        assert!(is_plain_pre_push(&args(&["check", "pre-push"])));
     }
 
     #[test]
@@ -127,6 +128,11 @@ mod tests {
     #[test]
     fn pre_push_with_taskit_args_stays_taskit_only() {
         assert!(!is_plain_pre_push(&args(&["pre-push", "--dry-run"])));
+        assert!(!is_plain_pre_push(&args(&[
+            "check",
+            "pre-push",
+            "--dry-run"
+        ])));
     }
 
     #[test]

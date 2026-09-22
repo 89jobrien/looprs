@@ -10,6 +10,7 @@ pub mod observation_store;
 pub mod plugin_executor;
 pub mod plugin_runtime;
 pub mod session_store;
+pub mod tool_policy;
 pub mod user_output;
 
 #[cfg(any(test, feature = "test-contracts"))]
@@ -17,16 +18,18 @@ pub mod test_contracts;
 
 // Re-export all port traits and the Message domain type.
 pub use inference_provider::{
-    InferStream, InferenceProvider, InferenceRequest, InferenceResponse, Usage,
+    InferStream, InferenceDelta, InferenceProvider, InferenceRequest, InferenceResponse,
+    InferenceStreamError, InferenceStreamEvent, Usage,
 };
 pub use message_broker::{Message, MessageBroker};
 pub use model_catalog::{CatalogSource, RemoteCatalogError, RemoteModel, RemoteModelCatalogPort};
-pub use observation_store::ObservationStore;
+pub use observation_store::{ObservationQuery, ObservationStore};
 pub use plugin_executor::PluginExecutor;
 pub use plugin_runtime::{
     OrchestrationPluginPort, OrchestrationSupervisorPort, PluginAgentSelection,
-    PluginExecutionMode, PluginHealthState, PluginKind, PluginSupervisorStatus,
-    RuntimeSupervisorPort, ToolSupervisorPort,
+    PluginExecutionMode, PluginHealthState, PluginKind, PluginSupervisorError,
+    PluginSupervisorPort, PluginSupervisorStatus, RuntimeSupervisorPort, ToolSupervisorPort,
 };
 pub use session_store::{SessionEvent, SessionStore};
+pub use tool_policy::DelegatedToolPolicy;
 pub use user_output::UserOutput;

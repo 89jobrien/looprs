@@ -1,9 +1,12 @@
+//! Abstracts subprocess output capture and supplies a recording test runner.
+
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::{Command, Output};
 use std::sync::{Arc, Mutex};
 
 pub trait Runner: Send + Sync {
+    /// Runs a resolved program with arguments and captures its output.
     fn output(&self, program: &Path, args: &[OsString]) -> std::io::Result<Output>;
 }
 
@@ -30,6 +33,7 @@ pub struct MockRunner {
 }
 
 impl MockRunner {
+    /// Creates a recording runner with no queued outputs.
     pub fn new() -> Self {
         Self {
             calls: Arc::new(Mutex::new(Vec::new())),
@@ -37,10 +41,12 @@ impl MockRunner {
         }
     }
 
+    /// Queues the result returned by the next mock invocation.
     pub fn push_output(&self, out: std::io::Result<Output>) {
         self.outputs.lock().unwrap().push(out);
     }
 
+    /// Returns a snapshot of programs and arguments invoked so far.
     pub fn calls(&self) -> Vec<RunCall> {
         self.calls.lock().unwrap().clone()
     }

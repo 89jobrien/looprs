@@ -1,3 +1,5 @@
+//! Defines provider contracts, configuration resolution, and provider construction.
+
 use std::env;
 use std::time::Duration;
 
@@ -8,6 +10,7 @@ pub mod gemini;
 pub mod local;
 pub mod openai;
 pub mod openai_sdk;
+mod streaming;
 
 use crate::api::ContentBlock;
 use crate::errors::ProviderError;
@@ -21,11 +24,214 @@ pub use looprs_core::ports::inference_provider::{InferenceRequest, InferenceResp
 
 const DEFAULT_TIMEOUT_SECS: u64 = 120;
 
+type ProviderConstructor = fn(Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError>;
+type SettingsGetter = for<'a> fn(
+    &'a crate::config_file::ProviderConfig,
+) -> Option<&'a crate::config_file::ProviderSettings>;
+type SettingsGetterMut = for<'a> fn(
+    &'a mut crate::config_file::ProviderConfig,
+) -> Option<&'a mut crate::config_file::ProviderSettings>;
+type SettingsInserter = for<'a> fn(
+    &'a mut crate::config_file::ProviderConfig,
+) -> &'a mut crate::config_file::ProviderSettings;
+
+/// Canonical identity and configuration mapping for a provider implementation.
+#[derive(Debug, Clone, Copy)]
+pub struct ProviderDescriptor {
+    /// Name used after alias normalization.
+    pub canonical_name: &'static str,
+    /// Accepted configuration and environment aliases.
+    pub aliases: &'static [&'static str],
+    /// Section in `.looprs/provider.json` used by this implementation.
+    pub settings_section: &'static str,
+    constructor: ProviderConstructor,
+    settings: SettingsGetter,
+    settings_mut: SettingsGetterMut,
+    settings_insert: SettingsInserter,
+}
+
+impl PartialEq for ProviderDescriptor {
+    fn eq(&self, other: &Self) -> bool {
+        self.canonical_name == other.canonical_name
+            && self.aliases == other.aliases
+            && self.settings_section == other.settings_section
+    }
+}
+
+impl Eq for ProviderDescriptor {}
+
+impl ProviderDescriptor {
+    pub(crate) fn create(
+        &self,
+        model: Option<ModelId>,
+    ) -> Result<Box<dyn LLMProvider>, ProviderError> {
+        (self.constructor)(model)
+    }
+
+    pub(crate) fn settings<'a>(
+        &self,
+        config: &'a crate::config_file::ProviderConfig,
+    ) -> Option<&'a crate::config_file::ProviderSettings> {
+        (self.settings)(config)
+    }
+
+    pub(crate) fn settings_mut<'a>(
+        &self,
+        config: &'a mut crate::config_file::ProviderConfig,
+    ) -> Option<&'a mut crate::config_file::ProviderSettings> {
+        (self.settings_mut)(config)
+    }
+
+    pub(crate) fn get_or_insert_settings<'a>(
+        &self,
+        config: &'a mut crate::config_file::ProviderConfig,
+    ) -> &'a mut crate::config_file::ProviderSettings {
+        (self.settings_insert)(config)
+    }
+}
+
+fn construct_anthropic(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    Ok(Box::new(anthropic::AnthropicProvider::new_with_model(
+        resolve_secret_env("ANTHROPIC_API_KEY")?,
+        model,
+    )?))
+}
+
+fn construct_anthropic_sdk(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    Ok(Box::new(
+        anthropic_sdk::AnthropicSdkProvider::new_with_model(
+            resolve_secret_env("ANTHROPIC_API_KEY")?,
+            model,
+        )?,
+    ))
+}
+
+fn construct_openai(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    Ok(Box::new(openai::OpenAIProvider::new_with_model(
+        resolve_secret_env("OPENAI_API_KEY")?,
+        model,
+    )?))
+}
+
+fn construct_openai_sdk(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    Ok(Box::new(openai_sdk::OpenAISdkProvider::new_with_model(
+        resolve_secret_env("OPENAI_API_KEY")?,
+        model,
+    )?))
+}
+
+fn construct_gemini(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    let key =
+        resolve_secret_env("GEMINI_API_KEY").or_else(|_| resolve_secret_env("GOOGLE_API_KEY"))?;
+    Ok(Box::new(gemini::GeminiProvider::new_with_model(
+        key, model,
+    )?))
+}
+
+fn construct_local(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    Ok(Box::new(local::LocalProvider::new_with_model(model)?))
+}
+
+fn construct_baml(model: Option<ModelId>) -> Result<Box<dyn LLMProvider>, ProviderError> {
+    Ok(Box::new(baml_provider::BamlProvider::for_provider(
+        "baml", model,
+    )?))
+}
+
+const PROVIDER_DESCRIPTORS: &[ProviderDescriptor] = &[
+    ProviderDescriptor {
+        canonical_name: "anthropic",
+        aliases: &["anthropic"],
+        settings_section: "anthropic",
+        constructor: construct_anthropic,
+        settings: |config| config.anthropic.as_ref(),
+        settings_mut: |config| config.anthropic.as_mut(),
+        settings_insert: |config| config.anthropic.get_or_insert_with(Default::default),
+    },
+    ProviderDescriptor {
+        canonical_name: "anthropic-sdk",
+        aliases: &["anthropic-sdk", "claude-sdk"],
+        settings_section: "anthropic",
+        constructor: construct_anthropic_sdk,
+        settings: |config| config.anthropic.as_ref(),
+        settings_mut: |config| config.anthropic.as_mut(),
+        settings_insert: |config| config.anthropic.get_or_insert_with(Default::default),
+    },
+    ProviderDescriptor {
+        canonical_name: "openai",
+        aliases: &["openai"],
+        settings_section: "openai",
+        constructor: construct_openai,
+        settings: |config| config.openai.as_ref(),
+        settings_mut: |config| config.openai.as_mut(),
+        settings_insert: |config| config.openai.get_or_insert_with(Default::default),
+    },
+    ProviderDescriptor {
+        canonical_name: "openai-sdk",
+        aliases: &["openai-sdk"],
+        settings_section: "openai",
+        constructor: construct_openai_sdk,
+        settings: |config| config.openai.as_ref(),
+        settings_mut: |config| config.openai.as_mut(),
+        settings_insert: |config| config.openai.get_or_insert_with(Default::default),
+    },
+    ProviderDescriptor {
+        canonical_name: "gemini",
+        aliases: &["gemini", "google"],
+        settings_section: "gemini",
+        constructor: construct_gemini,
+        settings: |config| config.gemini.as_ref(),
+        settings_mut: |config| config.gemini.as_mut(),
+        settings_insert: |config| config.gemini.get_or_insert_with(Default::default),
+    },
+    ProviderDescriptor {
+        canonical_name: "local",
+        aliases: &["local", "ollama"],
+        settings_section: "local",
+        constructor: construct_local,
+        settings: |config| config.local.as_ref(),
+        settings_mut: |config| config.local.as_mut(),
+        settings_insert: |config| config.local.get_or_insert_with(Default::default),
+    },
+    ProviderDescriptor {
+        canonical_name: "baml",
+        aliases: &["baml"],
+        settings_section: "baml",
+        constructor: construct_baml,
+        settings: |config| config.baml.as_ref(),
+        settings_mut: |config| config.baml.as_mut(),
+        settings_insert: |config| config.baml.get_or_insert_with(Default::default),
+    },
+];
+
+/// Resolve a provider name or alias to its canonical descriptor.
+pub fn provider_descriptor(name: &str) -> Option<&'static ProviderDescriptor> {
+    PROVIDER_DESCRIPTORS.iter().find(|descriptor| {
+        descriptor
+            .aliases
+            .iter()
+            .any(|alias| alias.eq_ignore_ascii_case(name))
+    })
+}
+
+/// Returns all registered provider descriptors.
+pub const fn provider_descriptors() -> &'static [ProviderDescriptor] {
+    PROVIDER_DESCRIPTORS
+}
+
+/// Returns every accepted provider name and alias.
+pub fn provider_aliases() -> impl Iterator<Item = &'static str> {
+    PROVIDER_DESCRIPTORS
+        .iter()
+        .flat_map(|descriptor| descriptor.aliases.iter().copied())
+}
+
 pub(crate) struct ProviderHttpClient {
     client: Client,
 }
 
 impl ProviderHttpClient {
+    /// Builds a provider HTTP client with the requested timeout.
     pub fn new(timeout_secs: u64) -> Result<Self, ProviderError> {
         let client = Client::builder()
             .timeout(Duration::from_secs(timeout_secs))
@@ -33,10 +239,12 @@ impl ProviderHttpClient {
         Ok(Self { client })
     }
 
+    /// Builds a provider HTTP client with the standard request timeout.
     pub fn default() -> Result<Self, ProviderError> {
         Self::new(DEFAULT_TIMEOUT_SECS)
     }
 
+    /// Borrows the configured reqwest client.
     pub fn client(&self) -> &Client {
         &self.client
     }
@@ -234,22 +442,42 @@ pub async fn create_provider_from_config(
     Err(ProviderError::NoProviderConfigured)
 }
 
+// TODO(feature-idea 4): Validate provider documentation examples against registry defaults. (#51)
 /// Resolve the effective model id from overrides, env, and config file.
 fn resolve_model(
     config_section: &str,
     config_file: &Option<crate::config_file::ProviderConfig>,
     overrides: &ProviderOverrides,
 ) -> Option<ModelId> {
+    resolve_model_from_sources(
+        config_section,
+        config_file.as_ref(),
+        overrides,
+        env::var("MODEL").ok().as_deref(),
+    )
+}
+
+fn resolve_model_from_sources(
+    config_section: &str,
+    config_file: Option<&crate::config_file::ProviderConfig>,
+    overrides: &ProviderOverrides,
+    environment_model: Option<&str>,
+) -> Option<ModelId> {
     overrides
         .model
         .clone()
-        .or_else(|| env::var("MODEL").ok().map(ModelId::new))
+        .and_then(normalize_model_id)
+        .or_else(|| environment_model.and_then(|model| normalize_model_id(ModelId::new(model))))
         .or_else(|| {
             config_file
-                .as_ref()
                 .and_then(|c| c.merged_settings(config_section).model)
-                .map(ModelId::new)
+                .and_then(|model| normalize_model_id(ModelId::new(model)))
         })
+}
+
+fn normalize_model_id(model: ModelId) -> Option<ModelId> {
+    let normalized = model.as_str().trim();
+    (!normalized.is_empty()).then(|| ModelId::new(normalized))
 }
 
 /// Create a provider by explicit name
@@ -258,55 +486,12 @@ async fn create_provider_by_name(
     config_file: &Option<crate::config_file::ProviderConfig>,
     overrides: ProviderOverrides,
 ) -> Result<Box<dyn LLMProvider>, ProviderError> {
-    match name.to_lowercase().as_str() {
-        "anthropic" => {
-            let key = resolve_secret_env("ANTHROPIC_API_KEY")?;
-            let model = resolve_model("anthropic", config_file, &overrides);
-            Ok(Box::new(anthropic::AnthropicProvider::new_with_model(
-                key, model,
-            )?))
-        }
-        "anthropic-sdk" | "claude-sdk" => {
-            let key = resolve_secret_env("ANTHROPIC_API_KEY")?;
-            let model = resolve_model("anthropic", config_file, &overrides);
-            Ok(Box::new(
-                anthropic_sdk::AnthropicSdkProvider::new_with_model(key, model)?,
-            ))
-        }
-        "openai" => {
-            let key = resolve_secret_env("OPENAI_API_KEY")?;
-            let model = resolve_model("openai", config_file, &overrides);
-            Ok(Box::new(openai::OpenAIProvider::new_with_model(
-                key, model,
-            )?))
-        }
-        "openai-sdk" => {
-            let key = resolve_secret_env("OPENAI_API_KEY")?;
-            let model = resolve_model("openai", config_file, &overrides);
-            Ok(Box::new(openai_sdk::OpenAISdkProvider::new_with_model(
-                key, model,
-            )?))
-        }
-        "gemini" | "google" => {
-            let key = resolve_secret_env("GEMINI_API_KEY")
-                .or_else(|_| resolve_secret_env("GOOGLE_API_KEY"))?;
-            let model = resolve_model("gemini", config_file, &overrides);
-            Ok(Box::new(gemini::GeminiProvider::new_with_model(
-                key, model,
-            )?))
-        }
-        "ollama" | "local" => {
-            let model = resolve_model("local", config_file, &overrides);
-            Ok(Box::new(local::LocalProvider::new_with_model(model)?))
-        }
-        "baml" => {
-            let model = resolve_model("anthropic", config_file, &overrides);
-            Ok(Box::new(baml_provider::BamlProvider::for_provider(
-                "baml", model,
-            )?))
-        }
-        other => Err(ProviderError::Config(format!("Unknown provider: {other}"))),
-    }
+    let descriptor = provider_descriptor(name)
+        .ok_or_else(|| ProviderError::Config(format!("Unknown provider: {name}")))?;
+    // TODO(feature-idea 5): Apply all provider settings during construction. (#52)
+    // Include timeout_secs and provider-specific extra settings.
+    let model = resolve_model(descriptor.settings_section, config_file, &overrides);
+    descriptor.create(model)
 }
 
 #[cfg(test)]
@@ -360,5 +545,118 @@ mod tests {
         assert!(supports_temperature("gpt-4o"));
         assert!(!supports_temperature("o1-preview"));
         assert!(!supports_temperature("gpt-5-mini"));
+    }
+
+    #[test]
+    fn provider_descriptors_resolve_every_alias_to_one_settings_section() {
+        for descriptor in provider_descriptors() {
+            for alias in descriptor.aliases {
+                assert_eq!(
+                    provider_descriptor(alias),
+                    Some(descriptor),
+                    "alias {alias:?} did not resolve to its descriptor"
+                );
+            }
+        }
+        assert!(provider_descriptor("unknown").is_none());
+        assert_eq!(
+            provider_aliases().collect::<Vec<_>>(),
+            vec![
+                "anthropic",
+                "anthropic-sdk",
+                "claude-sdk",
+                "openai",
+                "openai-sdk",
+                "gemini",
+                "google",
+                "local",
+                "ollama",
+                "baml"
+            ]
+        );
+    }
+
+    #[test]
+    fn provider_descriptor_drives_construction_and_settings_access() {
+        let descriptor = provider_descriptor("ollama").unwrap();
+        let mut config = crate::config_file::ProviderConfig::default();
+
+        descriptor.get_or_insert_settings(&mut config).model = Some("llama3.2:latest".to_string());
+        let provider = descriptor
+            .create(Some(ModelId::new("llama3.2:latest")))
+            .unwrap();
+
+        assert_eq!(provider.name(), "ollama");
+        assert_eq!(
+            descriptor
+                .settings(&config)
+                .and_then(|settings| settings.model.as_deref()),
+            Some("llama3.2:latest")
+        );
+    }
+
+    #[test]
+    fn baml_model_resolution_respects_precedence() {
+        let config = crate::config_file::ProviderConfig {
+            defaults: Some(crate::config_file::ProviderSettings {
+                model: Some("default-model".to_string()),
+                ..Default::default()
+            }),
+            baml: Some(crate::config_file::ProviderSettings {
+                model: Some("baml-model".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            resolve_model_from_sources("baml", Some(&config), &ProviderOverrides::default(), None,)
+                .as_ref()
+                .map(ModelId::as_str),
+            Some("baml-model")
+        );
+        assert_eq!(
+            resolve_model_from_sources(
+                "baml",
+                Some(&config),
+                &ProviderOverrides::default(),
+                Some("env-model"),
+            )
+            .as_ref()
+            .map(ModelId::as_str),
+            Some("env-model")
+        );
+        assert_eq!(
+            resolve_model_from_sources(
+                "baml",
+                Some(&config),
+                &ProviderOverrides {
+                    model: Some(ModelId::new("override-model")),
+                },
+                Some("env-model"),
+            )
+            .as_ref()
+            .map(ModelId::as_str),
+            Some("override-model")
+        );
+    }
+
+    #[test]
+    fn model_resolution_normalizes_whitespace_and_ignores_blank_values() {
+        assert_eq!(
+            resolve_model_from_sources(
+                "openai",
+                None,
+                &ProviderOverrides::default(),
+                Some("  gpt-5-mini  "),
+            )
+            .as_ref()
+            .map(ModelId::as_str),
+            Some("gpt-5-mini")
+        );
+        assert!(
+            resolve_model_from_sources("openai", None, &ProviderOverrides::default(), Some("   "),)
+                .is_none()
+        );
     }
 }

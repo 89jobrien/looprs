@@ -1,3 +1,5 @@
+//! Verifies loading and querying named model tiers and MAGI configuration.
+
 use looprs::models_config::ModelsConfig;
 use std::io::Write;
 use tempfile::NamedTempFile;

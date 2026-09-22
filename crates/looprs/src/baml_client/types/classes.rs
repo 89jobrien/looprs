@@ -6,19 +6,21 @@
 //! Generated class types.
 
 use super::*;
-use baml::{BamlDecode, BamlEncode};
+use baml::{
+    __internal::serde::{Deserialize, Serialize},
+    BamlDecode, BamlEncode,
+};
 
 /// A single turn in a multi-turn conversation.
 
-#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
-
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode, Serialize, Deserialize)]
+#[serde(crate = "::baml::__internal::serde")]
 pub struct ChatMessage {
     pub role: String,
-
     pub content: String,
 }
 
-impl AsRef<ChatMessage> for ChatMessage {
+impl ::std::convert::AsRef<ChatMessage> for ChatMessage {
     fn as_ref(&self) -> &ChatMessage {
         self
     }
@@ -26,17 +28,15 @@ impl AsRef<ChatMessage> for ChatMessage {
 
 /// A single tool invocation requested by the model.
 
-#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
-
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode, Serialize, Deserialize)]
+#[serde(crate = "::baml::__internal::serde")]
 pub struct ToolCall {
     pub name: String,
-
     pub arguments: String,
-
     pub id: String,
 }
 
-impl AsRef<ToolCall> for ToolCall {
+impl ::std::convert::AsRef<ToolCall> for ToolCall {
     fn as_ref(&self) -> &ToolCall {
         self
     }
@@ -46,17 +46,15 @@ impl AsRef<ToolCall> for ToolCall {
 /// schema serialized as a string (kept as a string to avoid modeling
 /// arbitrary JSON Schema shapes in BAML).
 
-#[derive(Debug, Clone, Default, BamlEncode, BamlDecode)]
-
+#[derive(Debug, Clone, Default, BamlEncode, BamlDecode, Serialize, Deserialize)]
+#[serde(crate = "::baml::__internal::serde")]
 pub struct ToolDefinition {
     pub name: String,
-
     pub description: String,
-
     pub input_schema: String,
 }
 
-impl AsRef<ToolDefinition> for ToolDefinition {
+impl ::std::convert::AsRef<ToolDefinition> for ToolDefinition {
     fn as_ref(&self) -> &ToolDefinition {
         self
     }

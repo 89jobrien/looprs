@@ -1,8 +1,86 @@
 project: looprs
 id: looprs
-updated: 2026-09-06
-items: []
+updated: 2026-09-21
+items:
+- id: kani-proof-redesign
+  doob_uuid: 4b68ab19-c94e-4794-af00-b4ce5db6d5a1
+  name: kani-proof-redesign
+  priority: P2
+  status: done
+  title: Redesign ANSI sanitizer Kani proof for bounded CI execution
+  description: |-
+    Replaced the unbounded String/Vec proof with bounded production-kernel proofs
+    for output growth, ESC removal, CSI, OSC, and DCS handling. All replacement
+    harnesses now complete within five minutes.
+  files:
+  - crates/looprs/src/sanitize.rs
+  - .github/workflows/nightly.yml
+  extra: []
+- id: pty-terminal-contracts
+  doob_uuid: c88928d4-b6e1-4bc2-8f62-c63640600d13
+  name: pty-terminal-contracts
+  priority: P2
+  status: blocked
+  title: Add deterministic PTY contracts for the chat TUI
+  description: |-
+    Three harness attempts raced terminal readiness before input submission.
+    Add an explicit ready signal before retrying restoration and transcript tests.
+  files:
+  - crates/looprs-tui/src/chat.rs
+  - crates/looprs-tui/tests/terminal_contract.rs
+  extra: []
 log:
+- date: '20260921.143500'
+  summary: |-
+    Session: completed and verified the v0.7.0 health-remediation slice.
+    - Added CLI help/version contracts and synchronized tracked documentation.
+    - Removed confirmed dead APIs while preserving supported embedding adapters.
+    - Modernized provider, storage, terminal, BAML, and system dependencies.
+    - Raised the workspace, mise, CI, and release MSRV to Rust 1.95.0.
+    - Added idempotent observation persistence and bounded sanitizer Kani proofs.
+    - Verified formatting, Clippy, fuzz builds, mdBook, dependency policy, and
+      687 workspace tests; deterministic PTY coverage remains blocked.
+  commits: []
+- date: '20260919.221500'
+  summary: |-
+    Session: shipped the reviewed looprs 0.6.0 branch slice.
+    - Integrated the issue wave for machine automation, parallel dispatch, MCP,
+      plugin supervision, observation replay, streaming, and capabilities.
+    - Resolved all 57 five-lens MoA findings across isolated worktree waves.
+    - Verified 677 workspace tests, 90.3% looprs-core coverage, formatting,
+      clippy, compilation, pre-commit, pre-push, and release-health gates.
+    - Added migration guidance, expanded changelog, human-facing release notes,
+      and a validated static documentation site.
+    - Stabilized the machine-protocol mock server under loaded full-suite runs.
+  commits:
+  - 3b894a85
+  - 81c46a53
+- date: '20260916.084215'
+  summary: done=22 running=0 pending=12 blocked=0
+  commits:
+  - d93ab287a58c6d2ef8a519d71dbd1c0dbd2f0281
+  - 71d6fed561350a333ac0adc62da1012ffe7e148d
+  - 9054bec42f8699e65e2970144d8d46a79ae8f79a
+  - 25162d6070d62b7294b032281df01dc77455a1e8
+  - 9e1c9e7ef556ae22d4727138f3b2a8f0a71be675
+  - 08b880440127d89d22d4a0a92ccb1e4fbfc3ef19
+  - f81697bafe97b2a78cb46e3d1a5bad8805746ddc
+  - 2d6d9e0c7337cc043aefbc2beb5f46cf63a982c3
+  - c980a3ec4ba7ddb91cef593add21cf6d06e59958
+  - 30704dee4ff1bc1b22b6a477e784ced26605173c
+- date: '20260912.111735'
+  summary: done=22 running=0 pending=12 blocked=0
+  commits:
+  - a733b888dd5f881eb67e25f874c4d853e62de5ed
+  - 5a6a78927aac82c3fe710265f3233b0d683a72da
+  - 7b72a9807b549220ef87186b6a73983732c3222f
+  - f55e2215d07f6850a38ccc19e20a0261e748c758
+  - cccc366dd17dfac066e1f53d235b5552ed459242
+  - 896b3180dc75286189d1977a408af4560bb741b6
+  - 5f4c5081ac37f3166faebaf09a7ee2705b292a4f
+  - 5c6c68641260685c8e65f75ae33325fea0029469
+  - fbdce67f5f026630147ec0bf11225ead5ad006e6
+  - 3c2d7005c29d7580b98937c3a737cd843c8be166
 - date: '20260906.092820'
   summary: done=17 running=0 pending=16 blocked=0
   commits:

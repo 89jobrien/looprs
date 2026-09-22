@@ -1,3 +1,5 @@
+//! Re-exports procedural macro front ends for typed IDs and domain events.
+
 /// Forwarding macro for typed string IDs.
 #[macro_export]
 macro_rules! newtype_id {

@@ -1,3 +1,5 @@
+//! Bootstraps the configured provider and agent runtime for CLI front ends.
+
 use looprs::Agent;
 use looprs::ModelId;
 use looprs::ProviderConfig;
@@ -16,6 +18,7 @@ pub struct BootstrappedRuntime {
     pub agent: Agent,
 }
 
+/// Loads configuration, creates the selected provider, and constructs an agent runtime.
 pub async fn bootstrap_runtime(
     model_override: Option<ModelId>,
 ) -> anyhow::Result<BootstrappedRuntime> {
@@ -31,11 +34,15 @@ pub async fn bootstrap_runtime(
 
     let provider_config = ProviderConfig::load().unwrap_or_default();
     let max_tokens_override = provider_config.merged_settings(&provider_name).max_tokens;
-    let runtime = RuntimeSettings {
-        defaults: app_config.defaults.clone(),
+    let mut runtime = RuntimeSettings::new(
+        app_config.defaults.clone(),
         max_tokens_override,
-        fs_mode: app_config.agents.fs_mode,
-    };
+        app_config.agents.fs_mode,
+    )
+    .with_max_parallel(app_config.agents.max_parallel);
+    if let Ok(server_url) = std::env::var("LOOPRS_MCP_SERVER_URL") {
+        runtime = runtime.with_mcp_server_url(server_url);
+    }
     let session_logger = looprs::adapters::default_session_store();
     let agent = Agent::new_with_runtime(
         provider,
@@ -54,6 +61,7 @@ pub async fn bootstrap_runtime(
     })
 }
 
+/// Converts a missing Ollama model error into an actionable diagnostic report.
 pub fn provider_bootstrap_report(error: &anyhow::Error) -> Option<miette::Report> {
     let provider_error = error.downcast_ref::<looprs::ProviderError>()?;
 

@@ -14,6 +14,8 @@ mod api;
 pub mod app_config;
 /// Interactive approval and prompt callback utilities.
 pub mod approval;
+/// Versioned machine-automation protocol envelope and env contract.
+pub mod automation_protocol;
 /// Generated BAML client bindings and wrappers.
 pub mod baml_client;
 /// Slash-command schema and command registry.
@@ -48,6 +50,8 @@ pub mod observability;
 pub mod observation;
 /// Observation storage and retrieval manager.
 pub mod observation_manager;
+/// Agent selection, skill resolution, and delegated prompt preparation.
+pub mod orchestration;
 /// Optional deterministic pipeline execution framework.
 pub mod pipeline;
 /// Plugin manifests, loading, and execution helpers.
@@ -74,6 +78,7 @@ pub mod skills;
 pub mod state;
 /// System resource monitoring helpers.
 pub mod system_monitor;
+mod text_utils;
 mod tools;
 /// Trace data types for runtime telemetry.
 pub mod trace;
@@ -84,14 +89,15 @@ pub mod ui;
 
 /// Default message-broker implementation.
 pub use crate::adapters::{
-    ChannelBroker, NullOutput, PluginsAdapter, RetryProvider, SqliteSessionStore,
+    ChannelBroker, NullOutput, PluginsAdapter, RetryProvider, SqliteObservationStore,
+    SqliteSessionStore,
 };
 /// Primary agent runtime type and chat/runtime models.
-// TODO(automation-2): Keep external automation behind a versioned process protocol so Crux
-// does not couple to looprs release cadence, Tokio runtime choices, or feature graph.
 pub use crate::agent::{Agent, ChatMessage, RuntimeSettings};
 /// Agent definition schema and agent registry.
 pub use crate::agents::{AgentDefinition, AgentRegistry};
+/// Tool definitions advertised through injectable catalogs.
+pub use crate::api::ToolDefinition;
 /// Default interactive callbacks for approvals and prompts.
 pub use crate::approval::{console_approval_prompt, console_prompt, console_secret_prompt};
 /// Command schema and command registry.
@@ -117,16 +123,26 @@ pub use crate::observation_manager::ObservationManager;
 /// Core message and broker traits.
 pub use crate::ports::{Message, MessageBroker};
 /// Observation and plugin execution ports.
-pub use crate::ports::{ObservationStore, PluginExecutor};
+pub use crate::ports::{ObservationQuery, ObservationStore, PluginExecutor};
 /// Provider override settings and provider factory.
 pub use crate::providers::{ProviderOverrides, create_provider_with_overrides};
 /// Rule schema and registry.
-pub use crate::rules::{Rule, RuleRegistry};
+pub use crate::rules::{
+    ExecutionBoundary, ExecutionPolicy, ExecutionRequest, PolicyDecision, PolicyEffect,
+    PolicyError, PolicySource, Rule, RuleRegistry,
+};
 /// Skill schema and registry.
 pub use crate::skills::{Skill, SkillRegistry};
+/// Injectable tool catalog/dispatcher ports and default composition.
+pub use crate::tools::{
+    BuiltinToolCatalog, StaticToolCatalog, ToolCatalog, ToolContext, ToolDispatcher, ToolError,
+    ToolExecutor, ToolPorts,
+};
+/// Public trace append and freshness helpers.
+pub use crate::trace::{
+    append_turn_trace, append_turn_trace_in_dir, session_trace_path, trace_stream_is_stale,
+};
 /// Shared typed IDs.
 pub use crate::types::{ModelId, ToolId, ToolName};
-/// AI analysis domain types from `looprs-core`.
-pub use looprs_core::ai_types;
 /// `/models` overview types and render/build entry points.
 pub use model_catalog::{ModelsOverview, build_models_overview, render_models_overview};

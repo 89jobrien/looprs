@@ -1,6 +1,9 @@
+//! Evaluates hook conditions and executes command, prompt, and context actions.
+
 use super::{Action, Hook, PromptCallback};
 use crate::app_config::AppConfig;
 use crate::events::EventContext;
+use crate::rules::{ExecutionBoundary, ExecutionRequest, PolicyEffect, RuleRegistry};
 use crate::state::AppState;
 use std::collections::HashMap;
 
@@ -15,6 +18,12 @@ pub struct HookResult {
     pub action_index: usize,
     pub output: String,
     pub inject_key: Option<String>,
+}
+
+#[derive(Clone, Copy)]
+struct ExecutionControls<'a> {
+    timeout_secs: Option<u64>,
+    policy: Option<(&'a RuleRegistry, &'a str)>,
 }
 
 impl HookExecutor {
@@ -41,14 +50,49 @@ impl HookExecutor {
         prompt_fn: Option<&PromptCallback>,
         secret_prompt_fn: Option<&PromptCallback>,
     ) -> anyhow::Result<Vec<HookResult>> {
+        Self::execute_hook_with_optional_policy(
+            hook,
+            context,
+            approval_fn,
+            prompt_fn,
+            secret_prompt_fn,
+            None,
+        )
+    }
+
+    /// Execute a hook while enforcing runtime execution policies.
+    pub fn execute_hook_with_policy(
+        hook: &Hook,
+        context: &EventContext,
+        approval_fn: Option<&ApprovalCallback>,
+        prompt_fn: Option<&PromptCallback>,
+        secret_prompt_fn: Option<&PromptCallback>,
+        rules: &RuleRegistry,
+    ) -> anyhow::Result<Vec<HookResult>> {
+        Self::execute_hook_with_optional_policy(
+            hook,
+            context,
+            approval_fn,
+            prompt_fn,
+            secret_prompt_fn,
+            Some(rules),
+        )
+    }
+
+    fn execute_hook_with_optional_policy(
+        hook: &Hook,
+        context: &EventContext,
+        approval_fn: Option<&ApprovalCallback>,
+        prompt_fn: Option<&PromptCallback>,
+        secret_prompt_fn: Option<&PromptCallback>,
+        rules: Option<&RuleRegistry>,
+    ) -> anyhow::Result<Vec<HookResult>> {
         let timeout_secs = AppConfig::load()
             .ok()
             .and_then(|c| c.defaults.timeout_seconds);
 
-        // TODO(feature-idea-7): Seed condition evaluation with typed event fields
-        // such as `tool_name` so lifecycle hooks can use event-aware predicates.
         let mut results = Vec::new();
-        let mut local_ctx: HashMap<String, String> = HashMap::new();
+        let mut local_ctx = Self::event_context_values(context);
 
         // Check condition if present
         if let Some(condition) = &hook.condition
@@ -66,7 +110,10 @@ impl HookExecutor {
                 prompt_fn,
                 secret_prompt_fn,
                 &mut local_ctx,
-                timeout_secs,
+                ExecutionControls {
+                    timeout_secs,
+                    policy: rules.map(|registry| (registry, hook.name.as_str())),
+                },
             )? {
                 results.push(HookResult {
                     hook_name: hook.name.clone(),
@@ -80,6 +127,23 @@ impl HookExecutor {
         Ok(results)
     }
 
+    fn event_context_values(context: &EventContext) -> HashMap<String, String> {
+        let mut values = context.metadata.clone();
+        for (key, value) in [
+            ("session_context", context.session_context.as_ref()),
+            ("user_message", context.user_message.as_ref()),
+            ("tool_name", context.tool_name.as_ref()),
+            ("tool_output", context.tool_output.as_ref()),
+            ("error", context.error.as_ref()),
+            ("warning", context.warning.as_ref()),
+        ] {
+            if let Some(value) = value {
+                values.insert(key.to_string(), value.clone());
+            }
+        }
+        values
+    }
+
     /// Execute a single action and return (output, inject_key)
     // qual:allow(iosp) reason: "I/O boundary — dispatches hook actions"
     fn execute_action(
@@ -89,7 +153,7 @@ impl HookExecutor {
         prompt_fn: Option<&PromptCallback>,
         secret_prompt_fn: Option<&PromptCallback>,
         local_ctx: &mut HashMap<String, String>,
-        timeout_secs: Option<u64>,
+        controls: ExecutionControls<'_>,
     ) -> anyhow::Result<Option<(String, Option<String>)>> {
         match action {
             Action::Command {
@@ -98,6 +162,22 @@ impl HookExecutor {
                 requires_approval,
                 approval_prompt,
             } => {
+                if let Some((rules, hook_name)) = controls.policy {
+                    let request =
+                        ExecutionRequest::new(ExecutionBoundary::Hook, hook_name, command);
+                    let decision = rules.evaluate(&request)?;
+                    log::info!(
+                        "execution_policy {}",
+                        serde_json::to_string(&decision).unwrap_or_else(|_| "{}".to_string())
+                    );
+                    let approved = if decision.effect == PolicyEffect::Approval {
+                        approval_fn.is_some_and(|callback| callback(&decision.reason))
+                    } else {
+                        false
+                    };
+                    rules.authorize(&request, approved)?;
+                }
+
                 // Check if approval is required
                 if *requires_approval {
                     let prompt = approval_prompt
@@ -120,7 +200,7 @@ impl HookExecutor {
                     }
                 }
 
-                let output = Self::run_command(command, timeout_secs)?;
+                let output = Self::run_command(command, controls.timeout_secs)?;
                 Ok(Some((output, inject_as.clone())))
             }
             Action::Message { text } => {
@@ -141,7 +221,7 @@ impl HookExecutor {
                             prompt_fn,
                             secret_prompt_fn,
                             local_ctx,
-                            timeout_secs,
+                            controls,
                         )? {
                             last_result = Some(result);
                         }
@@ -231,6 +311,7 @@ impl HookExecutor {
     }
 
     /// Evaluate simple conditions (very basic for now)
+    // TODO(feature-idea 7): Replace ad hoc hook conditions with a typed expression evaluator. (#54)
     // qual:allow(iosp) reason: "I/O boundary — evaluates conditions with shell commands"
     fn eval_condition(
         condition: &str,
@@ -239,7 +320,7 @@ impl HookExecutor {
         // Simple condition evaluation: "on_branch:main" or "has_tool:git"
         if condition.starts_with("on_branch:") {
             let branch = condition.strip_prefix("on_branch:").unwrap_or("");
-            // Would check actual branch here
+            // TODO(feature-idea 2): Evaluate on_branch against the repository's actual branch. (#49)
             return Ok(branch == "main" || branch == "*"); // For now, accept main or wildcard
         }
 
@@ -465,6 +546,87 @@ actions:
         let results =
             HookExecutor::execute_hook_with_approval(&hook, &context, Some(&approve)).unwrap();
         assert!(results.iter().any(|r| r.output == "ok"));
+    }
+
+    #[test]
+    fn post_tool_use_condition_reads_event_tool_name() {
+        let yaml = r#"name: post_read
+trigger: PostToolUse
+condition: equals:tool_name:read
+actions:
+  - type: message
+    text: "matched"
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let context = EventContext::new().with_tool_name("read".to_string());
+
+        let results = HookExecutor::execute_hook(&hook, &context).unwrap();
+
+        assert!(results.iter().any(|result| result.output == "matched"));
+    }
+
+    #[test]
+    fn event_context_values_include_every_typed_field() {
+        let context = EventContext::new()
+            .with_session_context("session".to_string())
+            .with_user_message("message".to_string())
+            .with_tool_name("tool".to_string())
+            .with_tool_output("output".to_string())
+            .with_error("error".to_string())
+            .with_warning("warning".to_string());
+
+        let values = HookExecutor::event_context_values(&context);
+
+        for (key, value) in [
+            ("session_context", "session"),
+            ("user_message", "message"),
+            ("tool_name", "tool"),
+            ("tool_output", "output"),
+            ("error", "error"),
+            ("warning", "warning"),
+        ] {
+            assert_eq!(values.get(key).map(String::as_str), Some(value));
+        }
+    }
+
+    #[test]
+    fn typed_event_context_fields_override_metadata() {
+        let mut context =
+            EventContext::new().with_metadata("custom".to_string(), "kept".to_string());
+        for key in [
+            "session_context",
+            "user_message",
+            "tool_name",
+            "tool_output",
+            "error",
+            "warning",
+        ] {
+            context
+                .metadata
+                .insert(key.to_string(), format!("metadata-{key}"));
+        }
+        context = context
+            .with_session_context("typed-session".to_string())
+            .with_user_message("typed-message".to_string())
+            .with_tool_name("typed-tool".to_string())
+            .with_tool_output("typed-output".to_string())
+            .with_error("typed-error".to_string())
+            .with_warning("typed-warning".to_string());
+
+        let values = HookExecutor::event_context_values(&context);
+
+        for (key, value) in [
+            ("session_context", "typed-session"),
+            ("user_message", "typed-message"),
+            ("tool_name", "typed-tool"),
+            ("tool_output", "typed-output"),
+            ("error", "typed-error"),
+            ("warning", "typed-warning"),
+        ] {
+            assert_eq!(values.get(key).map(String::as_str), Some(value));
+        }
+        assert_eq!(values.get("custom").map(String::as_str), Some("kept"));
     }
 
     #[test]
@@ -696,5 +858,47 @@ actions:
 
         let saved = std::fs::read_to_string(".looprs/state.json").unwrap();
         assert!(saved.contains("\"demo_seen\": true"));
+    }
+
+    #[test]
+    fn denied_hook_command_never_executes() {
+        use crate::rules::{
+            ExecutionBoundary, ExecutionPolicy, PolicyEffect, PolicySource, RuleRegistry,
+        };
+
+        let yaml = r#"name: denied
+trigger: SessionStart
+actions:
+  - type: command
+    command: touch policy-bypass
+"#;
+        let file = create_test_hook_yaml(yaml);
+        let hook = crate::hooks::parse_hook(file.path()).unwrap();
+        let cwd = TempDir::new().unwrap();
+        let _guard = DirGuard::change_to(cwd.path());
+        let mut rules = RuleRegistry::new();
+        rules.register_policy(ExecutionPolicy {
+            id: "deny-hooks".to_string(),
+            effect: PolicyEffect::Deny,
+            boundary: ExecutionBoundary::Hook,
+            target: "*".to_string(),
+            input_contains: None,
+            reason: "hooks disabled".to_string(),
+            audit: Default::default(),
+            source: PolicySource::Repository,
+        });
+
+        let error = HookExecutor::execute_hook_with_policy(
+            &hook,
+            &EventContext::new(),
+            None,
+            None,
+            None,
+            &rules,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("hooks disabled"));
+        assert!(!cwd.path().join("policy-bypass").exists());
     }
 }

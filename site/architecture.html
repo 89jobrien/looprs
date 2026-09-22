@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Architecture - looprs</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <a class="brand" href="index.html"><span>loop</span>rs</a>
+      <a href="index.html">Overview</a>
+      <a class="active" href="architecture.html">Architecture</a>
+      <a href="state-model.html">State Model</a>
+      <a href="feature-matrix.html">Feature Matrix</a>
+      <a href="crate-inventory.html">Crate Inventory</a>
+      <a href="crate-tiers.html">Crate Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main class="page">
+      <h1>Architecture Reference</h1>
+      <p class="subtitle">
+        Workspace split between core types, runtime orchestration, CLI surface, and TUI interface.
+      </p>
+
+      <h2>Workspace ownership</h2>
+      <div class="diagram">
+        <img src="arch-crates.svg" alt="Concentric crate ownership map for looprs workspace" />
+      </div>
+      <div class="callout">
+        Keep business-facing contracts in <code>looprs-core</code>, orchestration in
+        <code>looprs</code>, and user surfaces in <code>looprs-cli</code> or
+        <code>looprs-tui</code>. This keeps extension and runtime concerns decoupled.
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>Domain and ports</h3>
+          <p>
+            <code>crates/looprs-core</code> defines shared types, events, and core port traits with
+            lightweight adapters.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Runtime engine</h3>
+          <p>
+            <code>crates/looprs</code> hosts the agent loop, providers, tool execution, hooks,
+            skills, rules, and observability.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Operator interface</h3>
+          <p>
+            <code>crates/looprs-cli</code> handles args, REPL, command dispatch, provider selection,
+            and startup plumbing.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Interactive UI</h3>
+          <p>
+            <code>crates/looprs-tui</code> provides the provider chooser and terminal chat client
+            over the same runtime primitives.
+          </p>
+        </div>
+      </div>
+
+      <h2>Turn execution flow</h2>
+      <div class="diagram">
+        <img src="arch-request-flow.svg" alt="Turn lifecycle from user prompt through inference and tool execution" />
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>Stage</th><th>Key components</th><th>Outcome</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Input</td><td>CLI/TUI, file-ref resolver</td><td>User text + optional file context</td></tr>
+          <tr><td>Policy</td><td>Rule registry, fs mode, hook preconditions</td><td>Guarded prompt and tools</td></tr>
+          <tr><td>Inference</td><td>Provider adapter + model config</td><td>Assistant blocks and tool calls</td></tr>
+          <tr><td>Execution</td><td>Tool executor, event manager, hook actions</td><td>Tool results added to transcript</td></tr>
+          <tr><td>Persistence</td><td>Session store + JSONL observability</td><td>Replayable traces and usage</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Extension loading model</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Dual-source precedence</h3>
+          <p>
+            User-level assets in <code>$HOME/.looprs/</code> are loaded first, then repo-level
+            assets in <code>.looprs/</code> override on name collision.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Hot behavior, static contracts</h3>
+          <p>
+            Hooks, skills, and commands can evolve quickly while core API types stay in Rust code
+            under typed boundaries.
+          </p>
+        </div>
+      </div>
+
+      <h2>Provider and tool boundaries</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Boundary</th><th>Owned by</th><th>Guarantee</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Provider request shaping</td><td><code>crates/looprs/src/providers</code></td><td>Model-specific protocol conversion is isolated per provider.</td></tr>
+            <tr><td>Tool schema registry</td><td><code>crates/looprs/src/tools</code></td><td>Shared tool definitions are generated from one runtime source.</td></tr>
+            <tr><td>Execution controls</td><td><code>RuntimeSettings</code> + metadata</td><td>Filesystem mode and delegated allowlists apply before tool execution.</td></tr>
+            <tr><td>UI rendering</td><td><code>looprs-cli</code>, <code>looprs-tui</code></td><td>Presentation can change without mutating orchestration behavior.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Observability path</h2>
+      <ul class="stack-list">
+        <li><strong>Turn traces:</strong> request and response payload summaries are appended to JSONL.</li>
+        <li><strong>UI events:</strong> frontend-visible lifecycle markers are written separately for tooling.</li>
+        <li><strong>Session context:</strong> git state and todo context can be injected on session start.</li>
+        <li><strong>Diagnostics loop:</strong> tool failures fire <code>OnError</code>; provider failures return through the caller and output ports.</li>
+      </ul>
+
+      <h2>Runtime excerpt</h2>
+      <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/crates/looprs/src/agent.rs"><code>crates/looprs/src/agent.rs</code></a></p>
+      <pre><code>let mut tools = get_tool_definitions();
+if let Some(server_url) = self.runtime.mcp_server_url.clone() {
+    match crate::tools::mcp_tool_definitions(&server_url).await {
+        Ok(remote_tools) => {
+            tools = Self::merge_remote_tool_definitions(tools, remote_tools);
+        }
+        Err(err) => {
+            self.output.warn(&format!(
+                "Warning: failed to discover MCP tools from {server_url}: {err}"
+            ));
+        }
+    }
+}
+if let Some(allowed) = allowed_tools.as_ref() {
+    tools.retain(|tool| allowed.contains(tool.name.as_str()));
+}</code></pre>
+
+      <footer>
+        See README and AGENTS for full operational details.
+      </footer>
+    </main>
+  </body>
+</html>

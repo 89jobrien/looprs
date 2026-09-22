@@ -1,3 +1,5 @@
+//! Fuzzes JSON deserialization of persisted session events.
+
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 use serde::{Deserialize, Serialize};

@@ -1,3 +1,5 @@
+//! Implements Gemini inference through Google's OpenAI-compatible endpoint.
+
 use serde_json::{Value, json};
 
 use crate::api::ContentBlock;
@@ -16,11 +18,13 @@ pub struct GeminiProvider {
 }
 
 impl GeminiProvider {
+    /// Creates a Gemini provider using `MODEL` or the default Flash model.
     pub fn new(key: String) -> Result<Self, ProviderError> {
         let model = std::env::var("MODEL").ok().map(ModelId::new);
         Self::new_with_model(key, model)
     }
 
+    /// Creates a Gemini provider with an explicit or default Flash model.
     pub fn new_with_model(key: String, model: Option<ModelId>) -> Result<Self, ProviderError> {
         let http = ProviderHttpClient::default()?;
         let model = model.unwrap_or_else(|| ModelId::new("gemini-2.0-flash"));

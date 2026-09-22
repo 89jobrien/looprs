@@ -1,0 +1,23 @@
+---
+source: crates/looprs/src/commands.rs
+assertion_line: 430
+expression: names
+---
+- build
+- check
+- commit
+- diff
+- doc
+- fine-tune
+- fix
+- git
+- help
+- lint
+- model
+- model-status
+- models
+- outsource
+- refactor
+- reset-model
+- score-session
+- test

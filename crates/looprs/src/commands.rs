@@ -1,3 +1,5 @@
+//! Loads custom slash-command definitions and resolves command invocations.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -13,6 +15,7 @@ pub struct Command {
     pub action: CommandAction,
 }
 
+// TODO(feature-idea 8): Add session and observation recall/replay command actions. (#55)
 /// Action to execute when command is invoked
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -49,6 +52,7 @@ pub struct CommandRegistry {
 }
 
 impl CommandRegistry {
+    /// Creates an empty custom-command registry.
     pub fn new() -> Self {
         CommandRegistry {
             commands: HashMap::new(),
@@ -139,22 +143,82 @@ impl Default for CommandRegistry {
     }
 }
 
-// TODO(feature-idea-3): Add snapshot tests for command, hook, skill, and agent output.
-// `cargo insta` is available. Snapshot the rendered output of each built-in command
-// (help, model-status, score-session, etc.) and each bundled agent's system_prompt
-// so config drift is caught at test time rather than at runtime.
-//
-// Pattern:
-//   use insta::assert_snapshot;
-//   assert_snapshot!("help_command_text", registry.get("help").unwrap().render());
-//
-// Run `cargo insta review` after adding new snapshots to accept the baseline.
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use insta::assert_yaml_snapshot;
+    use serde::Serialize;
     use std::io::Write;
     use tempfile::TempDir;
+
+    #[derive(Debug, Serialize)]
+    struct SnapshotCommand {
+        name: String,
+        description: String,
+        aliases: Vec<String>,
+        action: SnapshotAction,
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(tag = "type")]
+    enum SnapshotAction {
+        Prompt {
+            template: String,
+            variables: HashMap<String, String>,
+        },
+        Shell {
+            command: String,
+            inject_output: bool,
+        },
+        Message {
+            text: String,
+        },
+        SwitchProvider,
+        Outsource,
+        ListModels,
+    }
+
+    fn stable_rendered(text: &str) -> String {
+        let home = dirs::home_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default();
+        if home.is_empty() {
+            return text.to_string();
+        }
+        text.replace(&home, "$HOME")
+    }
+
+    fn snapshot_command(cmd: &Command) -> SnapshotCommand {
+        let action = match &cmd.action {
+            CommandAction::Prompt {
+                template,
+                variables,
+            } => SnapshotAction::Prompt {
+                template: stable_rendered(template),
+                variables: variables.clone(),
+            },
+            CommandAction::Shell {
+                command,
+                inject_output,
+            } => SnapshotAction::Shell {
+                command: stable_rendered(command),
+                inject_output: *inject_output,
+            },
+            CommandAction::Message { text } => SnapshotAction::Message {
+                text: stable_rendered(text),
+            },
+            CommandAction::SwitchProvider => SnapshotAction::SwitchProvider,
+            CommandAction::Outsource => SnapshotAction::Outsource,
+            CommandAction::ListModels => SnapshotAction::ListModels,
+        };
+
+        SnapshotCommand {
+            name: cmd.name.clone(),
+            description: stable_rendered(&cmd.description),
+            aliases: cmd.aliases.clone(),
+            action,
+        }
+    }
 
     fn create_test_command_file(dir: &std::path::Path, filename: &str, content: &str) {
         let path = dir.join(filename);
@@ -333,5 +397,40 @@ action:
             CommandRegistry::load_from_directory(&temp_dir.path().to_path_buf()).unwrap();
         let cmd = registry.get("models").unwrap();
         assert!(matches!(cmd.action, CommandAction::ListModels));
+    }
+
+    #[test]
+    fn built_in_commands_snapshot_rendered_output() {
+        let commands_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join(".looprs")
+            .join("commands");
+        let registry = CommandRegistry::load_from_directory(&commands_dir).unwrap();
+
+        let mut snapshots: Vec<SnapshotCommand> =
+            registry.list().into_iter().map(snapshot_command).collect();
+        snapshots.sort_by(|a, b| a.name.cmp(&b.name));
+
+        assert_yaml_snapshot!("built_in_commands_rendered", snapshots);
+    }
+
+    #[test]
+    fn built_in_command_names_snapshot() {
+        let commands_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join(".looprs")
+            .join("commands");
+        let registry = CommandRegistry::load_from_directory(&commands_dir).unwrap();
+
+        let mut names: Vec<String> = registry
+            .list()
+            .into_iter()
+            .map(|cmd| cmd.name.clone())
+            .collect();
+        names.sort();
+
+        assert_yaml_snapshot!("built_in_command_names", names);
     }
 }

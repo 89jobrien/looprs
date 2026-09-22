@@ -1,3 +1,5 @@
+//! Fuzzes JSON deserialization of provider content blocks.
+
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 use looprs_core::api::ContentBlock;

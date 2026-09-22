@@ -1,29 +1,32 @@
+//! Runs `looprs` in one-shot, interactive REPL, provider-selection, or chat TUI mode.
+
 use anyhow::Result;
 use colored::*;
 use rustyline::Editor;
 use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
-use std::collections::HashMap;
 use std::env;
 
 use looprs::ModelId;
 use looprs::app_config::AppConfig;
+use looprs::automation_protocol;
 use looprs::file_refs::{AtReference, resolve_at_reference};
+use looprs::orchestration::{OrchestrationNotice, PreparedPrompt, RuntimeOrchestrator};
+use looprs::plugins::manifests::PluginRuntimeRegistry;
 use looprs::providers::{ProviderOverrides, create_provider_with_overrides};
 use looprs::ui;
 use looprs::{
     Agent, AgentRegistry, ApprovalCallback, Command, CommandRegistry, Event, EventContext,
-    HookRegistry, PromptCallback, SessionContext, SkillRegistry, console_approval_prompt,
-    console_prompt, console_secret_prompt,
+    ExecutionBoundary, ExecutionRequest, HookRegistry, PolicyEffect, PromptCallback,
+    SessionContext, SkillRegistry, console_approval_prompt, console_prompt, console_secret_prompt,
 };
 use looprs::{ProviderConfig, ProviderSettings};
-use looprs::{plugins::manifests::PluginRuntimeRegistry, ports::OrchestrationPluginPort};
 
 mod args;
 mod cli;
 mod repl;
 mod runtime;
-use args::CliArgs;
+use args::{CliArgs, CliMetaAction, meta_action};
 use cli::{CliCommand, parse_input};
 use repl::{MatchSets, ReplHelper, bind_repl_keys};
 
@@ -75,8 +78,20 @@ fn apply_nu_env(path: &std::path::Path) {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    load_nu_env();
     let args: Vec<String> = env::args().collect();
+    match meta_action(&args[1..]) {
+        Some(CliMetaAction::Help) => {
+            print_help();
+            return Ok(());
+        }
+        Some(CliMetaAction::Version) => {
+            println!("looprs {}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
+        None => {}
+    }
+
+    load_nu_env();
     if matches!(args.get(1).map(String::as_str), Some("provider")) {
         return run_provider_menu();
     }
@@ -123,13 +138,36 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Enable machine-readable logging if requested
-    if cli_args.machine_log {
+    // Enable versioned machine protocol envelope and runtime controls when requested.
+    if cli_args.machine_log || cli_args.machine_protocol.is_some() {
         // SAFETY: process-wide environment mutation for logging mode toggle.
         unsafe {
-            std::env::set_var("LOOPRS_MACHINE_LOG", "1");
+            std::env::set_var(automation_protocol::MACHINE_LOG_ENV, "1");
         }
     }
+    if let Some(protocol) = &cli_args.machine_protocol {
+        // SAFETY: process-wide environment mutation for protocol selection.
+        unsafe {
+            std::env::set_var(automation_protocol::MACHINE_PROTOCOL_ENV, protocol);
+        }
+    }
+    if let Some(run_id) = &cli_args.run_id {
+        // SAFETY: process-wide environment mutation for machine run identity.
+        unsafe {
+            std::env::set_var(automation_protocol::MACHINE_RUN_ID_ENV, run_id);
+        }
+    }
+    let run_controls = if cli_args.deadline_seconds.is_some() || cli_args.cancel_file.is_some() {
+        automation_protocol::RunControls::try_from_timeout(
+            cli_args.deadline_seconds,
+            cli_args
+                .cancel_file
+                .as_deref()
+                .map(std::path::PathBuf::from),
+        )?
+    } else {
+        automation_protocol::RunControls::from_env()
+    };
 
     ui::init_logging();
 
@@ -214,7 +252,7 @@ async fn main() -> Result<()> {
 
     let repo_skills_dir = env::current_dir()
         .ok()
-        .map(|d| d.join(".looprs").join("skills"));
+        .map(|d| d.join(&app_config.paths.skills));
 
     let mut skill_registry = SkillRegistry::new();
 
@@ -263,7 +301,15 @@ async fn main() -> Result<()> {
     let user_plugins = user_plugins_dir.exists().then_some(user_plugins_dir);
     let repo_plugins = repo_plugins_dir.filter(|d| d.exists());
     let plugin_runtime = PluginRuntimeRegistry::load_dual_source(user_plugins, repo_plugins)
-        .unwrap_or_else(|_| PluginRuntimeRegistry::default());
+        .map_err(|error| anyhow::anyhow!("failed to initialize plugin runtime: {error}"))?;
+    // TODO(feature-idea 11): Compose manifest plugins into CLI bootstrap. (#58)
+    // Include tool and runtime plugins instead of limiting them to orchestration routing.
+    let orchestrator = RuntimeOrchestrator::new(
+        app_config.agents.clone(),
+        agent_registry,
+        skill_registry,
+        plugin_runtime,
+    );
 
     // Handle scriptable (non-interactive) mode
     if cli_args.is_scriptable() {
@@ -271,10 +317,9 @@ async fn main() -> Result<()> {
             &cli_args,
             &model,
             &provider_name,
-            app_config,
-            agent_registry,
-            plugin_runtime,
+            orchestrator,
             agent,
+            run_controls,
         )
         .await;
     }
@@ -288,27 +333,45 @@ async fn main() -> Result<()> {
         provider_config,
         agent,
         command_registry,
-        skill_registry,
-        agent_registry,
-        plugin_runtime,
+        orchestrator,
     )
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_scriptable(
     cli_args: &CliArgs,
     model: &str,
     provider_name: &str,
-    app_config: AppConfig,
-    agent_registry: AgentRegistry,
-    mut plugin_runtime: PluginRuntimeRegistry,
+    mut orchestrator: RuntimeOrchestrator,
     mut agent: Agent,
+    run_controls: automation_protocol::RunControls,
 ) -> Result<()> {
+    if let Some(reason) = run_controls.cancellation() {
+        ui::machine_event(
+            "run.cancelled",
+            serde_json::json!({ "reason": reason.as_str() }),
+        );
+        anyhow::bail!(
+            "Machine run cancelled before execution: {}",
+            reason.as_str()
+        );
+    }
+
     // Get the prompt
     let Some(prompt) = cli_args.get_prompt()? else {
         ui::error("Error: No prompt provided");
         std::process::exit(1);
     };
+
+    ui::machine_event(
+        "run.started",
+        serde_json::json!({
+            "provider": provider_name,
+            "model": model,
+            "scriptable": true,
+        }),
+    );
 
     // Display header unless quiet mode
     if !cli_args.quiet {
@@ -319,21 +382,37 @@ async fn run_scriptable(
         );
     }
 
-    let (prepared_prompt, metadata, selected_agent) =
-        prepare_user_prompt(&prompt, &app_config, &agent_registry, &mut plugin_runtime)?;
-    if !metadata.is_empty() {
-        agent.set_turn_metadata(metadata);
-    }
-    if let Some(agent_name) = selected_agent {
-        ui::info(format!("Delegated prompt to agent role: {agent_name}"));
-    }
-    agent.add_user_message(prepared_prompt);
+    let prepared = orchestrator.prepare_prompt(&prompt)?;
+    submit_prepared_prompt(&mut agent, prepared);
 
     ui::assistant_lead_in();
-    let result = agent.run_turn_streaming().await;
+    let result = tokio::select! {
+        biased;
+        reason = run_controls.cancelled() => Err(reason),
+        result = agent.run_turn_streaming() => Ok(result),
+    };
     println!();
 
+    let result = match result {
+        Ok(result) => result,
+        Err(reason) => {
+            ui::machine_event(
+                "run.cancelled",
+                serde_json::json!({ "reason": reason.as_str() }),
+            );
+            anyhow::bail!("Machine run cancelled: {}", reason.as_str());
+        }
+    };
+
     if let Err(e) = result {
+        ui::machine_event(
+            "run.failed",
+            serde_json::json!({
+                "error": e.to_string(),
+                "deadline_exceeded": automation_protocol::deadline_exceeded(),
+                "cancel_requested": automation_protocol::cancellation_requested(),
+            }),
+        );
         if cli_args.json_output {
             let error_json = serde_json::json!({
                 "success": false,
@@ -341,10 +420,21 @@ async fn run_scriptable(
             });
             ui::info_full(serde_json::to_string_pretty(&error_json)?);
         } else {
-            ui::error(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));
+            ui::error_full(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));
         }
         std::process::exit(1);
     }
+
+    let (input_tokens, output_tokens) = agent.session_tokens();
+    ui::machine_event(
+        "run.succeeded",
+        serde_json::json!({
+            "usage": {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            }
+        }),
+    );
 
     Ok(())
 }
@@ -359,12 +449,14 @@ async fn run_interactive(
     mut provider_config: ProviderConfig,
     mut agent: Agent,
     command_registry: CommandRegistry,
-    skill_registry: SkillRegistry,
-    agent_registry: AgentRegistry,
-    mut plugin_runtime: PluginRuntimeRegistry,
+    mut orchestrator: RuntimeOrchestrator,
 ) -> Result<()> {
     let command_items = build_command_items(&command_registry);
-    let skill_items = build_skill_items(&skill_registry);
+    let skill_items = orchestrator
+        .skill_names()
+        .into_iter()
+        .map(|name| format!("${name}"))
+        .collect();
     let settings_items = setting_keys();
     let helper = ReplHelper::new(MatchSets {
         commands: command_items,
@@ -474,32 +566,11 @@ async fn run_interactive(
                         ui::info("● Conversation cleared");
                     }
                     CliCommand::InvokeSkill(skill_name, trailing) => {
-                        if let Some(skill) = skill_registry.get(&skill_name) {
-                            ui::info(format!("📚 Loading skill: {}", skill.name));
-                            let skill_message = if let Some(trailing_text) = trailing {
-                                let skill_message = format!(
-                                    "=== Skill: {} ===\n{}\n\nUser message: {}",
-                                    skill.name, skill.content, trailing_text
-                                );
-                                skill_message
-                            } else {
-                                format!("Skill '{}' activated:\n\n{}", skill.name, skill.content)
-                            };
-
-                            let (prepared_message, metadata, selected_agent) = prepare_user_prompt(
-                                &skill_message,
-                                &app_config,
-                                &agent_registry,
-                                &mut plugin_runtime,
-                            )?;
-                            if !metadata.is_empty() {
-                                agent.set_turn_metadata(metadata);
-                            }
-                            if let Some(agent_name) = selected_agent {
-                                ui::info(format!("Delegated prompt to agent role: {agent_name}"));
-                            }
-
-                            agent.add_user_message(prepared_message);
+                        if let Some(prepared) =
+                            orchestrator.prepare_skill(&skill_name, trailing.as_deref())?
+                        {
+                            ui::info(format!("📚 Loading skill: {skill_name}"));
+                            submit_prepared_prompt(&mut agent, prepared);
 
                             if let Err(e) = agent.run_turn().await {
                                 ui::error(format!(
@@ -510,6 +581,8 @@ async fn run_interactive(
                             }
                         } else {
                             ui::warn(format!("Skill not found: {skill_name}"));
+                            // TODO(feature-idea 1): Add generated extension listing commands. (#48)
+                            // Cover /skills, /agents, /commands, and /plugins from their registries.
                             ui::info("Available skills: /skills (not yet implemented)");
                         }
                     }
@@ -560,9 +633,7 @@ async fn run_interactive(
                                 cmd,
                                 &cmd_input,
                                 &mut agent,
-                                &app_config,
-                                &agent_registry,
-                                &mut plugin_runtime,
+                                &mut orchestrator,
                                 &mut state,
                             )
                             .await;
@@ -578,32 +649,6 @@ async fn run_interactive(
                         }
                     }
                     CliCommand::Message(msg) => {
-                        // Check for auto-triggering skills
-                        let matching_skills = skill_registry.find_matching(&msg);
-
-                        let final_message = if !matching_skills.is_empty() {
-                            ui::info(format!(
-                                "📚 Auto-triggered {} skill(s)",
-                                matching_skills.len()
-                            ));
-                            for skill in &matching_skills {
-                                ui::info(format!("  • {}", skill.name.cyan()));
-                            }
-
-                            // Prepend skill content to user message
-                            let mut full_message = String::new();
-                            for skill in matching_skills {
-                                full_message.push_str(&format!(
-                                    "=== Skill: {} ===\n{}\n\n",
-                                    skill.name, skill.content
-                                ));
-                            }
-                            full_message.push_str(&format!("User message: {msg}"));
-                            full_message
-                        } else {
-                            msg
-                        };
-
                         // Inject session state so the model has current context on every turn.
                         let cwd_str = env::current_dir()
                             .map(|p| p.display().to_string())
@@ -615,22 +660,17 @@ async fn run_interactive(
                             &cwd_str,
                             turn_count,
                         );
-                        let final_message = format!("{ctx_prefix}{final_message}");
-
-                        let (prepared_message, metadata, selected_agent) = prepare_user_prompt(
-                            &final_message,
-                            &app_config,
-                            &agent_registry,
-                            &mut plugin_runtime,
-                        )?;
-                        if !metadata.is_empty() {
-                            agent.set_turn_metadata(metadata);
+                        let prepared = orchestrator.prepare_message(&msg, &ctx_prefix)?;
+                        if !prepared.activated_skills.is_empty() {
+                            ui::info(format!(
+                                "📚 Auto-triggered {} skill(s)",
+                                prepared.activated_skills.len()
+                            ));
+                            for skill_name in &prepared.activated_skills {
+                                ui::info(format!("  • {}", skill_name.cyan()));
+                            }
                         }
-                        if let Some(agent_name) = selected_agent {
-                            ui::info(format!("Delegated prompt to agent role: {agent_name}"));
-                        }
-
-                        agent.add_user_message(prepared_message);
+                        submit_prepared_prompt(&mut agent, prepared);
 
                         if let Err(e) = agent.run_turn().await {
                             ui::error(format!("\n{} {}", "✗".red().bold(), e.to_string().red()));
@@ -663,9 +703,7 @@ async fn run_interactive(
     Ok(())
 }
 
-fn print_usage() {
-    ui::error_full(
-        r#"Usage: looprs [OPTIONS] | looprs seed [DIR] | looprs provider | looprs tui
+const HELP_TEXT: &str = r#"Usage: looprs [OPTIONS] | looprs seed [DIR] | looprs provider | looprs tui
 
 COMMANDS:
   seed [DIR]             Write example config files to DIR (default: .looprs).
@@ -677,12 +715,19 @@ COMMANDS:
                          an input box, instead of the default REPL.
 
 OPTIONS:
+  -h, --help             Print help and exit
+  -V, --version          Print version and exit
   -p, --prompt <TEXT>    Run with single prompt and exit (scriptable mode)
   -f, --file <FILE>      Read prompt from file
   -m, --model <MODEL>    Override default model
   -q, --quiet            Suppress context and observations display
   --no-hooks             Skip loading hooks from ~/.looprs/hooks/
   --json                 Output response as structured JSON
+  --machine-log          Emit machine-readable JSONL events to stderr
+  --machine-protocol <V> Select machine protocol version (looprs-machine/v1)
+  --run-id <ID>          Stable run identifier included in machine events
+  --deadline-seconds <N> Cancel an active run after N seconds
+  --cancel-file <PATH>   Cancel an active run when this file exists
 
 EXAMPLES:
   looprs                           # Interactive mode
@@ -691,8 +736,14 @@ EXAMPLES:
   looprs provider                  # Choose provider/model interactively
   looprs tui                       # Launch the alternate chat TUI
   looprs -p "explain closures"     # Run single prompt and exit
-"#,
-    );
+"#;
+
+fn print_help() {
+    print!("{HELP_TEXT}");
+}
+
+fn print_usage() {
+    ui::error_full(HELP_TEXT);
 }
 
 /// List locally installed Ollama models via `ollama list`. Returns an
@@ -727,17 +778,29 @@ fn models_gist_url() -> String {
     })
 }
 
-/// Interactive `looprs provider` entrypoint: pick a provider, and for
-/// `local` also pick an installed Ollama model, then persist the choice
-/// to `.looprs/provider.json`.
+fn provider_menu_options() -> &'static [&'static str] {
+    looprs::model_catalog::MODEL_PROVIDERS
+}
+
+fn configure_provider(
+    config: &mut ProviderConfig,
+    provider: &str,
+    model: Option<String>,
+) -> Result<()> {
+    config.provider = Some(provider.to_string());
+    if let Some(model) = model {
+        provider_settings_mut(config, provider)?.model = Some(model);
+    }
+    Ok(())
+}
+
+/// Interactive `looprs provider` entrypoint: pick a runtime provider,
+/// configure its model, then persist the choice to `.looprs/provider.json`.
 fn run_provider_menu() -> Result<()> {
-    // TODO(feature-idea-4): Offer every provider supported by the runtime and
-    // collect any provider-specific model settings before persisting a choice.
-    let providers = vec![
-        "anthropic".to_string(),
-        "openai".to_string(),
-        "local (Ollama)".to_string(),
-    ];
+    let providers = provider_menu_options()
+        .iter()
+        .map(|provider| (*provider).to_string())
+        .collect::<Vec<_>>();
 
     let Some(index) = looprs_tui::select("Select a provider", &providers)? else {
         println!("Cancelled.");
@@ -745,30 +808,24 @@ fn run_provider_menu() -> Result<()> {
     };
 
     let mut config = ProviderConfig::load().unwrap_or_default();
-
-    match index {
-        0 => config.provider = Some("anthropic".to_string()),
-        1 => config.provider = Some("openai".to_string()),
-        2 => {
-            let models = list_ollama_models();
-            if models.is_empty() {
-                ui::error(
-                    "No Ollama models found. Install Ollama and run `ollama pull <model>` first.",
-                );
-                return Ok(());
-            }
-            let Some(model_index) = looprs_tui::select("Select a local model", &models)? else {
-                println!("Cancelled.");
-                return Ok(());
-            };
-            config.provider = Some("local".to_string());
-            config.local = Some(ProviderSettings {
-                model: Some(models[model_index].clone()),
-                ..Default::default()
-            });
+    let provider = provider_menu_options()[index];
+    let model = if matches!(provider, "local" | "ollama") {
+        let models = list_ollama_models();
+        if models.is_empty() {
+            ui::error(
+                "No Ollama models found. Install Ollama and run `ollama pull <model>` first.",
+            );
+            return Ok(());
         }
-        _ => unreachable!("select() returned an out-of-range index"),
-    }
+        let Some(model_index) = looprs_tui::select("Select a local model", &models)? else {
+            println!("Cancelled.");
+            return Ok(());
+        };
+        Some(models[model_index].clone())
+    } else {
+        console_prompt("Model (leave blank to use the provider default):")
+    };
+    configure_provider(&mut config, provider, model)?;
 
     config.save()?;
     println!(
@@ -786,17 +843,6 @@ fn build_command_items(command_registry: &CommandRegistry) -> Vec<String> {
             items.push(format!("/{alias}"));
         }
     }
-    items.sort();
-    items.dedup();
-    items
-}
-
-fn build_skill_items(skill_registry: &SkillRegistry) -> Vec<String> {
-    let mut items = skill_registry
-        .list()
-        .into_iter()
-        .map(|skill| format!("${}", skill.name))
-        .collect::<Vec<_>>();
     items.sort();
     items.dedup();
     items
@@ -821,27 +867,17 @@ fn setting_keys() -> Vec<String> {
 fn provider_settings_mut<'a>(
     config: &'a mut ProviderConfig,
     provider: &str,
-) -> &'a mut ProviderSettings {
-    match provider {
-        "anthropic" => config
-            .anthropic
-            .get_or_insert_with(ProviderSettings::default),
-        "openai" => config.openai.get_or_insert_with(ProviderSettings::default),
-        "local" | "ollama" => config.local.get_or_insert_with(ProviderSettings::default),
-        _ => config.openai.get_or_insert_with(ProviderSettings::default),
-    }
+) -> Result<&'a mut ProviderSettings> {
+    config
+        .get_or_insert_provider_settings(provider)
+        .ok_or_else(|| anyhow::anyhow!("unknown provider {provider:?}"))
 }
 
 fn provider_settings_ref<'a>(
     config: &'a ProviderConfig,
     provider: &str,
 ) -> Option<&'a ProviderSettings> {
-    match provider {
-        "anthropic" => config.anthropic.as_ref(),
-        "openai" => config.openai.as_ref(),
-        "local" | "ollama" => config.local.as_ref(),
-        _ => None,
-    }
+    config.get_provider_settings(provider)
 }
 
 fn build_runtime_settings(
@@ -850,11 +886,16 @@ fn build_runtime_settings(
     provider_name: &str,
 ) -> looprs::RuntimeSettings {
     let max_tokens_override = provider_config.merged_settings(provider_name).max_tokens;
-    looprs::RuntimeSettings {
-        defaults: app_config.defaults.clone(),
+    let mut runtime = looprs::RuntimeSettings::new(
+        app_config.defaults.clone(),
         max_tokens_override,
-        fs_mode: app_config.agents.fs_mode,
+        app_config.agents.fs_mode,
+    )
+    .with_max_parallel(app_config.agents.max_parallel);
+    if let Ok(server_url) = std::env::var("LOOPRS_MCP_SERVER_URL") {
+        runtime = runtime.with_mcp_server_url(server_url);
     }
+    runtime
 }
 
 async fn handle_colon_command(
@@ -925,10 +966,10 @@ async fn handle_colon_command(
                 ui::warn("Usage: :unset <key>");
                 return Ok(());
             }
-            unset_setting(key, app_config, provider_config, provider_name);
+            unset_setting(key, app_config, provider_config, provider_name)?;
             save_configs(app_config, provider_config)?;
             let runtime = build_runtime_settings(app_config, provider_config, provider_name);
-            agent.set_runtime_settings(runtime);
+            looprs::adapters::apply_runtime_settings(agent, runtime);
             agent.set_file_ref_policy(app_config.file_ref_policy());
             ui::info(format!("Unset {key}"));
         }
@@ -956,7 +997,7 @@ async fn handle_colon_command(
                     reload_provider = true;
                 }
                 "model" => {
-                    let settings = provider_settings_mut(provider_config, &target_provider);
+                    let settings = provider_settings_mut(provider_config, &target_provider)?;
                     settings.model = Some(value.clone());
                     reload_provider = true;
                 }
@@ -969,18 +1010,18 @@ async fn handle_colon_command(
                         return Ok(());
                     }
                     provider_config.provider = Some(provider.to_string());
-                    let settings = provider_settings_mut(provider_config, provider);
+                    let settings = provider_settings_mut(provider_config, provider)?;
                     settings.model = Some(model.to_string());
                     reload_provider = true;
                 }
                 "max_tokens" => {
                     let parsed = value.parse::<u32>()?;
-                    let settings = provider_settings_mut(provider_config, &target_provider);
+                    let settings = provider_settings_mut(provider_config, &target_provider)?;
                     settings.max_tokens = Some(parsed);
                 }
                 "timeout_secs" => {
                     let parsed = value.parse::<u64>()?;
-                    let settings = provider_settings_mut(provider_config, &target_provider);
+                    let settings = provider_settings_mut(provider_config, &target_provider)?;
                     settings.timeout_secs = Some(parsed);
                 }
                 "defaults.max_context_tokens" => {
@@ -1010,7 +1051,7 @@ async fn handle_colon_command(
             }
 
             let runtime = build_runtime_settings(app_config, provider_config, provider_name);
-            agent.set_runtime_settings(runtime);
+            looprs::adapters::apply_runtime_settings(agent, runtime);
             agent.set_file_ref_policy(app_config.file_ref_policy());
             ui::info(format!("Set {key}"));
         }
@@ -1056,19 +1097,19 @@ fn unset_setting(
     app_config: &mut AppConfig,
     provider_config: &mut ProviderConfig,
     provider_name: &str,
-) {
+) -> Result<()> {
     match key {
         "provider" => provider_config.provider = None,
         "model" => {
-            let settings = provider_settings_mut(provider_config, provider_name);
+            let settings = provider_settings_mut(provider_config, provider_name)?;
             settings.model = None;
         }
         "max_tokens" => {
-            let settings = provider_settings_mut(provider_config, provider_name);
+            let settings = provider_settings_mut(provider_config, provider_name)?;
             settings.max_tokens = None;
         }
         "timeout_secs" => {
-            let settings = provider_settings_mut(provider_config, provider_name);
+            let settings = provider_settings_mut(provider_config, provider_name)?;
             settings.timeout_secs = None;
         }
         "defaults.max_context_tokens" => app_config.defaults.max_context_tokens = None,
@@ -1077,6 +1118,7 @@ fn unset_setting(
         "fs_mode" => app_config.agents.fs_mode = looprs::FsMode::Write,
         _ => {}
     }
+    Ok(())
 }
 
 /// Config files are user-owned; we no longer write config.json or provider.json.
@@ -1085,160 +1127,22 @@ fn save_configs(_app_config: &AppConfig, _provider_config: &ProviderConfig) -> R
     Ok(())
 }
 
-fn prepare_user_prompt(
-    raw_prompt: &str,
-    app_config: &AppConfig,
-    agent_registry: &AgentRegistry,
-    plugin_runtime: &mut PluginRuntimeRegistry,
-) -> Result<(String, HashMap<String, String>, Option<String>)> {
-    if agent_registry.is_empty() {
-        return Ok((raw_prompt.to_string(), HashMap::new(), None));
-    }
-
-    let explicit = parse_explicit_agent_tag(raw_prompt);
-    let (selection, task_prompt, selection_mode, routed_by_plugin) = match explicit {
-        Some((agent_name, remainder)) => {
-            if let Some(agent) = agent_registry.get(agent_name) {
-                (Some(agent), remainder, "explicit", None)
-            } else {
-                ui::warn(format!(
-                    "Unknown explicit agent tag '#{agent_name}'; falling back to auto selection"
-                ));
-                let fallback_prompt = if remainder.is_empty() {
-                    raw_prompt
-                } else {
-                    remainder
-                };
-                (
-                    agent_registry.select_for_prompt(
-                        fallback_prompt,
-                        app_config.agents.default_agent.as_deref(),
-                        app_config.agents.delegate_by_default,
-                    ),
-                    fallback_prompt,
-                    "auto",
-                    None,
-                )
-            }
+fn submit_prepared_prompt(agent: &mut Agent, prepared: PreparedPrompt) {
+    for notice in prepared.notices {
+        match notice {
+            OrchestrationNotice::UnknownExplicitAgent(agent_name) => ui::warn(format!(
+                "Unknown explicit agent tag '#{agent_name}'; falling back to auto selection"
+            )),
         }
-        None => match plugin_runtime.select_agent_for_prompt(raw_prompt)? {
-            Some(plugin_selection) => {
-                let manifest = plugin_runtime
-                    .orchestration_plugin(&plugin_selection.plugin_name)
-                    .cloned();
-
-                if let Some(agent) = agent_registry.get(&plugin_selection.agent_name) {
-                    (
-                        Some(agent),
-                        raw_prompt,
-                        "plugin",
-                        Some(plugin_selection.plugin_name),
-                    )
-                } else if manifest.as_ref().is_some_and(|m| m.required) {
-                    anyhow::bail!(
-                        "Required orchestration plugin '{}' routed to unknown agent '{}'",
-                        plugin_selection.plugin_name,
-                        plugin_selection.agent_name
-                    );
-                } else {
-                    (
-                        agent_registry.select_for_prompt(
-                            raw_prompt,
-                            app_config.agents.default_agent.as_deref(),
-                            app_config.agents.delegate_by_default,
-                        ),
-                        raw_prompt,
-                        "auto",
-                        None,
-                    )
-                }
-            }
-            None => (
-                agent_registry.select_for_prompt(
-                    raw_prompt,
-                    app_config.agents.default_agent.as_deref(),
-                    app_config.agents.delegate_by_default,
-                ),
-                raw_prompt,
-                "auto",
-                None,
-            ),
-        },
-    };
-
-    let Some(agent) = selection else {
-        return Ok((raw_prompt.to_string(), HashMap::new(), None));
-    };
-
-    let mut metadata = HashMap::new();
-    metadata.insert("orchestration.mode".to_string(), "delegated".to_string());
-    metadata.insert("orchestration.agent".to_string(), agent.name.clone());
-    metadata.insert(
-        "orchestration.strategy".to_string(),
-        app_config.agents.orchestration.clone(),
-    );
-    metadata.insert(
-        "orchestration.selection".to_string(),
-        selection_mode.to_string(),
-    );
-    if let Some(plugin_name) = routed_by_plugin {
-        metadata.insert("orchestration.plugin".to_string(), plugin_name);
     }
-
-    // TODO(feature-idea-5): Resolve `agent.skills` into delegated context and
-    // enforce `agent.tools` when defining and executing tools for this turn.
-    let role = agent
-        .role
-        .clone()
-        .unwrap_or_else(|| "Specialized assistant".to_string());
-    let description = agent.description.clone().unwrap_or_default();
-    let system_prompt = agent.system_prompt.clone().unwrap_or_default();
-    let constraints = if agent.constraints.is_empty() {
-        String::new()
-    } else {
-        agent
-            .constraints
-            .iter()
-            .map(|c| format!("- {c}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-
-    let rewritten = format!(
-        "[Delegation]\nAgent: {}\nRole: {}\nDescription: {}\nSystem Prompt:\n{}\nConstraints:\n{}\n\nTask:\n{}",
-        agent.name, role, description, system_prompt, constraints, task_prompt
-    );
-
-    Ok((rewritten, metadata, Some(agent.name.clone())))
-}
-
-fn parse_explicit_agent_tag(raw_prompt: &str) -> Option<(&str, &str)> {
-    let trimmed = raw_prompt.trim_start();
-    if !trimmed.starts_with('#') {
-        return None;
+    if let Some(delegation) = prepared.delegation {
+        ui::info(format!(
+            "Delegated prompt to agent role: {}",
+            delegation.agent_name()
+        ));
+        agent.set_delegation_context(delegation);
     }
-
-    let after_hash = &trimmed[1..];
-    if after_hash.is_empty() {
-        return None;
-    }
-
-    let split_at = after_hash
-        .char_indices()
-        .find_map(|(idx, ch)| ch.is_whitespace().then_some(idx))
-        .unwrap_or(after_hash.len());
-
-    let agent_name = &after_hash[..split_at];
-    if agent_name.is_empty()
-        || !agent_name
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
-    {
-        return None;
-    }
-
-    let remainder = after_hash[split_at..].trim_start();
-    Some((agent_name, remainder))
+    agent.add_user_message(prepared.prompt);
 }
 
 /// Execute a custom command
@@ -1252,9 +1156,7 @@ async fn execute_command(
     cmd: &Command,
     input: &str,
     agent: &mut Agent,
-    app_config: &AppConfig,
-    agent_registry: &AgentRegistry,
-    plugin_runtime: &mut PluginRuntimeRegistry,
+    orchestrator: &mut RuntimeOrchestrator,
     state: &mut SessionState,
 ) -> Result<()> {
     let provider_config = &mut state.provider_config;
@@ -1262,17 +1164,21 @@ async fn execute_command(
     let model = &mut state.model;
     use looprs::CommandAction;
 
+    let policy_request =
+        ExecutionRequest::new(ExecutionBoundary::CustomCommand, cmd.name.as_str(), input);
+    let decision = agent.evaluate_execution(&policy_request)?;
+    let approved = decision.effect == PolicyEffect::Approval
+        && console_approval_prompt(&format!(
+            "Policy '{}' requires approval: {}",
+            decision.matched_policy.as_deref().unwrap_or("default"),
+            decision.reason
+        ));
+    agent.authorize_execution(&policy_request, approved)?;
+
     match &cmd.action {
         CommandAction::Prompt { template, .. } => {
-            let (prepared_prompt, metadata, selected_agent) =
-                prepare_user_prompt(template, app_config, agent_registry, plugin_runtime)?;
-            if !metadata.is_empty() {
-                agent.set_turn_metadata(metadata);
-            }
-            if let Some(agent_name) = selected_agent {
-                ui::info(format!("Delegated prompt to agent role: {agent_name}"));
-            }
-            agent.add_user_message(prepared_prompt);
+            let prepared = orchestrator.prepare_prompt(template)?;
+            submit_prepared_prompt(agent, prepared);
             agent.run_turn().await?;
         }
         CommandAction::Shell {
@@ -1301,19 +1207,8 @@ async fn execute_command(
                 let clean = looprs::ui::output_preview_colored(trimmed);
                 ui::info("Output injected into context");
                 let output_prompt = format!("Command output:\n```\n{clean}\n```");
-                let (prepared_prompt, metadata, selected_agent) = prepare_user_prompt(
-                    &output_prompt,
-                    app_config,
-                    agent_registry,
-                    plugin_runtime,
-                )?;
-                if !metadata.is_empty() {
-                    agent.set_turn_metadata(metadata);
-                }
-                if let Some(agent_name) = selected_agent {
-                    ui::info(format!("Delegated prompt to agent role: {agent_name}"));
-                }
-                agent.add_user_message(prepared_prompt);
+                let prepared = orchestrator.prepare_prompt(&output_prompt)?;
+                submit_prepared_prompt(agent, prepared);
             } else if !stdout.is_empty() {
                 let trimmed = stdout.trim();
                 looprs::ui::output_preview_colored(trimmed);
@@ -1344,19 +1239,8 @@ async fn execute_command(
             let new_provider = parts.next().unwrap_or("").trim().to_string();
             let new_model_id = parts.next().map(|s| s.trim().to_string());
 
-            let valid = [
-                "anthropic",
-                "openai",
-                "gemini",
-                "google",
-                "ollama",
-                "local",
-                "anthropic-sdk",
-                "openai-sdk",
-                "claude-sdk",
-                "baml",
-            ];
-            if !valid.contains(&new_provider.as_str()) {
+            if looprs::providers::provider_descriptor(&new_provider).is_none() {
+                let valid = looprs::providers::provider_aliases().collect::<Vec<_>>();
                 ui::warn(format!(
                     "Unknown provider {new_provider:?}. Valid: {}",
                     valid.join(", ")
@@ -1366,7 +1250,7 @@ async fn execute_command(
 
             provider_config.provider = Some(new_provider.clone());
             if let Some(ref m) = new_model_id {
-                let settings = provider_settings_mut(provider_config, &new_provider);
+                let settings = provider_settings_mut(provider_config, &new_provider)?;
                 settings.model = Some(m.clone());
             }
 
@@ -1445,11 +1329,53 @@ async fn execute_command(
 
 #[cfg(test)]
 mod provider_menu_tests {
-    use super::parse_explicit_agent_tag;
+    use super::configure_provider;
     use super::parse_ollama_list_output;
+    use super::provider_menu_options;
+    use super::{provider_settings_mut, provider_settings_ref};
+    use looprs::ProviderConfig;
 
     // Captured from a real `ollama list` invocation.
     const REAL_OLLAMA_LIST_OUTPUT: &str = "NAME                                             ID              SIZE      MODIFIED\nfunctiongemma:latest                             7c19b650567a    300 MB    2 months ago\ngemma-lg:latest                                  e6349aa91a78    24 GB     2 months ago\nhf.co/unsloth/gemma-4-26B-A4B-it-GGUF:UD-Q6_K    e6349aa91a78    24 GB     2 months ago\nnomic-embed-text:latest                          0a109f422b47    274 MB    2 months ago\nllama3.2:latest                                  a80c4f17acd5    2.0 GB    4 months ago\n";
+
+    #[test]
+    fn setup_offers_every_runtime_provider() {
+        assert_eq!(
+            provider_menu_options(),
+            looprs::model_catalog::MODEL_PROVIDERS
+        );
+    }
+
+    #[test]
+    fn setup_stores_model_for_every_runtime_provider() {
+        for provider in looprs::model_catalog::MODEL_PROVIDERS {
+            let mut config = ProviderConfig::default();
+            configure_provider(&mut config, provider, Some("test-model".to_string()))
+                .expect("menu provider should be registered");
+
+            assert_eq!(config.provider.as_deref(), Some(*provider));
+            assert_eq!(
+                config.merged_settings(provider).model.as_deref(),
+                Some("test-model"),
+                "model setting was not stored for {provider}"
+            );
+        }
+    }
+
+    #[test]
+    fn cli_settings_helpers_follow_every_registered_alias() {
+        for alias in looprs::providers::provider_aliases() {
+            let mut config = ProviderConfig::default();
+            provider_settings_mut(&mut config, alias)
+                .expect("registered alias should be mutable")
+                .model = Some(alias.to_string());
+            assert_eq!(
+                provider_settings_ref(&config, alias)
+                    .and_then(|settings| settings.model.as_deref()),
+                Some(alias)
+            );
+        }
+    }
 
     #[test]
     fn parses_model_names_from_real_output() {
@@ -1487,22 +1413,15 @@ mod provider_menu_tests {
     }
 
     #[test]
-    fn parses_hash_agent_tag_with_prompt() {
-        let parsed = parse_explicit_agent_tag("#taskit investigate regression").unwrap();
-        assert_eq!(parsed.0, "taskit");
-        assert_eq!(parsed.1, "investigate regression");
-    }
-
-    #[test]
-    fn parses_hash_agent_tag_without_prompt() {
-        let parsed = parse_explicit_agent_tag("#opencode").unwrap();
-        assert_eq!(parsed.0, "opencode");
-        assert_eq!(parsed.1, "");
-    }
-
-    #[test]
-    fn rejects_invalid_hash_agent_tag() {
-        assert!(parse_explicit_agent_tag("#taskit/alpha do thing").is_none());
-        assert!(parse_explicit_agent_tag("not a tag").is_none());
+    fn repo_skill_path_uses_configured_app_path() {
+        let source = include_str!("main.rs");
+        assert!(
+            !source.contains("join(\".looprs\").join(\"skills\")"),
+            "repo skills path should not be hardcoded to .looprs/skills"
+        );
+        assert!(
+            source.contains("join(&app_config.paths.skills)"),
+            "expected repo skills path to use app_config.paths.skills"
+        );
     }
 }

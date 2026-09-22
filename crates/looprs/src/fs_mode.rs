@@ -1,3 +1,5 @@
+//! Defines filesystem access modes and their stable string and numeric encodings.
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -10,6 +12,7 @@ pub enum FsMode {
 }
 
 impl FsMode {
+    /// Returns the lowercase configuration name for this mode.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Read => "read",
@@ -18,6 +21,7 @@ impl FsMode {
         }
     }
 
+    /// Parses a case-insensitive filesystem mode name.
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_lowercase().as_str() {
             "read" => Some(Self::Read),
@@ -27,6 +31,7 @@ impl FsMode {
         }
     }
 
+    /// Advances through read, update, and write modes cyclically.
     pub fn next(self) -> Self {
         match self {
             Self::Read => Self::Update,
@@ -35,6 +40,7 @@ impl FsMode {
         }
     }
 
+    /// Encodes the mode for storage in an atomic byte.
     pub fn to_u8(self) -> u8 {
         match self {
             Self::Read => 0,
@@ -43,6 +49,7 @@ impl FsMode {
         }
     }
 
+    /// Decodes an atomic byte, defaulting unknown values to write mode.
     pub fn from_u8(v: u8) -> Self {
         match v {
             0 => Self::Read,

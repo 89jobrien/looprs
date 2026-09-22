@@ -20,11 +20,13 @@ pub struct OnboardingState {
 }
 
 impl AppState {
+    /// Loads app-managed state from `.looprs/state.json`.
     pub fn load() -> anyhow::Result<Self> {
         Self::load_at(Path::new(DEFAULT_STATE_PATH))
     }
 
     // qual:allow(iosp) reason: "I/O boundary — reads state file and deserializes"
+    /// Loads app-managed state from a path, returning defaults when absent.
     pub fn load_at(path: &Path) -> anyhow::Result<Self> {
         if !path.exists() {
             return Ok(Self::default());
@@ -39,6 +41,7 @@ impl AppState {
         Self::set_onboarding_demo_seen_at(Path::new(DEFAULT_STATE_PATH), value)
     }
 
+    /// Updates the onboarding flag and persists state at the supplied path.
     pub fn set_onboarding_demo_seen_at(path: &Path, value: bool) -> anyhow::Result<()> {
         let mut state = Self::load_at(path)?;
         state.onboarding.demo_seen = value;

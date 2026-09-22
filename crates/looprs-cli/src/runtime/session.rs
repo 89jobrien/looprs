@@ -1,7 +1,10 @@
+//! Executes one prompt against an initialized agent and returns its latest text response.
+
 use looprs::Agent;
 use looprs::AgentError;
 use std::collections::HashMap;
 
+/// Applies metadata and a user prompt, runs one agent turn, and returns assistant text.
 #[allow(dead_code)]
 pub async fn run_single_turn(
     agent: &mut Agent,

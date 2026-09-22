@@ -1,3 +1,5 @@
+//! Loads named provider/model tiers and MAGI paths from `models.toml`.
+
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -27,21 +29,25 @@ pub struct ModelsConfig {
 }
 
 impl ModelsConfig {
+    /// Reads and parses model tiers from a TOML file.
     pub fn from_path(path: &Path) -> Result<Self> {
         let content =
             std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         toml::from_str(&content).context("parsing models.toml")
     }
 
+    /// Loads model tiers from `$HOME/.looprs/models.toml`.
     pub fn load() -> Result<Self> {
         let home = dirs::home_dir().context("could not determine home directory")?;
         Self::from_path(&home.join(".looprs").join("models.toml"))
     }
 
+    /// Returns the provider and model configured for a named tier.
     pub fn tier(&self, name: &str) -> Option<&ProviderTier> {
         self.tiers.get(name)
     }
 
+    /// Formats all named tiers in sorted `name -> provider/model` order.
     pub fn tier_lines(&self) -> Vec<String> {
         let mut names = self.tiers.keys().cloned().collect::<Vec<_>>();
         names.sort();
@@ -55,10 +61,12 @@ impl ModelsConfig {
             .collect()
     }
 
+    /// Returns the configured MAGI model-card path.
     pub fn magi_modelcard(&self) -> &str {
         &self.magi.modelcard
     }
 
+    /// Returns the configured MAGI database path.
     pub fn magi_db(&self) -> &str {
         &self.magi.db
     }

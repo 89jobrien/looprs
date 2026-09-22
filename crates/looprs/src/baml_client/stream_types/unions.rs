@@ -7,11 +7,15 @@
 
 use super::*;
 use crate::baml_client::types;
-use baml::BamlDecode;
+use baml::{
+    __internal::serde::{Deserialize, Serialize},
+    BamlDecode, BamlSerde,
+};
 
 /// Generated from: (string | Streaming.ToolCall[])
-#[derive(Debug, Clone, BamlDecode)]
+#[derive(Debug, Clone, BamlDecode, BamlSerde, Serialize)]
 #[baml(union)]
+#[serde(crate = "::baml::__internal::serde", untagged)]
 pub enum Union2ListToolCallOrString {
     #[baml(name = "string")]
     String(String),
@@ -20,14 +24,14 @@ pub enum Union2ListToolCallOrString {
     ListToolCall(Vec<ToolCall>),
 }
 
-impl AsRef<Union2ListToolCallOrString> for Union2ListToolCallOrString {
+impl ::std::convert::AsRef<Union2ListToolCallOrString> for Union2ListToolCallOrString {
     fn as_ref(&self) -> &Union2ListToolCallOrString {
         self
     }
 }
 
-impl Default for Union2ListToolCallOrString {
+impl ::std::default::Default for Union2ListToolCallOrString {
     fn default() -> Self {
-        Self::String(Default::default())
+        Self::String(::std::default::Default::default())
     }
 }

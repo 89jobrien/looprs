@@ -1,3 +1,5 @@
+//! Implements sandboxed text-file reads with optional line ranges.
+
 use super::ToolArgs;
 use super::ToolContext;
 use super::error::ToolError;

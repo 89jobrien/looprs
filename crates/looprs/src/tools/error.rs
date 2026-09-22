@@ -1,3 +1,5 @@
+//! Defines structured validation, access, execution, and availability errors for tools.
+
 use miette::Diagnostic;
 use thiserror::Error;
 

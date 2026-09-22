@@ -1,3 +1,5 @@
+//! Loads the top-level looprs configuration and derives runtime policies from it.
+
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -124,17 +126,24 @@ pub struct OnboardingConfig {
 pub struct PipelineConfig {
     /// Enable pipeline execution.
     pub enabled: bool,
-    /// Directory where JSONL pipeline logs are written.
+    /// Directory where each check and final report are appended to `events.jsonl`.
     pub log_dir: String,
-    /// Minimum score required for pipeline success.
+    /// Minimum successful-check ratio required for pipeline success.
+    ///
+    /// Values below zero normalize to zero, values above one normalize to one,
+    /// and `NaN` normalizes to zero. Equality passes the threshold.
     pub reward_threshold: f32,
-    /// Require external tools to be present.
+    /// Fail preflight when `cargo`, the tool required by enabled checks, is unavailable.
     pub require_tools: bool,
-    /// Revert worktree changes on pipeline failure.
+    /// Restore the pre-turn conversation, Git index, tracked files, and non-ignored
+    /// untracked files when a blocking pipeline check fails.
+    ///
+    /// The baseline is captured immediately before the first tool dispatch. Ignored
+    /// files, nested repositories, and external side effects are not rolled back.
     pub auto_revert: bool,
-    /// Stop pipeline at first failing step.
+    /// Stop the ordered build, test, lint, typecheck, benchmark suite at its first failure.
     pub fail_fast: bool,
-    /// Block normal turn completion if pipeline fails.
+    /// Return a pipeline error instead of allowing normal turn completion on failure.
     pub block_on_failure: bool,
     /// Build/test/lint gate toggles.
     pub checks: PipelineChecksConfig,
@@ -166,6 +175,8 @@ pub struct AgentsConfig {
     pub context_sharing: bool,
     /// Maximum number of concurrent delegated agents.
     pub max_parallel: usize,
+    /// Per-agent execution timeout in seconds; `None` disables the timeout.
+    pub timeout_seconds: Option<u64>,
     /// Orchestration strategy label.
     pub orchestration: String,
     /// Delegate automatically when no explicit agent is requested.
@@ -181,6 +192,7 @@ impl Default for AgentsConfig {
         Self {
             context_sharing: true,
             max_parallel: 3,
+            timeout_seconds: Some(120),
             orchestration: "sequential".to_string(),
             delegate_by_default: true,
             fs_mode: FsMode::Write,
@@ -248,6 +260,7 @@ pub struct PersistenceConfig {
     pub session_store: SessionStoreBackend,
 }
 
+// TODO(feature-idea 6): Centralize user/repository extension source resolution for every loader. (#53)
 /// Filesystem locations for user/repo extension assets.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]

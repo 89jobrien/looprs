@@ -6,11 +6,15 @@
 //! Generated union types.
 
 use super::*;
-use baml::{BamlDecode, BamlEncode};
+use baml::{
+    __internal::serde::{Deserialize, Serialize},
+    BamlDecode, BamlEncode, BamlSerde,
+};
 
 /// Generated from: (string | ToolCall[])
-#[derive(Debug, Clone, BamlEncode, BamlDecode)]
+#[derive(Debug, Clone, BamlEncode, BamlDecode, BamlSerde, Serialize, Deserialize)]
 #[baml(union)]
+#[serde(crate = "::baml::__internal::serde", untagged)]
 pub enum Union2ListToolCallOrString {
     #[baml(name = "string")]
     String(String),
@@ -19,14 +23,14 @@ pub enum Union2ListToolCallOrString {
     ListToolCall(Vec<ToolCall>),
 }
 
-impl AsRef<Union2ListToolCallOrString> for Union2ListToolCallOrString {
+impl ::std::convert::AsRef<Union2ListToolCallOrString> for Union2ListToolCallOrString {
     fn as_ref(&self) -> &Union2ListToolCallOrString {
         self
     }
 }
 
-impl Default for Union2ListToolCallOrString {
+impl ::std::default::Default for Union2ListToolCallOrString {
     fn default() -> Self {
-        Self::String(Default::default())
+        Self::String(::std::default::Default::default())
     }
 }

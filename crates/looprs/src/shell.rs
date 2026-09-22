@@ -1,3 +1,5 @@
+//! Executes Nushell or Bash commands and returns captured process output.
+
 use std::io;
 use std::process::{Command, Output, Stdio};
 use std::time::Duration;
@@ -5,10 +7,12 @@ use std::time::Duration;
 pub const NUSHELL_BIN: &str = "nu";
 pub const BASH_BIN: &str = "bash";
 
+/// Runs a Nushell command and captures its exit status and output.
 pub fn run_nu_command(command: &str) -> io::Result<Output> {
     run_nu_command_with_timeout(command, None)
 }
 
+/// Runs a Bash command and captures its exit status and output.
 pub fn run_bash_command(command: &str) -> io::Result<Output> {
     run_bash_command_with_timeout(command, None)
 }

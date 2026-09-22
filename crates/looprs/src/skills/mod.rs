@@ -1,3 +1,5 @@
+//! Defines skill metadata and an in-memory registry keyed by skill name.
+
 // Skills module - loads SKILL.md files with YAML frontmatter
 // Following Anthropic Agent Skills standard
 
@@ -23,20 +25,24 @@ pub struct SkillRegistry {
 }
 
 impl SkillRegistry {
+    /// Creates an empty skill registry.
     pub fn new() -> Self {
         Self { skills: Vec::new() }
     }
 
+    /// Registers or replaces a skill by name.
     pub fn register(&mut self, skill: Skill) {
         // Remove existing skill with same name (for precedence)
         self.skills.retain(|s| s.name != skill.name);
         self.skills.push(skill);
     }
 
+    /// Returns the skill registered under `name`.
     pub fn get(&self, name: &str) -> Option<&Skill> {
         self.skills.iter().find(|s| s.name == name)
     }
 
+    /// Returns all registered skills sorted by name.
     pub fn list(&self) -> Vec<&Skill> {
         self.skills.iter().collect()
     }

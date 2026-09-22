@@ -4,6 +4,87 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-19
+
+### Breaking Changes
+- Add `max_parallel` and `mcp_server_url` to `RuntimeSettings` and mark the struct non-exhaustive; downstream struct literals must migrate to `RuntimeSettings::new` and its builder methods
+- Change `InferenceProvider::infer_stream` from a stream of text chunks to typed `InferenceStreamEvent` values with incremental text/tool-call deltas and one final structured response
+- Make the tool execution port asynchronous and split tool advertisement from dispatch through `ToolCatalog`, `ToolDispatcher`, and `ToolPorts`; custom `ToolExecutor` implementations must now use `async_trait` and await execution
+- Replace the separate plugin supervisor method contracts with `PluginSupervisorPort`, including typed errors plus status, probe, restart, and shutdown operations; supervisor status gains lifecycle fields, while daemon entries gain argument and probe configuration
+- Reject malformed plugin manifests during registry loading, require enabled daemon plugins to define a non-empty `entry.command`, and validate skill names, triggers, and content as non-blank
+
+### Features
+- Add the opt-in `looprs-machine/v1` JSONL protocol with stable run IDs, ordered event sequences, timestamps, token usage, terminal run events, deadlines, and cancellation-file controls while retaining legacy `--machine-log` output
+- Add bounded parallel execution for delegated turns using the `parallel` orchestration strategy while preserving provider tool-call result order
+- Discover and execute remote MCP tools, merge them with the built-in catalog with local-name precedence, and support local fallback when remote execution fails
+- Add managed daemon lifecycle supervision for tool, runtime, and orchestration plugins, including liveness checks, optional health probes, bounded restarts, shutdown, and atomic manifest refresh
+- Add cross-session SQLite observation queries and idempotent session replay through the new `ObservationQuery` port and `SqliteObservationStore` adapter
+- Add public trace path, append, and freshness helpers with fail-stale handling for missing, unreadable, or malformed trace data
+
+### Fixes
+- Preserve streamed text, tool calls, stop reasons, and token usage across fragmented OpenAI and Anthropic deltas without issuing a second provider request for tool turns
+- Reject malformed streaming sequences and tool calls, including missing terminal responses, duplicate finals, deltas after completion, and invalid tool arguments
+- Enforce machine-run deadlines and cancellation markers before and during provider work, emit one terminal cancellation event, and keep human output on stdout while machine events use stderr
+- Preserve legacy pipeline check ordering and report shape while making expanded runs honor benchmark, fail-fast, reward, tool-availability, logging, and nextest fallback contracts
+- Make plugin refresh transactional, stop replaced or removed child processes, surface probe and launch failures, and prevent unbounded restart loops
+- Make observation reads non-creating and schema-validating, preserve deterministic query/replay order, retain distinct timestamp collisions, and return precise malformed-row errors
+- Apply configured repository skill paths, deterministic YAML precedence, `.yml` discovery, shared skill validation, and fail closed when a delegated agent references a missing skill
+- Expose all typed hook context fields to predicates, including warning values, with typed fields taking precedence over same-named metadata
+- Normalize blank or padded provider model overrides, centralize provider alias handling, add MCP discovery timeouts, and preserve built-in tools when remote discovery fails
+- Handle zero-length and multibyte text truncation on character boundaries and harden trace freshness checks for pre-epoch repository activity
+
+### Refactoring
+- Move agent selection, skill activation, and delegated prompt preparation from the CLI into the runtime orchestration module
+- Centralize provider construction, aliases, and configuration access in a descriptor registry shared by CLI and runtime code
+- Separate observation policy from SQLite persistence and isolate provider streaming assembly in dedicated adapters
+- Inject focused ports for automation environment, time, cancellation files, run identity, event sequence, event sinks, pipeline commands, and pipeline event logging
+
+### CI
+- Require version-matched health baseline/history data, zero release health failures, and semantic-version checks for published library crates before release
+- Validate complete version-scoped release assets, checksums, SBOM binary paths, and reproducible Unix and Windows packages through fixture-tested helper scripts
+- Add required workflow contract jobs for actionlint, shellcheck, release health, packaging success/failure paths, coverage summaries, and static-site smoke checks
+- Make `cargo xtask check pre-push` run the CLI binary tests in addition to delegated taskit checks
+
+### Tests
+- Add contract coverage for provider streaming, tool catalogs and dispatchers, plugin supervision, observation queries, automation ports, pipeline compatibility, and public API construction
+- Add CLI-level machine protocol coverage for ordered envelopes, stream separation, legacy compatibility, deadlines, cancellation, and terminal state
+- Snapshot bundled command rendering and agent prompts, and extend property/fuzz coverage for strict skill parsing
+- Fresh release gates pass 677 workspace tests with 90.3% core coverage
+
+### Documentation
+- Add a validated static reference site covering architecture, crate ownership and tiers, state, features, testing, stability, changelog, and roadmap
+- Document plugin daemon lifecycle, strict skill schemas and precedence, pipeline compatibility, release helpers, pre-push behavior, and current runtime ownership
+- Add the 0.6 migration guide and synchronize README, contributor, agent, workflow, and site claims with committed behavior
+
+### Security
+- Apply a default-deny delegated tool policy to both provider-visible definitions and execution, preventing delegated agents from invoking tools outside their allowlist
+- Restore `quinn-proto 0.11.17` in workspace and fuzz lockfiles to retain the RustSec remediation recorded for 0.5.5
+
+### Migration
+- See `docs/migration-0.6.md` for stable `RuntimeSettings` construction and release compatibility gates
+- See `docs/releases/v0.6.0.md` for concrete migration steps for streaming providers, asynchronous tool dispatch, plugin supervision, and stricter extension validation
+
+## [0.5.5] - 2026-09-13
+
+### CI
+- Publish Windows binary artifacts in the release workflow
+
+### Features
+- Expose all supported providers in CLI setup
+
+### Fixes
+- Restore streaming trace emission for observability
+- Load repository YAML skill definitions during discovery
+- Expose lifecycle event context to hook conditions
+- Honor configured pipeline execution semantics
+
+### Security
+- Upgrade lockfile dependencies to resolve RustSec advisories through `quinn-proto 0.11.17` (restored in 0.6.0 after post-release lockfile drift)
+
+### Tests
+- Add provider inference conformance matrix coverage
+- Attach workspace integration tests to the `looprs` package
+
 ## [0.5.4] - 2026-09-09
 
 ### CI

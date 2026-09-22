@@ -1,3 +1,5 @@
+//! Probes availability of external search tools used by built-in tool adapters.
+
 use std::ffi::OsString;
 
 use crate::plugins::NamedTool;

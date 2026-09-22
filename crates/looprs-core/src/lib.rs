@@ -11,8 +11,6 @@ pub mod macros;
 
 /// Infrastructure adapters that implement core ports.
 pub mod adapters;
-/// Shared AI-oriented domain types used by observability and analysis features.
-pub mod ai_types;
 /// API model types shared across crates.
 pub mod api;
 /// Event types and event context shared across runtime boundaries.

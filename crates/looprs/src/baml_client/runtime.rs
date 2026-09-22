@@ -11,7 +11,6 @@ use crate::baml_client::baml_source_map::get_baml_files;
 use std::sync::OnceLock;
 
 /// Options for BAML function calls.
-#[derive(Debug, Clone)]
 pub struct FunctionOptions {
     env: Option<HashMap<String, String>>,
     tags: Option<HashMap<String, String>>,
@@ -20,6 +19,37 @@ pub struct FunctionOptions {
     client: Option<String>,
     client_registry: Option<baml::ClientRegistry>,
     cancellation_token: Option<baml::CancellationToken>,
+    on_tick: Option<baml::OnTickCallback>,
+}
+
+impl std::fmt::Debug for FunctionOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FunctionOptions")
+            .field("env", &self.env)
+            .field("tags", &self.tags)
+            .field("type_builder", &self.type_builder)
+            .field("collectors", &self.collectors)
+            .field("client", &self.client)
+            .field("client_registry", &self.client_registry)
+            .field("cancellation_token", &self.cancellation_token)
+            .field("on_tick", &self.on_tick.as_ref().map(|_| "<on_tick>"))
+            .finish()
+    }
+}
+
+impl Clone for FunctionOptions {
+    fn clone(&self) -> Self {
+        Self {
+            env: self.env.clone(),
+            tags: self.tags.clone(),
+            type_builder: self.type_builder.clone(),
+            collectors: self.collectors.clone(),
+            client: self.client.clone(),
+            client_registry: self.client_registry.clone(),
+            cancellation_token: self.cancellation_token.clone(),
+            on_tick: self.on_tick.clone(),
+        }
+    }
 }
 
 impl Default for FunctionOptions {
@@ -39,6 +69,7 @@ impl FunctionOptions {
             client: None,
             client_registry: None,
             cancellation_token: None,
+            on_tick: None,
         }
     }
 
@@ -110,6 +141,39 @@ impl FunctionOptions {
         self
     }
 
+    /// Set an on-tick callback for streaming calls.
+    ///
+    /// The callback is invoked for each SSE streaming chunk received from the LLM,
+    /// with a `FunctionLog` providing access to SSE chunks, thinking tokens, usage,
+    /// and timing data as they arrive.
+    ///
+    /// A collector is automatically created internally by the runtime at call time.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let mut stream = B.MyFunction
+    ///     .with_on_tick(|log: &baml::FunctionLog| {
+    ///         for call in log.calls() {
+    ///             if let Some(stream_call) = call.as_stream() {
+    ///                 if let Some(chunks) = stream_call.sse_chunks() {
+    ///                     for chunk in &chunks {
+    ///                         println!("SSE: {}", chunk.text());
+    ///                     }
+    ///                 }
+    ///             }
+    ///         }
+    ///     })
+    ///     .stream(args)
+    ///     .expect("Failed to start stream");
+    /// ```
+    pub fn with_on_tick<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(&baml::FunctionLog) + Send + Sync + 'static,
+    {
+        self.on_tick = Some(std::sync::Arc::new(callback));
+        self
+    }
+
     pub(super) fn to_baml_args(&self) -> baml::FunctionArgs {
         let mut args = baml::FunctionArgs::new();
         for (env, values) in std::env::vars() {
@@ -155,6 +219,10 @@ impl FunctionOptions {
 
         if let Some(cancellation_token) = &self.cancellation_token {
             args = args.with_cancellation_token(Some(cancellation_token.clone()));
+        }
+
+        if let Some(on_tick) = &self.on_tick {
+            args = args.with_on_tick_arc(on_tick.clone());
         }
 
         args
@@ -226,4 +294,78 @@ pub fn new_video_from_base64(base64: &str, mime_type: Option<&str>) -> baml::Vid
 /// Create a new collector for gathering telemetry from function calls.
 pub fn new_collector(name: &str) -> baml::Collector {
     get_runtime().new_collector(name)
+}
+
+// =============================================================================
+// Serde Deserialize helpers
+// =============================================================================
+
+/// Referenced by `#[serde(deserialize_with = "__internal_media_serde::...")]` in created types,
+/// Since the actual media types don't have access to the runtime.
+pub(super) mod __internal_media_serde {
+    use super::{
+        new_audio_from_base64, new_audio_from_url, new_image_from_base64, new_image_from_url,
+        new_pdf_from_base64, new_pdf_from_url, new_video_from_base64, new_video_from_url,
+    };
+    use baml::__internal::{
+        BamlMediaRepr, BamlMediaReprContent,
+        serde::{self, Deserialize, Deserializer},
+    };
+
+    pub fn deserialize_image<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<baml::Image, D::Error> {
+        let repr = BamlMediaRepr::deserialize(deserializer)?;
+        let image = match repr.content {
+            BamlMediaReprContent::Url { url } => {
+                new_image_from_url(url.as_str(), repr.mime_type.as_deref())
+            }
+            BamlMediaReprContent::Base64 { base64 } => {
+                new_image_from_base64(base64.as_str(), repr.mime_type.as_deref())
+            }
+        };
+        Ok(image)
+    }
+    pub fn deserialize_audio<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<baml::Audio, D::Error> {
+        let repr = BamlMediaRepr::deserialize(deserializer)?;
+        let audio = match repr.content {
+            BamlMediaReprContent::Url { url } => {
+                new_audio_from_url(url.as_str(), repr.mime_type.as_deref())
+            }
+            BamlMediaReprContent::Base64 { base64 } => {
+                new_audio_from_base64(base64.as_str(), repr.mime_type.as_deref())
+            }
+        };
+        Ok(audio)
+    }
+    pub fn deserialize_pdf<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<baml::Pdf, D::Error> {
+        let repr = BamlMediaRepr::deserialize(deserializer)?;
+        let pdf = match repr.content {
+            BamlMediaReprContent::Url { url } => {
+                new_pdf_from_url(url.as_str(), repr.mime_type.as_deref())
+            }
+            BamlMediaReprContent::Base64 { base64 } => {
+                new_pdf_from_base64(base64.as_str(), repr.mime_type.as_deref())
+            }
+        };
+        Ok(pdf)
+    }
+    pub fn deserialize_video<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<baml::Video, D::Error> {
+        let repr = BamlMediaRepr::deserialize(deserializer)?;
+        let video = match repr.content {
+            BamlMediaReprContent::Url { url } => {
+                new_video_from_url(url.as_str(), repr.mime_type.as_deref())
+            }
+            BamlMediaReprContent::Base64 { base64 } => {
+                new_video_from_base64(base64.as_str(), repr.mime_type.as_deref())
+            }
+        };
+        Ok(video)
+    }
 }

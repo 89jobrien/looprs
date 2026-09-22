@@ -1,17 +1,50 @@
+//! Defines command-line arguments and subcommands for the `looprs` binary.
+
 use anyhow::{Result, anyhow};
+use looprs::automation_protocol::{MACHINE_PROTOCOL_V1, MachineProtocol};
 use std::env;
 
-// TODO(feature-idea-8): Define a versioned machine contract with stable flags, JSONL output,
-// run IDs, usage reporting, deadlines, and cancellation before Crux integration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CliMetaAction {
+    Help,
+    Version,
+}
+
+pub(crate) fn meta_action(args: &[String]) -> Option<CliMetaAction> {
+    let mut version_requested = false;
+    let mut index = 0;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "-p" | "--prompt" | "-f" | "--file" | "-m" | "--model" | "--machine-protocol"
+            | "--run-id" | "--deadline-seconds" | "--cancel-file" => {
+                index += 2;
+            }
+            "-h" | "--help" => return Some(CliMetaAction::Help),
+            "-V" | "--version" => {
+                version_requested = true;
+                index += 1;
+            }
+            _ => index += 1,
+        }
+    }
+
+    version_requested.then_some(CliMetaAction::Version)
+}
+
 #[derive(Debug, Clone)]
 pub struct CliArgs {
-    pub prompt: Option<String>, // -p/--prompt
-    pub file: Option<String>,   // -f/--file
-    pub model: Option<String>,  // -m/--model
-    pub quiet: bool,            // -q/--quiet
-    pub no_hooks: bool,         // --no-hooks
-    pub json_output: bool,      // --json
-    pub machine_log: bool,      // --machine-log
+    pub prompt: Option<String>,           // -p/--prompt
+    pub file: Option<String>,             // -f/--file
+    pub model: Option<String>,            // -m/--model
+    pub quiet: bool,                      // -q/--quiet
+    pub no_hooks: bool,                   // --no-hooks
+    pub json_output: bool,                // --json
+    pub machine_log: bool,                // --machine-log
+    pub machine_protocol: Option<String>, // --machine-protocol
+    pub run_id: Option<String>,           // --run-id
+    pub deadline_seconds: Option<u64>,    // --deadline-seconds
+    pub cancel_file: Option<String>,      // --cancel-file
 }
 
 impl CliArgs {
@@ -32,6 +65,10 @@ impl CliArgs {
             no_hooks: false,
             json_output: false,
             machine_log: false,
+            machine_protocol: None,
+            run_id: None,
+            deadline_seconds: None,
+            cancel_file: None,
         };
 
         let mut i = 0;
@@ -70,7 +107,53 @@ impl CliArgs {
                     result.json_output = true;
                 }
                 "--machine-log" => {
+                    if result.machine_log {
+                        return Err(anyhow!("{arg} specified more than once"));
+                    }
                     result.machine_log = true;
+                }
+                "--machine-protocol" => {
+                    if result.machine_protocol.is_some() {
+                        return Err(anyhow!("{arg} specified more than once"));
+                    }
+                    i += 1;
+                    if i >= args.len() {
+                        return Err(anyhow!("{arg} requires a value"));
+                    }
+                    result.machine_protocol = Some(args[i].clone());
+                }
+                "--run-id" => {
+                    if result.run_id.is_some() {
+                        return Err(anyhow!("{arg} specified more than once"));
+                    }
+                    i += 1;
+                    if i >= args.len() {
+                        return Err(anyhow!("{arg} requires a value"));
+                    }
+                    result.run_id = Some(args[i].clone());
+                }
+                "--deadline-seconds" => {
+                    if result.deadline_seconds.is_some() {
+                        return Err(anyhow!("{arg} specified more than once"));
+                    }
+                    i += 1;
+                    if i >= args.len() {
+                        return Err(anyhow!("{arg} requires a value"));
+                    }
+                    let parsed = args[i]
+                        .parse::<u64>()
+                        .map_err(|_| anyhow!("{arg} must be an integer number of seconds"))?;
+                    result.deadline_seconds = Some(parsed);
+                }
+                "--cancel-file" => {
+                    if result.cancel_file.is_some() {
+                        return Err(anyhow!("{arg} specified more than once"));
+                    }
+                    i += 1;
+                    if i >= args.len() {
+                        return Err(anyhow!("{arg} requires a value"));
+                    }
+                    result.cancel_file = Some(args[i].clone());
                 }
                 unknown => {
                     return Err(anyhow!("Unknown argument: {unknown}"));
@@ -78,6 +161,47 @@ impl CliArgs {
             }
 
             i += 1;
+        }
+
+        if let Some(protocol) = result.machine_protocol.as_mut() {
+            protocol.parse::<MachineProtocol>().map_err(|_| {
+                anyhow!(
+                    "Unsupported machine protocol '{protocol}', expected '{MACHINE_PROTOCOL_V1}'"
+                )
+            })?;
+            *protocol = protocol.trim().to_string();
+        }
+
+        let has_run_controls = result.run_id.is_some()
+            || result.deadline_seconds.is_some()
+            || result.cancel_file.is_some();
+        if has_run_controls && result.machine_protocol.is_none() {
+            return Err(anyhow!(
+                "--machine-protocol is required when using --run-id, --deadline-seconds, or --cancel-file"
+            ));
+        }
+
+        if result
+            .run_id
+            .as_deref()
+            .is_some_and(|run_id| run_id.trim().is_empty())
+        {
+            return Err(anyhow!("--run-id cannot be empty"));
+        }
+
+        if result
+            .deadline_seconds
+            .is_some_and(|deadline| deadline == 0)
+        {
+            return Err(anyhow!("--deadline-seconds must be greater than 0"));
+        }
+
+        if result
+            .cancel_file
+            .as_deref()
+            .is_some_and(|path| path.trim().is_empty())
+        {
+            return Err(anyhow!("--cancel-file cannot be empty"));
         }
 
         Ok(result)
@@ -111,6 +235,32 @@ mod tests {
     }
 
     #[test]
+    fn meta_action_recognizes_help_flags() {
+        assert_eq!(meta_action(&args(&["-h"])), Some(CliMetaAction::Help));
+        assert_eq!(
+            meta_action(&args(&["provider", "--help"])),
+            Some(CliMetaAction::Help)
+        );
+    }
+
+    #[test]
+    fn meta_action_recognizes_version_flags() {
+        assert_eq!(meta_action(&args(&["-V"])), Some(CliMetaAction::Version));
+        assert_eq!(
+            meta_action(&args(&["--version"])),
+            Some(CliMetaAction::Version)
+        );
+    }
+
+    #[test]
+    fn meta_action_prefers_help_over_version() {
+        assert_eq!(
+            meta_action(&args(&["--version", "--help"])),
+            Some(CliMetaAction::Help)
+        );
+    }
+
+    #[test]
     fn parse_no_args() {
         let parsed = CliArgs::parse_from(&args(&[])).unwrap();
         assert!(parsed.prompt.is_none());
@@ -120,6 +270,10 @@ mod tests {
         assert!(!parsed.no_hooks);
         assert!(!parsed.json_output);
         assert!(!parsed.machine_log);
+        assert!(parsed.machine_protocol.is_none());
+        assert!(parsed.run_id.is_none());
+        assert!(parsed.deadline_seconds.is_none());
+        assert!(parsed.cancel_file.is_none());
     }
 
     #[test]
@@ -192,6 +346,216 @@ mod tests {
     }
 
     #[test]
+    fn parse_machine_protocol_with_run_controls() {
+        let parsed = CliArgs::parse_from(&args(&[
+            "--machine-protocol",
+            MACHINE_PROTOCOL_V1,
+            "--run-id",
+            "run-123",
+            "--deadline-seconds",
+            "30",
+            "--cancel-file",
+            "/tmp/looprs.cancel",
+        ]))
+        .unwrap();
+
+        assert_eq!(
+            parsed.machine_protocol.as_deref(),
+            Some(MACHINE_PROTOCOL_V1)
+        );
+        assert_eq!(parsed.run_id.as_deref(), Some("run-123"));
+        assert_eq!(parsed.deadline_seconds, Some(30));
+        assert_eq!(parsed.cancel_file.as_deref(), Some("/tmp/looprs.cancel"));
+    }
+
+    #[test]
+    fn parse_machine_protocol_rejects_unknown_version() {
+        let result = CliArgs::parse_from(&args(&["--machine-protocol", "v2"]));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unsupported machine protocol")
+        );
+    }
+
+    #[test]
+    fn parse_deadline_rejects_zero() {
+        let result = CliArgs::parse_from(&args(&[
+            "--machine-protocol",
+            MACHINE_PROTOCOL_V1,
+            "--deadline-seconds",
+            "0",
+        ]));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("must be greater than 0")
+        );
+    }
+
+    #[test]
+    fn run_controls_require_machine_protocol() {
+        let run_id_only = CliArgs::parse_from(&args(&["--run-id", "run-123"]));
+        assert!(run_id_only.is_err());
+        assert!(
+            run_id_only
+                .unwrap_err()
+                .to_string()
+                .contains("--machine-protocol")
+        );
+
+        let deadline_only = CliArgs::parse_from(&args(&["--deadline-seconds", "30"]));
+        assert!(deadline_only.is_err());
+        assert!(
+            deadline_only
+                .unwrap_err()
+                .to_string()
+                .contains("--machine-protocol")
+        );
+
+        let cancel_file_only = CliArgs::parse_from(&args(&["--cancel-file", "/tmp/looprs.cancel"]));
+        assert!(cancel_file_only.is_err());
+        assert!(
+            cancel_file_only
+                .unwrap_err()
+                .to_string()
+                .contains("--machine-protocol")
+        );
+    }
+
+    #[test]
+    fn run_controls_with_unknown_protocol_fail_with_protocol_error() {
+        let result =
+            CliArgs::parse_from(&args(&["--machine-protocol", "v2", "--run-id", "run-123"]));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unsupported machine protocol")
+        );
+    }
+
+    #[test]
+    fn run_controls_with_protocol_still_validate_control_values() {
+        let result = CliArgs::parse_from(&args(&[
+            "--machine-protocol",
+            MACHINE_PROTOCOL_V1,
+            "--run-id",
+            "  ",
+        ]));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("--run-id cannot be empty")
+        );
+    }
+
+    #[test]
+    fn machine_options_reject_missing_values() {
+        for option in [
+            "--machine-protocol",
+            "--run-id",
+            "--deadline-seconds",
+            "--cancel-file",
+        ] {
+            let result = CliArgs::parse_from(&args(&[option]));
+            assert!(result.is_err(), "{option} should require a value");
+            assert!(result.unwrap_err().to_string().contains("requires a value"));
+        }
+    }
+
+    #[test]
+    fn deadline_rejects_negative_nonnumeric_and_overflow_values() {
+        for value in ["-1", "soon", "18446744073709551616"] {
+            let result = CliArgs::parse_from(&args(&[
+                "--machine-protocol",
+                MACHINE_PROTOCOL_V1,
+                "--deadline-seconds",
+                value,
+            ]));
+            assert!(result.is_err(), "deadline {value:?} should fail");
+        }
+    }
+
+    #[test]
+    fn cancel_file_rejects_empty_path() {
+        let result = CliArgs::parse_from(&args(&[
+            "--machine-protocol",
+            MACHINE_PROTOCOL_V1,
+            "--cancel-file",
+            "  ",
+        ]));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn machine_options_reject_duplicates() {
+        let cases = [
+            vec!["--machine-log", "--machine-log"],
+            vec![
+                "--machine-protocol",
+                MACHINE_PROTOCOL_V1,
+                "--machine-protocol",
+                MACHINE_PROTOCOL_V1,
+            ],
+            vec![
+                "--machine-protocol",
+                MACHINE_PROTOCOL_V1,
+                "--run-id",
+                "one",
+                "--run-id",
+                "two",
+            ],
+            vec![
+                "--machine-protocol",
+                MACHINE_PROTOCOL_V1,
+                "--deadline-seconds",
+                "1",
+                "--deadline-seconds",
+                "2",
+            ],
+            vec![
+                "--machine-protocol",
+                MACHINE_PROTOCOL_V1,
+                "--cancel-file",
+                "one",
+                "--cancel-file",
+                "two",
+            ],
+        ];
+        for case in cases {
+            let result = CliArgs::parse_from(&args(&case));
+            assert!(result.is_err(), "duplicate case {case:?} should fail");
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("specified more than once")
+            );
+        }
+    }
+
+    #[test]
+    fn machine_log_does_not_enable_versioned_run_controls() {
+        let result = CliArgs::parse_from(&args(&["--machine-log", "--run-id", "run-123"]));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("--machine-protocol")
+        );
+    }
+
+    #[test]
     fn parse_combined_args() {
         let parsed = CliArgs::parse_from(&args(&[
             "-p",
@@ -239,6 +603,18 @@ mod tests {
         let result = CliArgs::parse_from(&args(&["--unknown"]));
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Unknown argument"));
+    }
+
+    #[test]
+    fn meta_action_ignores_flag_shaped_option_values() {
+        for case in [
+            vec!["--prompt", "--help"],
+            vec!["--file", "--version"],
+            vec!["--model", "-h"],
+            vec!["--run-id", "-V"],
+        ] {
+            assert_eq!(meta_action(&args(&case)), None, "case: {case:?}");
+        }
     }
 
     #[test]

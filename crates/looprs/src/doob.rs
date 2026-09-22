@@ -20,6 +20,8 @@ use std::thread;
 #[cfg(not(test))]
 use std::time::Duration;
 
+use crate::text_utils::sanitize_and_truncate;
+
 /// Summary of pending doob todos for a project, for session-start context.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DoobStatus {
@@ -39,7 +41,7 @@ pub struct DoobTodo {
     pub priority: i64,
 }
 
-const MAX_TODO_CONTENT: usize = 500;
+const MAX_ITEM_CONTENT: usize = 500;
 #[cfg(not(test))]
 const DOOB_TIMEOUT_SECS: u64 = 2;
 
@@ -139,23 +141,7 @@ fn parse_doob_list(json_str: &str) -> Option<DoobStatus> {
     let mut out_todos = Vec::new();
     for t in todos.into_iter() {
         let raw = t.content.unwrap_or_default();
-        let sanitized: String = raw
-            .chars()
-            .filter(|c| {
-                // allow printable chars plus common whitespace (LF, CR, TAB)
-                !c.is_control() || *c == '\n' || *c == '\r' || *c == '\t'
-            })
-            .collect();
-        let content = if sanitized.chars().count() > MAX_TODO_CONTENT {
-            let mut s = sanitized
-                .chars()
-                .take(MAX_TODO_CONTENT - 1)
-                .collect::<String>();
-            s.push('\u{2026}'); // ellipsis
-            s
-        } else {
-            sanitized
-        };
+        let content = sanitize_and_truncate(&raw, MAX_ITEM_CONTENT);
 
         let priority = t.priority.unwrap_or(5);
         out_todos.push(DoobTodo { content, priority });
@@ -211,13 +197,13 @@ mod tests {
 
     #[test]
     fn test_content_truncation_and_sanitize() {
-        let long = "a".repeat(MAX_TODO_CONTENT + 50);
+        let long = "a".repeat(MAX_ITEM_CONTENT + 50);
         let bad = format!(r#"{{"todos":[{{"content":"{long}"}}]}}"#);
         let result = parse_doob_list(&bad).expect("parse should succeed");
         assert_eq!(result.todos.len(), 1);
-        assert!(result.todos[0].content.chars().count() <= MAX_TODO_CONTENT);
+        assert!(result.todos[0].content.chars().count() <= MAX_ITEM_CONTENT);
         // ensure ends with ellipsis char when truncated
-        if result.todos[0].content.chars().count() == MAX_TODO_CONTENT {
+        if result.todos[0].content.chars().count() == MAX_ITEM_CONTENT {
             assert!(
                 result.todos[0]
                     .content

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Testing - looprs</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <a class="brand" href="index.html"><span>loop</span>rs</a>
+      <a href="index.html">Overview</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="state-model.html">State Model</a>
+      <a href="feature-matrix.html">Feature Matrix</a>
+      <a href="crate-inventory.html">Crate Inventory</a>
+      <a href="crate-tiers.html">Crate Tiers</a>
+      <a class="active" href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main class="page">
+      <h1>Testing and Gates</h1>
+      <p class="subtitle">Quality checks used in regular development and pre-push hooks.</p>
+
+      <div class="card">
+        <h3>Primary commands</h3>
+        <p><code>cargo build --workspace</code></p>
+        <p><code>cargo nextest run --workspace</code></p>
+        <p><code>cargo clippy --all-targets --all-features -- -D warnings</code></p>
+        <p><code>cargo xtask check pre-push</code></p>
+      </div>
+
+      <div class="callout">
+        If you only run one command before publishing branch updates, run
+        <code>cargo xtask check pre-push</code> since it captures formatting, linting, tests, and
+        project-specific validation parity.
+      </div>
+
+      <h2>Gate intent</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Compilation and lint</h3>
+          <p>
+            Catch API drift, dead code, and warning regressions across crates before integration.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Behavioral tests</h3>
+          <p>
+            Exercise tool execution, provider adapters, file-reference behavior, and runtime state.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Protocol drift checks</h3>
+          <p>
+            Validate contract surfaces used for taskit protocol locking and workspace consistency.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Regression gate</h3>
+          <p>
+            Pre-push runs formatting, lint, protocol, and test gates. Workspace coverage is measured
+            separately by CI and persisted as a comparable artifact.
+          </p>
+        </div>
+      </div>
+
+      <h2>Live model tests</h2>
+      <p>
+        Optional live-provider tests are gated to avoid accidental external calls:
+        <code>LOOPRS_RUN_LIVE_LLM_TESTS=1</code>.
+      </p>
+
+      <h2>When to run what</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Change scope</th><th>Minimum check</th><th>Recommended check</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Single rust file, no API change</td><td><code>cargo check</code></td><td><code>cargo clippy -p &lt;crate&gt; --all-targets -- -D warnings</code></td></tr>
+            <tr><td>Runtime/tool/provider logic</td><td><code>cargo nextest run -p looprs</code></td><td><code>cargo nextest run --workspace</code></td></tr>
+            <tr><td>CLI/TUI behavior changes</td><td><code>cargo nextest run -p looprs-cli</code></td><td><code>cargo xtask check pre-push</code></td></tr>
+            <tr><td>Release or integration branch</td><td><code>cargo xtask check pre-push</code></td><td>full pre-push plus manual smoke run</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Debugging failed gates</h2>
+      <ol>
+        <li>Fix formatting first so lint and test diffs stay readable.</li>
+        <li>Resolve clippy warnings before broad test retries.</li>
+        <li>Re-run only the failing crate while iterating.</li>
+        <li>End with full workspace or pre-push parity before commit/push.</li>
+      </ol>
+
+      <h2>Code-backed examples</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Pre-push hook wiring</h3>
+          <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/.githooks/pre-push#L1"><code>.githooks/pre-push#L1</code></a></p>
+          <pre><code>#!/bin/sh
+exec cargo xtask check pre-push</code></pre>
+        </div>
+        <div class="card">
+          <h3>Live LLM test gate</h3>
+          <p class="snippet-source">from <a href="https://github.com/89jobrien/looprs/blob/main/README.md#L180"><code>README.md#L180</code></a></p>
+          <pre><code>export LOOPRS_RUN_LIVE_LLM_TESTS=1
+cargo nextest run --workspace --run-ignored ignored-only</code></pre>
+        </div>
+      </div>
+
+      <footer>
+        Test strategy emphasizes deterministic local checks first, live integrations second.
+      </footer>
+    </main>
+  </body>
+</html>

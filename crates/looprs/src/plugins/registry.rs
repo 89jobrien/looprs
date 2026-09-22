@@ -1,8 +1,11 @@
+//! Caches PATH resolution results for named external tools.
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 pub trait ToolResolver: Send + Sync {
+    /// Resolves a tool name to an executable path when available.
     fn resolve(&self, tool: &str) -> Option<PathBuf>;
 }
 
@@ -12,6 +15,7 @@ pub struct ToolRegistry {
 }
 
 impl ToolRegistry {
+    /// Creates an empty resolution cache backed by the supplied resolver.
     pub fn new(resolver: Arc<dyn ToolResolver>) -> Self {
         Self {
             resolver,
@@ -19,10 +23,12 @@ impl ToolRegistry {
         }
     }
 
+    /// Returns whether the tool resolves to an executable path.
     pub fn has(&self, tool: &str) -> bool {
         self.resolve(tool).is_some()
     }
 
+    /// Resolves a tool or returns a not-found I/O error.
     pub fn require(&self, tool: &str) -> std::io::Result<PathBuf> {
         self.resolve(tool).ok_or_else(|| {
             std::io::Error::new(

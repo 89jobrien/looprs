@@ -5,7 +5,7 @@
 !.ctx/HANDOFF.*.yaml
 .ctx/HANDOFF.*.state.yaml
 thoughts/
-docs/
+docs/*
 
 .env
 .env.nu
@@ -32,6 +32,10 @@ docs/
 !tests/README.md
 !docs/TESTING.md
 !docs/ownership-model.md
+!docs/book.toml
+!docs/src/
+!docs/src/**
+docs/src/**/.DS_Store
 !*.ai.md
 !**/SKILL.md
 
@@ -52,9 +56,9 @@ target/llvm-cov/
 
 # Fuzz runtime output (corpus, crashes, artifacts)
 # Seed inputs in corpus/ subdirs are committed; fuzzer-generated inputs are not.
-fuzz/corpus/
-!fuzz/corpus/fuzz_parse_skill/seed_*
-!fuzz/corpus/fuzz_strip_ansi/seed_*
+fuzz/corpus/**
+!fuzz/corpus/**/
+!fuzz/corpus/**/seed_*
 fuzz/artifacts/
 fuzz/target/
 
@@ -73,3 +77,6 @@ third_party/**/target/
 # handoff-end
 .worktrees/
 .ctx/opavs/phase
+local/
+patches/
+IDEAS.md
