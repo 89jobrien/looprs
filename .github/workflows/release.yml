@@ -91,6 +91,31 @@ jobs:
             echo "Tag v${VERSION} already points to a different object." >&2
             exit 1
           fi
+      - name: Verify release health history
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          latest=$(tail -n 1 .health-history.jsonl)
+          if ! jq -e --arg version "$VERSION" '
+            .version == $version
+            and .versions_consistent == true
+            and .tests.failed == 0
+            and .clippy.errors == 0
+            and .coverage >= 0
+            and .coverage <= 100
+          ' <<< "$latest"; then
+            echo "Latest health history entry is not a valid measurement for release ${VERSION}." >&2
+            echo "Refresh with taskit health check --with-coverage --update and append the baseline before release." >&2
+            exit 1
+          fi
+          jq -S . .health-baseline.json > /tmp/health-baseline.json
+          jq -S . <<< "$latest" > /tmp/health-history-latest.json
+          if ! cmp -s /tmp/health-baseline.json /tmp/health-history-latest.json; then
+            echo ".health-baseline.json does not match the latest persisted health history entry." >&2
+            exit 1
+          fi
+          cp .health-baseline.json release-health.json
+          cp .health-history.jsonl release-health-history.jsonl
       - name: Run release gates
         run: |
           cargo +1.88.0 fmt --all --check
@@ -124,7 +149,10 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-metadata
-          path: RELEASE_NOTES.md
+          path: |
+            RELEASE_NOTES.md
+            release-health.json
+            release-health-history.jsonl
           if-no-files-found: error
           retention-days: 7
 
@@ -372,13 +400,15 @@ jobs:
             prerelease_args+=(--prerelease)
           fi
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
-            gh release upload "v${VERSION}" release-assets/*.tar.gz release-assets/*.tar.gz.sha256 release-assets/*.spdx.json --clobber
+            gh release upload "v${VERSION}" release-assets/*.tar.gz release-assets/*.tar.gz.sha256 release-assets/*.spdx.json release-assets/release-health.json release-assets/release-health-history.jsonl --clobber
             gh release edit "v${VERSION}" --title "looprs v${VERSION}" --notes-file release-assets/RELEASE_NOTES.md "${prerelease_args[@]}"
           else
             gh release create "v${VERSION}" \
               release-assets/*.tar.gz \
               release-assets/*.tar.gz.sha256 \
               release-assets/*.spdx.json \
+              release-assets/release-health.json \
+              release-assets/release-health-history.jsonl \
               --title "looprs v${VERSION}" \
               --notes-file release-assets/RELEASE_NOTES.md \
               --verify-tag \
