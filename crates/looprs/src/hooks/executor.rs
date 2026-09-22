@@ -237,10 +237,9 @@ impl HookExecutor {
         local_ctx: &HashMap<String, String>,
     ) -> anyhow::Result<bool> {
         // Simple condition evaluation: "on_branch:main" or "has_tool:git"
-        if condition.starts_with("on_branch:") {
-            let branch = condition.strip_prefix("on_branch:").unwrap_or("");
-            // Would check actual branch here
-            return Ok(branch == "main" || branch == "*"); // For now, accept main or wildcard
+        if let Some(expected_branch) = condition.strip_prefix("on_branch:") {
+            return Ok(expected_branch == "*"
+                || crate::git_info::branch_name().as_deref() == Some(expected_branch));
         }
 
         if condition.starts_with("has_tool:") {
@@ -347,8 +346,29 @@ mod tests {
 
     #[test]
     fn test_condition_on_branch() {
+        let _lock = test_lock();
+        let tmp = TempDir::new().unwrap();
+        let _guard = DirGuard::change_to(tmp.path());
+        assert!(
+            std::process::Command::new("git")
+                .args(["init", "--quiet"])
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(
+            std::process::Command::new("git")
+                .args(["checkout", "--quiet", "-b", "feature/hook-conditions"])
+                .status()
+                .unwrap()
+                .success()
+        );
+
         let local_ctx: HashMap<String, String> = HashMap::new();
-        assert!(HookExecutor::eval_condition("on_branch:main", &local_ctx).unwrap());
+        assert!(
+            HookExecutor::eval_condition("on_branch:feature/hook-conditions", &local_ctx).unwrap()
+        );
+        assert!(!HookExecutor::eval_condition("on_branch:main", &local_ctx).unwrap());
         assert!(HookExecutor::eval_condition("on_branch:*", &local_ctx).unwrap());
     }
 
