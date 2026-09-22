@@ -23,13 +23,19 @@ const CLI_BIN_TEST_ARGS: &[&str] = &[
 ];
 
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
 
     if is_plain_install(&args) {
         exit(run_install());
     }
 
     let is_pre_push = is_plain_pre_push(&args);
+    if matches!(
+        args.first().map(String::as_str),
+        Some("pre-commit" | "pre-push")
+    ) {
+        args.insert(0, "check".to_string());
+    }
 
     // Try running taskit directly first
     match Command::new("taskit").args(&args).status() {
