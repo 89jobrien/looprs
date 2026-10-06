@@ -170,8 +170,9 @@ async fn main() -> Result<()> {
 
         let repo_dir = repo_hooks_dir.filter(|d| d.exists());
 
-        if let Ok(hooks) = HookRegistry::load_dual_source(user_dir.as_ref(), repo_dir.as_ref()) {
-            agent = agent.with_hooks(hooks);
+        match HookRegistry::load_dual_source(user_dir.as_ref(), repo_dir.as_ref()) {
+            Ok(hooks) => agent = agent.with_hooks(hooks),
+            Err(e) => ui::warn(format!("failed to load hooks from dual source: {e}")),
         }
     }
 
@@ -188,21 +189,34 @@ async fn main() -> Result<()> {
     let mut command_registry = CommandRegistry::new();
 
     // Load user commands
-    if user_commands_dir.exists()
-        && let Ok(user_commands) = CommandRegistry::load_from_directory(&user_commands_dir)
-    {
-        for cmd in user_commands.list() {
-            command_registry.register(cmd.clone());
+    if user_commands_dir.exists() {
+        match CommandRegistry::load_from_directory(&user_commands_dir) {
+            Ok(user_commands) => {
+                for cmd in user_commands.list() {
+                    command_registry.register(cmd.clone());
+                }
+            }
+            Err(e) => ui::warn(format!(
+                "failed to load commands from {}: {e}",
+                user_commands_dir.display()
+            )),
         }
     }
 
     // Load repo commands (will override user commands with same name)
     if let Some(dir) = repo_commands_dir
         && dir.exists()
-        && let Ok(repo_commands) = CommandRegistry::load_from_directory(&dir)
     {
-        for cmd in repo_commands.list() {
-            command_registry.register(cmd.clone());
+        match CommandRegistry::load_from_directory(&dir) {
+            Ok(repo_commands) => {
+                for cmd in repo_commands.list() {
+                    command_registry.register(cmd.clone());
+                }
+            }
+            Err(e) => ui::warn(format!(
+                "failed to load commands from {}: {e}",
+                dir.display()
+            )),
         }
     }
 
@@ -220,17 +234,26 @@ async fn main() -> Result<()> {
 
     // Load with precedence (repo overrides user)
     if let Some(repo_dir) = repo_skills_dir {
-        if let Ok(_count) = skill_registry.load_with_precedence(&user_skills_dir, &repo_dir) {
-            // Skills loaded successfully
+        if let Err(e) = skill_registry.load_with_precedence(&user_skills_dir, &repo_dir) {
+            ui::warn(format!(
+                "failed to load skills from {} / {}: {e}",
+                user_skills_dir.display(),
+                repo_dir.display()
+            ));
         }
-    } else if user_skills_dir.exists() {
-        let _ = skill_registry.load_from_directory(&user_skills_dir);
+    } else if user_skills_dir.exists()
+        && let Err(e) = skill_registry.load_from_directory(&user_skills_dir)
+    {
+        ui::warn(format!(
+            "failed to load skills from {}: {e}",
+            user_skills_dir.display()
+        ));
     }
 
     // Load rules from both user and repo directories (repo overrides user)
     let rules = looprs::RuleRegistry::load_all();
     if rules.count() > 0 {
-        println!("📋 Loaded {} project rule(s)", rules.count());
+        println!("Loaded {} project rule(s)", rules.count());
     }
     agent = agent.with_rules(rules);
 
@@ -250,8 +273,12 @@ async fn main() -> Result<()> {
     };
     let repo_agents = repo_agents_dir.filter(|d| d.exists());
     let agent_registry =
-        AgentRegistry::load_dual_source(user_agents.as_ref(), repo_agents.as_ref())
-            .unwrap_or_else(|_| AgentRegistry::new());
+        AgentRegistry::load_dual_source(user_agents.as_ref(), repo_agents.as_ref()).unwrap_or_else(
+            |e| {
+                ui::warn(format!("failed to load agents from dual source: {e}"));
+                AgentRegistry::new()
+            },
+        );
 
     let user_plugins_dir = dirs::home_dir()
         .unwrap_or_default()
@@ -263,7 +290,10 @@ async fn main() -> Result<()> {
     let user_plugins = user_plugins_dir.exists().then_some(user_plugins_dir);
     let repo_plugins = repo_plugins_dir.filter(|d| d.exists());
     let plugin_runtime = PluginRuntimeRegistry::load_dual_source(user_plugins, repo_plugins)
-        .unwrap_or_else(|_| PluginRuntimeRegistry::default());
+        .unwrap_or_else(|e| {
+            ui::warn(format!("failed to load plugins from dual source: {e}"));
+            PluginRuntimeRegistry::default()
+        });
 
     // Handle scriptable (non-interactive) mode
     if cli_args.is_scriptable() {
@@ -372,12 +402,10 @@ async fn run_interactive(
         settings: settings_items,
     });
 
+    let repl_state = helper.state();
+    let repl_sets = helper.sets();
     let mut rl = Editor::<ReplHelper, DefaultHistory>::new()?;
     rl.set_helper(Some(helper));
-    let (repl_state, repl_sets) = {
-        let helper = rl.helper().expect("helper just set");
-        (helper.state(), helper.sets())
-    };
     bind_repl_keys(&mut rl, repl_state, repl_sets, agent.fs_mode_handle());
 
     // Collect session context (git status, pending doob todos, etc.)
@@ -475,7 +503,7 @@ async fn run_interactive(
                     }
                     CliCommand::InvokeSkill(skill_name, trailing) => {
                         if let Some(skill) = skill_registry.get(&skill_name) {
-                            ui::info(format!("📚 Loading skill: {}", skill.name));
+                            ui::info(format!("Loading skill: {}", skill.name));
                             let skill_message = if let Some(trailing_text) = trailing {
                                 let skill_message = format!(
                                     "=== Skill: {} ===\n{}\n\nUser message: {}",
@@ -582,10 +610,7 @@ async fn run_interactive(
                         let matching_skills = skill_registry.find_matching(&msg);
 
                         let final_message = if !matching_skills.is_empty() {
-                            ui::info(format!(
-                                "📚 Auto-triggered {} skill(s)",
-                                matching_skills.len()
-                            ));
+                            ui::info(format!("Auto-triggered {} skill(s)", matching_skills.len()));
                             for skill in &matching_skills {
                                 ui::info(format!("  • {}", skill.name.cyan()));
                             }

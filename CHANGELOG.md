@@ -2,7 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased]
+## [0.5.6] - 2026-10-06
+
+### Features
+- Add rendered output snapshots fixes #18
+- Implement parallel dispatch fixes #19
+- Add doctest and rustdoc gates fixes #50
+- Add typed condition expressions fixes #54
+
+### Fixes
+- Remove redundant iterator conversion
+- Fetch base refs and patch rustls advisory
+- Install Nushell for shared gates
+- Install cargo llvm cov in shared gates
+- Evaluate actual branch conditions fixes #49
+
+### Other
+- Issue #18
+- Issue #19
+- Issue #50
+- Restore integration clippy gate
+- Resolve issues #49 and #54
 
 ## [0.5.4] - 2026-09-09
 
