@@ -1,7 +1,9 @@
 [workspace]
 crates = [
+  { dir = "crates/looprs-macros", pkg = "looprs-macros" },
   { dir = "crates/looprs-core", pkg = "looprs-core" },
   { dir = "crates/looprs", pkg = "looprs" },
+  { dir = "crates/looprs-tui", pkg = "looprs-tui" },
   { dir = "crates/looprs-cli", pkg = "looprs-cli" },
 ]
 # offline_skip = "test(/.*network.*/)"
@@ -9,11 +11,19 @@ crates = [
 
 [[workspace.propagation]]
 source = "looprs"
-dependents = ["looprs-cli"]
+dependents = ["looprs-tui", "looprs-cli"]
 
 [[workspace.propagation]]
 source = "looprs-core"
-dependents = ["looprs", "looprs-cli"]
+dependents = ["looprs", "looprs-tui", "looprs-cli"]
+
+[[workspace.propagation]]
+source = "looprs-macros"
+dependents = ["looprs-core", "looprs", "looprs-tui", "looprs-cli"]
+
+[[workspace.propagation]]
+source = "looprs-tui"
+dependents = ["looprs-cli"]
 
 # Protocol drift detection: track SHA-256 hashes of contract surfaces.
 # Run `taskit check-protocol-drift --update` to regenerate the lockfile.

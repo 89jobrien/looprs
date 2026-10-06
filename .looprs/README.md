@@ -10,7 +10,7 @@ Repo-level configuration for looprs. These files are loaded in addition to user-
 ├── hooks/                    # Repo hooks (YAML) — see hooks/README.md
 ├── agents/                   # Agent role definitions (YAML) — see agents/README.md
 ├── rules/                    # Constraint guidelines (Markdown) — see rules/README.md
-├── skills/                   # Example skills (see skills/README.md)
+├── skills/                   # Active YAML skills + examples (see skills/README.md)
 ├── scripts/                  # Helper scripts invoked by commands/hooks
 ├── observability/            # JSONL traces/events (project-scoped; see root README's Observability section)
 ├── config.json               # Runtime defaults, file refs, pipeline, agents, paths

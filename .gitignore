@@ -14,6 +14,8 @@ docs/
 .ruff_cache/
 .venv/
 .taskit-cache/
+.taskit/telemetry/
+.release-state.json
 .xtask-cache/
 .looprs/provider.json
 .looprs/state.json
@@ -70,3 +72,4 @@ third_party/**/target/
 .ctx/.initialized
 # handoff-end
 .worktrees/
+.ctx/opavs/phase

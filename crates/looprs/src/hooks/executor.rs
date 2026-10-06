@@ -45,6 +45,8 @@ impl HookExecutor {
             .ok()
             .and_then(|c| c.defaults.timeout_seconds);
 
+        // TODO(feature-idea-7): Seed condition evaluation with typed event fields
+        // such as `tool_name` so lifecycle hooks can use event-aware predicates.
         let mut results = Vec::new();
         let mut local_ctx: HashMap<String, String> = HashMap::new();
 
@@ -295,16 +297,11 @@ impl HookExecutor {
 mod tests {
     use super::*;
     use std::path::PathBuf;
-    use std::sync::{Arc, Mutex, OnceLock};
+    use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
 
-    static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
     fn test_lock() -> std::sync::MutexGuard<'static, ()> {
-        TEST_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .expect("lock test mutex")
+        crate::app_config::cwd_test_lock()
     }
 
     struct DirGuard {
@@ -335,12 +332,14 @@ mod tests {
 
     #[test]
     fn test_run_command_success() {
+        let _lock = test_lock();
         let output = HookExecutor::run_command("echo hello", None).unwrap();
         assert_eq!(output, "hello");
     }
 
     #[test]
     fn test_run_command_with_pipes() {
+        let _lock = test_lock();
         let output = HookExecutor::run_command("[a b c] | length", None).unwrap();
         let lines: i32 = output.trim().parse().unwrap_or(0);
         assert_eq!(lines, 3);

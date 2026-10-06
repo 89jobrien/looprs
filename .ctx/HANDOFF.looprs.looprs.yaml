@@ -1,61 +1,40 @@
 project: looprs
 id: looprs
-updated: 2026-08-24
-items:
-- id: hex-phase-3
-  doob_uuid: null
-  name: hex-phase-3
-  priority: P2
-  status: open
-  title: 'Hex Phase 3: inject SessionStore construction out of Agent'
-  description: |
-    Agent constructs its own SessionStore internally. Phase 3 moves this to
-    the composition root (looprs-cli/main.rs) so the store is injected.
-    SQLite and Fs backends already exist; the factory fn default_session_store()
-    is in adapters/mod.rs. new_with_runtime() already accepts
-    Option<Box<dyn SessionStore>>, so the wiring is the main remaining gap.
-    See TODO in crates/looprs-core/src/ports/session_store.rs.
-  files:
-  - crates/looprs/src/agent.rs
-  - crates/looprs/src/adapters/mod.rs
-  - crates/looprs-cli/src/main.rs
-  completed: null
-  extra: []
-- id: streaming-openai
-  doob_uuid: null
-  name: streaming-openai
-  priority: P3
-  status: open
-  title: Extend real SSE streaming to openai.rs and openai_sdk.rs
-  description: |
-    AnthropicProvider has real infer_stream() via reqwest SSE.
-    OpenAIProvider and OpenAISdkProvider still use the default single-chunk
-    fallback. OpenAI SSE format: data: {"choices":[{"delta":{"content":"..."}}]}.
-    async-openai SDK exposes create_stream() on chat completions.
-  files:
-  - crates/looprs/src/providers/openai.rs
-  - crates/looprs/src/providers/openai_sdk.rs
-  completed: null
-  extra: []
-- id: parallel-dispatch
-  doob_uuid: null
-  name: parallel-dispatch
-  priority: P3
-  status: open
-  title: Parallel tool dispatch via tokio::task::JoinSet
-  description: |
-    run_turn() dispatches tool calls sequentially. When the LLM emits multiple
-    independent tool_use blocks in one response, they could be dispatched in
-    parallel. AgentsConfig.max_parallel is loaded (default 3). Guard with
-    agents.orchestration = "parallel" config flag; keep sequential as default.
-    Blocked on: stable AgentBuilder and AgentRuntime Clone impls.
-    See TODO comment in agent.rs around line 370.
-  files:
-  - crates/looprs/src/agent.rs
-  - crates/looprs/src/app_config.rs
-  completed: null
-  extra: []
+updated: 2026-09-06
+items: []
 log:
+- date: '20260906.092820'
+  summary: done=17 running=0 pending=16 blocked=0
+  commits:
+  - 5f31e234eb11c00b94f0566dcb27e9dce3f03b9b
+  - 72d7176ccf6209b5ebe469a07c3b48e6b0e12cdf
+  - 3d53ea5f951b2b2d72d6f3a6717264dd80c09e6c
+  - 5933781543ef80084fea859dac2a8c0e9deaad3d
+  - fe33d88bdc6a799671788acc37d1f066997f03d0
+  - 70e2e968a1df1bc249334ecffa906a694018af3e
+  - a93504317d33d79449cca96cb4bdd525457e8d66
+  - 1e6d60dfdd9c069d1280c789e7e9dee95c0ea406
+  - a6378cfb0c788ef7d8309b8a01da13ca57798431
+  - 5a71faf6da4453ab76201d4420338182a9ab137c
+- date: 2026-09-06
+  summary: |
+    Session: code-grounded feature backlog, release documentation, and
+    post-release health triage.
+    - Added 14 TODO(feature-idea-N) markers at implementation seams and updated
+      CHANGELOG.md; committed and pushed as 72d7176 on develop.
+    - Verified formatting, workspace check, clippy, 506 tests, pre-commit, and
+      pre-push gates. The final nextest run passed but reported two leaky tests:
+      adapters::plugin_executor::tests::adapts_has_tool_to_has_in_path and
+      adapters::retry_provider::tests::delegates_metadata.
+    - Created and classified GitHub issues #20-#33; existing issues #17-#19
+      cover the remaining source TODOs. Synced all issues into godmode tasks.
+    - Found no trace events after 2026-08-23 and no durable coverage trend;
+      prioritized runtime issues #27-#29 and observability issue #21.
+    - Consolidated the legacy .ctx/memory-bank into the canonical
+      .ctx/godmode/memory-bank and refreshed active context, progress, mistakes,
+      health history, and session reflection.
+  commits:
+  - 72d7176
 - date: 2026-08-24
   summary: |
     Session-context rework + docs accuracy pass + TUI fixes.
@@ -72,23 +51,19 @@ log:
       .looprs/* READMEs synced to actual config surface; Dockerfile reference
       recipe for minibox builds.
     - All 438 tests passing; clippy -D warnings clean.
-  commits: []
 - date: '20260713.174514'
   summary: done=11 running=0 pending=0 blocked=0
-  commits: []
 - date: 20260429:160832
   summary: |
     Hexagonal refactor Phases 2-4: extracted looprs-cli crate (binary, REPL, runtime);
     split ports.rs into ports/ directory with SessionStore and UserOutput ports; moved
     adapters to looprs-core; re-exported types/api/events/observation from looprs-core.
-  commits: []
   session: 2
 - date: 20260429:132540
   summary: |
     Hexagonal refactor Phase 1: extracted looprs-core crate with domain types, ports, and
     newtype_id!/domain_event! macros. Added ChannelBroker, RetryProvider adapters. Fixed
     global pre-commit hook.
-  commits: []
   session: 1
 - date: 2026-07-16
   summary: |
@@ -108,27 +83,23 @@ log:
       Agent::run_turn_streaming() implemented; 1 test.
     - Stale IDEA/TODO comment cleanup across 6 files.
     - All 409 tests passing; pre-commit and pre-push gates clean.
-  commits: []
 - date: 2026-07-08
   summary: |
     Dynamic statusline prompt + per-turn context injection for agent UX improvements.
     Fixed YAML block scalar parse error in outsource.yaml (collapsed Python config to
     single-line). Documented looprs repo config.
-  commits: []
 - date: 2026-06-07
   summary: |
     Pruned 4 completed HANDOFF items to log. HX-003: Wire Agent through
     ports (done 2026-05-07). HX-005: Deduplicate SessionEvent (done
     2026-05-06). HX-006: Extract LLMProvider to looprs-core (done
     2026-05-07). HX-007: DRY provider factory (done 2026-05-06).
-  commits: []
 - date: 2026-05-08
   summary: |
     Removed looprs-gui binary (freya-based GUI, unused). Restructured as proper virtual
     workspace: root Cargo.toml is now workspace-only with [workspace.package]; looprs
     library crate moved from root src/ into crates/looprs/; looprs-cli dep path updated
     to ../looprs; looprs-core dev-dep duplicate removed. Bumped to v0.3.1.
-  commits: []
   session: 4
 - date: 2026-05-07
   summary: |
@@ -137,5 +108,4 @@ log:
     unified with InferenceProvider from looprs-core), HX-005 and HX-007 confirmed done.
     Three PRs merged: #12 (plugin executor port), #13 (unify LLMProvider), #14 (agent
     port wiring).
-  commits: []
   session: 3

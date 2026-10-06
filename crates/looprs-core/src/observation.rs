@@ -9,12 +9,19 @@ const OUTPUT_PREVIEW_LEN: usize = 500;
 /// A captured observation from tool usage in a session
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Observation {
+    /// Name of the tool that was executed.
     pub tool_name: String,
+    /// Structured input passed to the tool.
     pub input: Value,
+    /// Raw output returned by the tool.
     pub output: String,
+    /// Provider-specific tool-use identifier, when available.
     pub tool_use_id: Option<ToolId>,
+    /// Unix timestamp (seconds) when observation was captured.
     pub timestamp: u64,
+    /// Session identifier this observation belongs to.
     pub session_id: String,
+    /// Optional human note about why this observation matters.
     pub context: Option<String>,
 }
 

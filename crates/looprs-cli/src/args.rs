@@ -1,6 +1,10 @@
 use anyhow::{Result, anyhow};
 use std::env;
 
+use looprs::ui;
+
+// TODO(feature-idea-8): Define a versioned machine contract with stable flags, JSONL output,
+// run IDs, usage reporting, deadlines, and cancellation before Crux integration.
 #[derive(Debug, Clone)]
 pub struct CliArgs {
     pub prompt: Option<String>, // -p/--prompt
@@ -98,6 +102,38 @@ impl CliArgs {
             Ok(None)
         }
     }
+}
+
+pub(crate) fn print_usage() {
+    ui::error_full(
+        r#"Usage: looprs [OPTIONS] | looprs seed [DIR] | looprs provider | looprs tui
+
+COMMANDS:
+  seed [DIR]             Write example config files to DIR (default: .looprs).
+                         Use ~ for home (e.g. ~/.looprs). Does not overwrite.
+  provider               Interactive menu to choose the active provider and
+                         (for local/Ollama) which model, written to
+                         .looprs/provider.json.
+  tui                    Alternate TUI mode: scrollback transcript pane over
+                         an input box, instead of the default REPL.
+
+OPTIONS:
+  -p, --prompt <TEXT>    Run with single prompt and exit (scriptable mode)
+  -f, --file <FILE>      Read prompt from file
+  -m, --model <MODEL>    Override default model
+  -q, --quiet            Suppress context and observations display
+  --no-hooks             Skip loading hooks from ~/.looprs/hooks/
+  --json                 Output response as structured JSON
+
+EXAMPLES:
+  looprs                           # Interactive mode
+  looprs seed                      # Create .looprs/config.json.example, etc.
+  looprs seed ~/.looprs            # Seed home config dir
+  looprs provider                  # Choose provider/model interactively
+  looprs tui                       # Launch the alternate chat TUI
+  looprs -p "explain closures"     # Run single prompt and exit
+"#,
+    );
 }
 
 #[cfg(test)]

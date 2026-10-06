@@ -8,35 +8,49 @@ use serde::Serialize;
 #[derive(Debug, Serialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum SessionEvent {
+    /// A user-authored message.
     UserMessage {
+        /// Message text as entered by the user.
         content: String,
+        /// Provider active when the message was submitted.
         provider: String,
     },
+    /// A completed model inference response.
     Inference {
+        /// Assistant text/content payload.
         content: String,
+        /// Provider that generated the inference.
         provider: String,
     },
+    /// A tool invocation requested by the model.
     ToolUse {
+        /// Tool name requested by the model.
         tool_name: String,
+        /// Structured JSON input passed to the tool.
         input: serde_json::Value,
+        /// Tool-use identifier from the provider payload.
         tool_use_id: String,
+        /// Provider that emitted this tool call.
         provider: String,
     },
+    /// The result produced by a prior tool invocation.
     ToolResult {
+        /// Tool-use identifier that this result completes.
         tool_use_id: String,
+        /// Tool output text.
         output: String,
+        /// Whether this result represents an error path.
         is_error: bool,
+        /// Provider that emitted the corresponding tool call.
         provider: String,
     },
+    /// Explicit end-of-session marker.
     SessionEnd,
 }
 
-// TODO: hex refactor Phase 3 — Agent still constructs SessionLogger
-// internally rather than receiving it as an injected SessionStore. Note that
-// the persistence half of this idea is done: SqliteSessionStore implements
-// this trait, and ObservationManager::persist/load_from already round-trip
-// through SQLite (see the TODO in observation_manager.rs for the remaining
-// gap — the read path is never wired into a running command).
+// NOTE: Hex refactor Phase 3 is complete: `Agent::new_with_runtime` accepts an
+// injected `SessionStore`, and the looprs-cli composition root wires
+// `default_session_store()` into the agent.
 /// Port: append session events to a durable store.
 ///
 /// Implementations decide the storage backend (filesystem JSONL, SQLite, etc.).

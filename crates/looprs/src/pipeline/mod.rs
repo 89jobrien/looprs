@@ -11,6 +11,8 @@ use crate::pipeline::types::{PipelineReport, StepResult};
 pub struct PipelineRunner;
 
 impl PipelineRunner {
+    // TODO(feature-idea-9): Honor the full pipeline configuration, including
+    // benchmarks, fail-fast, logging, rewards, required tools, and failure policy.
     /// Run the configured check suite and return a report.
     ///
     /// Enabled checks are executed in order: build, lint, tests. Each check
