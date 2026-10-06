@@ -7,8 +7,21 @@
 
 use std::process::{Command, exit};
 
-// TODO(feature-idea-14): Add cross-platform binary packaging, checksums, and
-// release artifacts to the canonical taskit/xtask release path.
+#[derive(Debug, PartialEq, Eq)]
+struct CargoGate {
+    name: &'static str,
+    args: &'static [&'static str],
+    env: &'static [(&'static str, &'static str)],
+}
+
+const DOCTEST_ARGS: &[&str] = &["test", "--locked", "--workspace", "--doc", "--all-features"];
+const RUSTDOC_ARGS: &[&str] = &[
+    "doc",
+    "--locked",
+    "--workspace",
+    "--no-deps",
+    "--all-features",
+];
 const CLI_BIN_TEST_ARGS: &[&str] = &[
     "nextest",
     "run",
@@ -23,6 +36,23 @@ const CLI_BIN_TEST_ARGS: &[&str] = &[
     "fail",
     "--hide-progress-bar",
     "--fail-fast",
+];
+const PRE_PUSH_GATES: &[CargoGate] = &[
+    CargoGate {
+        name: "workspace doctests",
+        args: DOCTEST_ARGS,
+        env: &[],
+    },
+    CargoGate {
+        name: "rustdoc warnings",
+        args: RUSTDOC_ARGS,
+        env: &[("RUSTDOCFLAGS", "-D warnings")],
+    },
+    CargoGate {
+        name: "looprs-cli bin",
+        args: CLI_BIN_TEST_ARGS,
+        env: &[],
+    },
 ];
 
 fn main() {
@@ -41,7 +71,7 @@ fn main() {
                 exit(status.code().unwrap_or(1));
             }
             if is_pre_push {
-                exit(run_cli_bin_tests());
+                exit(run_pre_push_gates());
             }
             exit(0);
         }
@@ -64,7 +94,7 @@ fn main() {
                 exit(status.code().unwrap_or(1));
             }
             if is_pre_push {
-                exit(run_cli_bin_tests());
+                exit(run_pre_push_gates());
             }
             exit(0);
         }
@@ -75,18 +105,40 @@ fn main() {
     }
 }
 
-fn run_cli_bin_tests() -> i32 {
-    eprintln!("  --- looprs-cli bin ---");
-    let status = Command::new("cargo")
-        .args(CLI_BIN_TEST_ARGS)
-        .status()
-        .expect("failed to run looprs-cli binary tests");
+fn run_pre_push_gates() -> i32 {
+    run_gate_commands(PRE_PUSH_GATES, run_cargo_gate)
+}
 
-    status.code().unwrap_or(1)
+fn run_gate_commands(gates: &[CargoGate], mut run: impl FnMut(&CargoGate) -> i32) -> i32 {
+    for gate in gates {
+        let code = run(gate);
+        if code != 0 {
+            return code;
+        }
+    }
+    0
+}
+
+fn run_cargo_gate(gate: &CargoGate) -> i32 {
+    eprintln!("  --- {} ---", gate.name);
+    let mut command = Command::new("cargo");
+    command.args(gate.args);
+    for (key, value) in gate.env {
+        command.env(key, value);
+    }
+
+    match command.status() {
+        Ok(status) => status.code().unwrap_or(1),
+        Err(error) => {
+            eprintln!("failed to run {}: {error}", gate.name);
+            1
+        }
+    }
 }
 
 fn is_plain_pre_push(args: &[String]) -> bool {
     matches!(args, [subcommand] if subcommand == "pre-push")
+        || matches!(args, [group, subcommand] if group == "check" && subcommand == "pre-push")
 }
 
 /// `taskit self install` installs taskit itself, not looprs — intercept
@@ -115,6 +167,7 @@ mod tests {
     #[test]
     fn plain_pre_push_runs_cli_bin_tests() {
         assert!(is_plain_pre_push(&args(&["pre-push"])));
+        assert!(is_plain_pre_push(&args(&["check", "pre-push"])));
     }
 
     #[test]
@@ -127,6 +180,11 @@ mod tests {
     #[test]
     fn pre_push_with_taskit_args_stays_taskit_only() {
         assert!(!is_plain_pre_push(&args(&["pre-push", "--dry-run"])));
+        assert!(!is_plain_pre_push(&args(&[
+            "check",
+            "pre-push",
+            "--dry-run"
+        ])));
     }
 
     #[test]
@@ -142,12 +200,28 @@ mod tests {
     }
 
     #[test]
-    fn cli_bin_test_command_targets_looprs_cli_binary() {
-        assert!(CLI_BIN_TEST_ARGS.contains(&"nextest"));
-        assert!(CLI_BIN_TEST_ARGS.contains(&"run"));
-        assert!(CLI_BIN_TEST_ARGS.contains(&"-p"));
-        assert!(CLI_BIN_TEST_ARGS.contains(&"looprs-cli"));
-        assert!(CLI_BIN_TEST_ARGS.contains(&"--bin"));
-        assert!(CLI_BIN_TEST_ARGS.contains(&"looprs"));
+    fn pre_push_gate_commands_cover_doctests_rustdoc_and_cli_binary() {
+        assert_eq!(PRE_PUSH_GATES.len(), 3);
+        assert_eq!(PRE_PUSH_GATES[0].args, DOCTEST_ARGS);
+        assert_eq!(PRE_PUSH_GATES[1].args, RUSTDOC_ARGS);
+        assert_eq!(PRE_PUSH_GATES[1].env, &[("RUSTDOCFLAGS", "-D warnings")]);
+        assert_eq!(PRE_PUSH_GATES[2].args, CLI_BIN_TEST_ARGS);
+    }
+
+    #[test]
+    fn pre_push_gates_stop_and_propagate_the_first_failure() {
+        let mut executed = Vec::new();
+
+        let code = run_gate_commands(PRE_PUSH_GATES, |gate| {
+            executed.push(gate.name);
+            if gate.name == "rustdoc warnings" {
+                23
+            } else {
+                0
+            }
+        });
+
+        assert_eq!(code, 23);
+        assert_eq!(executed, ["workspace doctests", "rustdoc warnings"]);
     }
 }

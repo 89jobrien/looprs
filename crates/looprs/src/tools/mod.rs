@@ -26,6 +26,7 @@ use crate::errors::ToolContextError;
 
 pub use error::ToolError;
 
+#[derive(Clone)]
 pub struct ToolContext {
     pub working_dir: PathBuf,
     fs_mode: Arc<AtomicU8>,

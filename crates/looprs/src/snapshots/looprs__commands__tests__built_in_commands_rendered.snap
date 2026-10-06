@@ -1,0 +1,128 @@
+---
+source: crates/looprs/src/commands.rs
+assertion_line: 411
+expression: snapshots
+---
+- name: build
+  description: Build the workspace in release mode
+  aliases: []
+  action:
+    type: Shell
+    command: cargo build --workspace --release
+    inject_output: true
+- name: check
+  description: Run cargo check across the workspace
+  aliases: []
+  action:
+    type: Shell
+    command: cargo check --workspace
+    inject_output: true
+- name: commit
+  description: "Stage all changes and commit. Usage: /commit <message>"
+  aliases: []
+  action:
+    type: Shell
+    command: "git add -A; git commit -m \"{args}\""
+    inject_output: true
+- name: diff
+  description: Show unstaged and staged changes
+  aliases: []
+  action:
+    type: Shell
+    command: git --no-pager -c color.ui=always diff HEAD
+    inject_output: true
+- name: doc
+  description: Build and open cargo docs
+  aliases: []
+  action:
+    type: Shell
+    command: cargo doc --workspace --no-deps --open
+    inject_output: false
+- name: fine-tune
+  description: Flag current session as high-priority for magi RL training
+  aliases: []
+  action:
+    type: Shell
+    command: rust-script ~/.looprs/scripts/fine-tune.rs
+    inject_output: true
+- name: fix
+  description: Apply clippy suggestions automatically
+  aliases: []
+  action:
+    type: Shell
+    command: cargo clippy --fix --allow-dirty --allow-staged
+    inject_output: true
+- name: git
+  description: Show recent git log
+  aliases:
+    - log
+  action:
+    type: Shell
+    command: git --no-pager log --oneline -10
+    inject_output: true
+- name: help
+  description: Show available commands
+  aliases:
+    - h
+  action:
+    type: Message
+    text: "Custom commands:\n\n/model [provider[/model]]  Show or switch provider. e.g. /model openai/gpt-4o\n/models                    Show grouped model catalog (local + configured + remote)\n/check                     cargo check --workspace\n/build                     cargo build --workspace --release\n/test                      cargo test --lib\n/lint                      cargo clippy --all-targets -- -D warnings\n/fix                       cargo clippy --fix --allow-dirty --allow-staged\n/doc                       cargo doc --workspace --no-deps --open\n/git (/log)                git log --oneline -10\n/diff                      git diff HEAD\n/commit <message>          git add -A && git commit -m <message>\n/refactor                  Refactor selected code for readability\n/reset-model <name>        Set default model in models.toml\n/model-status              Show model version and training status\n/score-session [n]         Score last N interactions via OpenAI judge\n/fine-tune                 Flag current session for RL training\n/outsource                 Re-run last prompt against outsource provider\n/help (/h)                 Show this help\n\nBuilt-in commands:\n/q, exit, quit    - Exit the session\n/c, clear         - Clear conversation history\n"
+- name: lint
+  description: Run clippy linter
+  aliases: []
+  action:
+    type: Shell
+    command: cargo clippy --all-targets -- -D warnings
+    inject_output: true
+- name: model
+  description: "Show or switch provider/model in-session. Usage: /model [provider[/model-id]]"
+  aliases:
+    - m
+  action:
+    type: SwitchProvider
+- name: model-status
+  description: "Show current magi model version, mean reward, and training status"
+  aliases: []
+  action:
+    type: Shell
+    command: rust-script ~/.looprs/scripts/model-status.rs
+    inject_output: true
+- name: models
+  description: "List selectable models (current, providers, local, tiers, remote catalogs)"
+  aliases:
+    - ls-models
+  action:
+    type: ListModels
+- name: outsource
+  description: Print the outsource provider/model from models.toml
+  aliases: []
+  action:
+    type: Outsource
+- name: refactor
+  description: Refactor selected code for readability
+  aliases: []
+  action:
+    type: Prompt
+    template: "Refactor this code for better readability and maintainability. Preserve functionality but improve structure, naming, and clarity."
+    variables: {}
+- name: reset-model
+  description: "Revert models.toml default model. Usage: /reset-model <model-name>"
+  aliases: []
+  action:
+    type: Shell
+    command: "rust-script ~/.looprs/scripts/reset-model.rs {args}"
+    inject_output: true
+- name: score-session
+  description: "Score last N session interactions via OpenAI. Usage: /score-session [n=10]"
+  aliases: []
+  action:
+    type: Shell
+    command: "rust-script ~/.looprs/scripts/score-session.rs {args}"
+    inject_output: true
+- name: test
+  description: Run all tests
+  aliases: []
+  action:
+    type: Shell
+    command: cargo test --lib
+    inject_output: true

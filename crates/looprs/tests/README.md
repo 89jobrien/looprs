@@ -31,7 +31,7 @@ cargo watch -x "nextest run"
 - **Fuzz**: libFuzzer targets under `fuzz/fuzz_targets/`; these are excluded from the default workspace and should be run explicitly when changing parser or text-processing boundaries.
 - **Model check**: no active model-checking target is currently wired into local gates.
 - **Conformance**: reusable port contract helpers live in `crates/looprs-core/src/ports/test_contracts.rs`.
-- **Integration**: root-level workflows in `tests/*.rs`, plus CLI binary tests in `crates/looprs-cli/src/args.rs` and `crates/looprs-cli/src/cli.rs`.
+- **Integration**: runtime workflows in `crates/looprs/tests/*.rs`, plus CLI binary tests in `crates/looprs-cli/src/args.rs` and `crates/looprs-cli/src/cli.rs`.
 - **Regression**: focused tests for previously fragile behavior, including model precedence, session logging, protocol drift surfaces, and CLI argument handling.
 
 ## Local Gate Expectations

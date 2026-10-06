@@ -3,6 +3,60 @@ use crate::app_config::AppConfig;
 use crate::events::EventContext;
 use crate::state::AppState;
 use std::collections::HashMap;
+use std::str::FromStr;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ConditionExpression {
+    OnBranch(String),
+    HasTool(String),
+    Equals { key: String, value: String },
+    EnvSet(String),
+    ConfigFlag { path: String, expected: bool },
+    Unknown(String),
+}
+
+impl FromStr for ConditionExpression {
+    type Err = anyhow::Error;
+
+    fn from_str(condition: &str) -> Result<Self, Self::Err> {
+        if let Some(branch) = condition.strip_prefix("on_branch:") {
+            anyhow::ensure!(!branch.is_empty(), "on_branch requires a branch name");
+            return Ok(Self::OnBranch(branch.to_string()));
+        }
+        if let Some(tool) = condition.strip_prefix("has_tool:") {
+            anyhow::ensure!(!tool.is_empty(), "has_tool requires a tool name");
+            return Ok(Self::HasTool(tool.to_string()));
+        }
+        if let Some(operands) = condition.strip_prefix("equals:") {
+            let (key, value) = operands
+                .split_once(':')
+                .ok_or_else(|| anyhow::anyhow!("equals requires a key and value"))?;
+            anyhow::ensure!(!key.is_empty(), "equals requires a non-empty key");
+            return Ok(Self::Equals {
+                key: key.to_string(),
+                value: value.to_string(),
+            });
+        }
+        if let Some(variable) = condition.strip_prefix("env_set:") {
+            anyhow::ensure!(!variable.is_empty(), "env_set requires a variable name");
+            return Ok(Self::EnvSet(variable.to_string()));
+        }
+        if let Some(operands) = condition.strip_prefix("config_flag:") {
+            let (path, expected) = operands
+                .split_once('=')
+                .ok_or_else(|| anyhow::anyhow!("config_flag requires a path and boolean value"))?;
+            anyhow::ensure!(!path.is_empty(), "config_flag requires a non-empty path");
+            let expected = expected.parse::<bool>().map_err(|_| {
+                anyhow::anyhow!("config_flag value must be either 'true' or 'false'")
+            })?;
+            return Ok(Self::ConfigFlag {
+                path: path.to_string(),
+                expected,
+            });
+        }
+        Ok(Self::Unknown(condition.to_string()))
+    }
+}
 
 pub struct HookExecutor;
 
@@ -230,41 +284,21 @@ impl HookExecutor {
         Ok(stdout.trim().to_string())
     }
 
-    /// Evaluate simple conditions (very basic for now)
+    /// Parse and evaluate a hook condition expression.
     // qual:allow(iosp) reason: "I/O boundary — evaluates conditions with shell commands"
     fn eval_condition(
         condition: &str,
         local_ctx: &HashMap<String, String>,
     ) -> anyhow::Result<bool> {
-        // Simple condition evaluation: "on_branch:main" or "has_tool:git"
-        if condition.starts_with("on_branch:") {
-            let branch = condition.strip_prefix("on_branch:").unwrap_or("");
-            // Would check actual branch here
-            return Ok(branch == "main" || branch == "*"); // For now, accept main or wildcard
-        }
-
-        if condition.starts_with("has_tool:") {
-            let tool = condition.strip_prefix("has_tool:").unwrap_or("");
-            return Self::check_tool_available(tool);
-        }
-
-        if let Some(rest) = condition.strip_prefix("equals:") {
-            let parts: Vec<&str> = rest.splitn(2, ':').collect();
-            if parts.len() == 2 {
-                return Ok(local_ctx
-                    .get(parts[0])
-                    .map(|v| v == parts[1])
-                    .unwrap_or(false));
-            }
-        }
-
-        if let Some(var) = condition.strip_prefix("env_set:") {
-            return Ok(std::env::var(var).map(|v| !v.is_empty()).unwrap_or(false));
-        }
-
-        if let Some(rest) = condition.strip_prefix("config_flag:") {
-            let parts: Vec<&str> = rest.splitn(2, '=').collect();
-            if parts.len() == 2 {
+        match condition.parse::<ConditionExpression>()? {
+            ConditionExpression::OnBranch(expected) => Ok(expected == "*"
+                || crate::git_info::branch_name().as_deref() == Some(expected.as_str())),
+            ConditionExpression::HasTool(tool) => Self::check_tool_available(&tool),
+            ConditionExpression::Equals { key, value } => Ok(local_ctx.get(&key) == Some(&value)),
+            ConditionExpression::EnvSet(variable) => Ok(std::env::var(variable)
+                .map(|value| !value.is_empty())
+                .unwrap_or(false)),
+            ConditionExpression::ConfigFlag { path, expected } => {
                 let cfg = match AppConfig::load() {
                     Ok(cfg) => cfg,
                     Err(e) => {
@@ -274,17 +308,18 @@ impl HookExecutor {
                         return Ok(false);
                     }
                 };
-                if parts[0] == "onboarding.demo_seen" {
-                    return Ok(cfg.onboarding.demo_seen.to_string() == parts[1]);
+                if path == "onboarding.demo_seen" {
+                    return Ok(cfg.onboarding.demo_seen == expected);
                 }
+                Ok(false)
+            }
+            ConditionExpression::Unknown(expression) => {
+                crate::ui::warn(format!(
+                    "Warning: Unknown hook condition '{expression}'; skipping hook for safety"
+                ));
+                Ok(false)
             }
         }
-
-        // Unknown condition -> fail closed.
-        crate::ui::warn(format!(
-            "Warning: Unknown hook condition '{condition}'; skipping hook for safety"
-        ));
-        Ok(false)
     }
 
     /// Check if a tool is available in PATH
@@ -347,8 +382,29 @@ mod tests {
 
     #[test]
     fn test_condition_on_branch() {
+        let _lock = test_lock();
+        let tmp = TempDir::new().unwrap();
+        let _guard = DirGuard::change_to(tmp.path());
+        assert!(
+            std::process::Command::new("git")
+                .args(["init", "--quiet"])
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(
+            std::process::Command::new("git")
+                .args(["checkout", "--quiet", "-b", "feature/hook-conditions"])
+                .status()
+                .unwrap()
+                .success()
+        );
+
         let local_ctx: HashMap<String, String> = HashMap::new();
-        assert!(HookExecutor::eval_condition("on_branch:main", &local_ctx).unwrap());
+        assert!(
+            HookExecutor::eval_condition("on_branch:feature/hook-conditions", &local_ctx).unwrap()
+        );
+        assert!(!HookExecutor::eval_condition("on_branch:main", &local_ctx).unwrap());
         assert!(HookExecutor::eval_condition("on_branch:*", &local_ctx).unwrap());
     }
 
@@ -356,6 +412,37 @@ mod tests {
     fn test_condition_unknown_fails_closed() {
         let local_ctx: HashMap<String, String> = HashMap::new();
         assert!(!HookExecutor::eval_condition("unknown_condition:foo", &local_ctx).unwrap());
+    }
+
+    #[test]
+    fn typed_condition_expressions_parse_operands() {
+        assert_eq!(
+            "on_branch:main".parse::<ConditionExpression>().unwrap(),
+            ConditionExpression::OnBranch("main".to_string())
+        );
+        assert_eq!(
+            "equals:approved:true"
+                .parse::<ConditionExpression>()
+                .unwrap(),
+            ConditionExpression::Equals {
+                key: "approved".to_string(),
+                value: "true".to_string(),
+            }
+        );
+        assert_eq!(
+            "config_flag:onboarding.demo_seen=true"
+                .parse::<ConditionExpression>()
+                .unwrap(),
+            ConditionExpression::ConfigFlag {
+                path: "onboarding.demo_seen".to_string(),
+                expected: true,
+            }
+        );
+        assert!(
+            "config_flag:onboarding.demo_seen=maybe"
+                .parse::<ConditionExpression>()
+                .is_err()
+        );
     }
 
     #[test]

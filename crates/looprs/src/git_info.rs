@@ -25,9 +25,9 @@ pub fn collect() -> GitInfo {
     }
 }
 
-fn branch_name() -> Option<String> {
+pub(crate) fn branch_name() -> Option<String> {
     let out = Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .args(["symbolic-ref", "--quiet", "--short", "HEAD"])
         .output()
         .ok()?;
     if out.status.success() {

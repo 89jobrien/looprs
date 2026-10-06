@@ -170,8 +170,9 @@ async fn main() -> Result<()> {
 
         let repo_dir = repo_hooks_dir.filter(|d| d.exists());
 
-        if let Ok(hooks) = HookRegistry::load_dual_source(user_dir.as_ref(), repo_dir.as_ref()) {
-            agent = agent.with_hooks(hooks);
+        match HookRegistry::load_dual_source(user_dir.as_ref(), repo_dir.as_ref()) {
+            Ok(hooks) => agent = agent.with_hooks(hooks),
+            Err(e) => ui::warn(format!("failed to load hooks from dual source: {e}")),
         }
     }
 
@@ -188,21 +189,34 @@ async fn main() -> Result<()> {
     let mut command_registry = CommandRegistry::new();
 
     // Load user commands
-    if user_commands_dir.exists()
-        && let Ok(user_commands) = CommandRegistry::load_from_directory(&user_commands_dir)
-    {
-        for cmd in user_commands.list() {
-            command_registry.register(cmd.clone());
+    if user_commands_dir.exists() {
+        match CommandRegistry::load_from_directory(&user_commands_dir) {
+            Ok(user_commands) => {
+                for cmd in user_commands.list() {
+                    command_registry.register(cmd.clone());
+                }
+            }
+            Err(e) => ui::warn(format!(
+                "failed to load commands from {}: {e}",
+                user_commands_dir.display()
+            )),
         }
     }
 
     // Load repo commands (will override user commands with same name)
     if let Some(dir) = repo_commands_dir
         && dir.exists()
-        && let Ok(repo_commands) = CommandRegistry::load_from_directory(&dir)
     {
-        for cmd in repo_commands.list() {
-            command_registry.register(cmd.clone());
+        match CommandRegistry::load_from_directory(&dir) {
+            Ok(repo_commands) => {
+                for cmd in repo_commands.list() {
+                    command_registry.register(cmd.clone());
+                }
+            }
+            Err(e) => ui::warn(format!(
+                "failed to load commands from {}: {e}",
+                dir.display()
+            )),
         }
     }
 
@@ -220,17 +234,26 @@ async fn main() -> Result<()> {
 
     // Load with precedence (repo overrides user)
     if let Some(repo_dir) = repo_skills_dir {
-        if let Ok(_count) = skill_registry.load_with_precedence(&user_skills_dir, &repo_dir) {
-            // Skills loaded successfully
+        if let Err(e) = skill_registry.load_with_precedence(&user_skills_dir, &repo_dir) {
+            ui::warn(format!(
+                "failed to load skills from {} / {}: {e}",
+                user_skills_dir.display(),
+                repo_dir.display()
+            ));
         }
-    } else if user_skills_dir.exists() {
-        let _ = skill_registry.load_from_directory(&user_skills_dir);
+    } else if user_skills_dir.exists()
+        && let Err(e) = skill_registry.load_from_directory(&user_skills_dir)
+    {
+        ui::warn(format!(
+            "failed to load skills from {}: {e}",
+            user_skills_dir.display()
+        ));
     }
 
     // Load rules from both user and repo directories (repo overrides user)
     let rules = looprs::RuleRegistry::load_all();
     if rules.count() > 0 {
-        println!("📋 Loaded {} project rule(s)", rules.count());
+        println!("Loaded {} project rule(s)", rules.count());
     }
     agent = agent.with_rules(rules);
 
@@ -250,8 +273,12 @@ async fn main() -> Result<()> {
     };
     let repo_agents = repo_agents_dir.filter(|d| d.exists());
     let agent_registry =
-        AgentRegistry::load_dual_source(user_agents.as_ref(), repo_agents.as_ref())
-            .unwrap_or_else(|_| AgentRegistry::new());
+        AgentRegistry::load_dual_source(user_agents.as_ref(), repo_agents.as_ref()).unwrap_or_else(
+            |e| {
+                ui::warn(format!("failed to load agents from dual source: {e}"));
+                AgentRegistry::new()
+            },
+        );
 
     let user_plugins_dir = dirs::home_dir()
         .unwrap_or_default()
@@ -263,7 +290,10 @@ async fn main() -> Result<()> {
     let user_plugins = user_plugins_dir.exists().then_some(user_plugins_dir);
     let repo_plugins = repo_plugins_dir.filter(|d| d.exists());
     let plugin_runtime = PluginRuntimeRegistry::load_dual_source(user_plugins, repo_plugins)
-        .unwrap_or_else(|_| PluginRuntimeRegistry::default());
+        .unwrap_or_else(|e| {
+            ui::warn(format!("failed to load plugins from dual source: {e}"));
+            PluginRuntimeRegistry::default()
+        });
 
     // Handle scriptable (non-interactive) mode
     if cli_args.is_scriptable() {
@@ -372,12 +402,10 @@ async fn run_interactive(
         settings: settings_items,
     });
 
+    let repl_state = helper.state();
+    let repl_sets = helper.sets();
     let mut rl = Editor::<ReplHelper, DefaultHistory>::new()?;
     rl.set_helper(Some(helper));
-    let (repl_state, repl_sets) = {
-        let helper = rl.helper().expect("helper just set");
-        (helper.state(), helper.sets())
-    };
     bind_repl_keys(&mut rl, repl_state, repl_sets, agent.fs_mode_handle());
 
     // Collect session context (git status, pending doob todos, etc.)
@@ -475,7 +503,7 @@ async fn run_interactive(
                     }
                     CliCommand::InvokeSkill(skill_name, trailing) => {
                         if let Some(skill) = skill_registry.get(&skill_name) {
-                            ui::info(format!("📚 Loading skill: {}", skill.name));
+                            ui::info(format!("Loading skill: {}", skill.name));
                             let skill_message = if let Some(trailing_text) = trailing {
                                 let skill_message = format!(
                                     "=== Skill: {} ===\n{}\n\nUser message: {}",
@@ -582,10 +610,7 @@ async fn run_interactive(
                         let matching_skills = skill_registry.find_matching(&msg);
 
                         let final_message = if !matching_skills.is_empty() {
-                            ui::info(format!(
-                                "📚 Auto-triggered {} skill(s)",
-                                matching_skills.len()
-                            ));
+                            ui::info(format!("Auto-triggered {} skill(s)", matching_skills.len()));
                             for skill in &matching_skills {
                                 ui::info(format!("  • {}", skill.name.cyan()));
                             }
@@ -727,17 +752,24 @@ fn models_gist_url() -> String {
     })
 }
 
-/// Interactive `looprs provider` entrypoint: pick a provider, and for
-/// `local` also pick an installed Ollama model, then persist the choice
-/// to `.looprs/provider.json`.
+fn provider_menu_options() -> &'static [&'static str] {
+    looprs::model_catalog::MODEL_PROVIDERS
+}
+
+fn configure_provider(config: &mut ProviderConfig, provider: &str, model: Option<String>) {
+    config.provider = Some(provider.to_string());
+    if let Some(model) = model {
+        provider_settings_mut(config, provider).model = Some(model);
+    }
+}
+
+/// Interactive `looprs provider` entrypoint: pick a runtime provider,
+/// configure its model, then persist the choice to `.looprs/provider.json`.
 fn run_provider_menu() -> Result<()> {
-    // TODO(feature-idea-4): Offer every provider supported by the runtime and
-    // collect any provider-specific model settings before persisting a choice.
-    let providers = vec![
-        "anthropic".to_string(),
-        "openai".to_string(),
-        "local (Ollama)".to_string(),
-    ];
+    let providers = provider_menu_options()
+        .iter()
+        .map(|provider| (*provider).to_string())
+        .collect::<Vec<_>>();
 
     let Some(index) = looprs_tui::select("Select a provider", &providers)? else {
         println!("Cancelled.");
@@ -745,30 +777,24 @@ fn run_provider_menu() -> Result<()> {
     };
 
     let mut config = ProviderConfig::load().unwrap_or_default();
-
-    match index {
-        0 => config.provider = Some("anthropic".to_string()),
-        1 => config.provider = Some("openai".to_string()),
-        2 => {
-            let models = list_ollama_models();
-            if models.is_empty() {
-                ui::error(
-                    "No Ollama models found. Install Ollama and run `ollama pull <model>` first.",
-                );
-                return Ok(());
-            }
-            let Some(model_index) = looprs_tui::select("Select a local model", &models)? else {
-                println!("Cancelled.");
-                return Ok(());
-            };
-            config.provider = Some("local".to_string());
-            config.local = Some(ProviderSettings {
-                model: Some(models[model_index].clone()),
-                ..Default::default()
-            });
+    let provider = provider_menu_options()[index];
+    let model = if matches!(provider, "local" | "ollama") {
+        let models = list_ollama_models();
+        if models.is_empty() {
+            ui::error(
+                "No Ollama models found. Install Ollama and run `ollama pull <model>` first.",
+            );
+            return Ok(());
         }
-        _ => unreachable!("select() returned an out-of-range index"),
-    }
+        let Some(model_index) = looprs_tui::select("Select a local model", &models)? else {
+            println!("Cancelled.");
+            return Ok(());
+        };
+        Some(models[model_index].clone())
+    } else {
+        console_prompt("Model (leave blank to use the provider default):")
+    };
+    configure_provider(&mut config, provider, model);
 
     config.save()?;
     println!(
@@ -823,11 +849,13 @@ fn provider_settings_mut<'a>(
     provider: &str,
 ) -> &'a mut ProviderSettings {
     match provider {
-        "anthropic" => config
+        "anthropic" | "anthropic-sdk" | "claude-sdk" => config
             .anthropic
             .get_or_insert_with(ProviderSettings::default),
-        "openai" => config.openai.get_or_insert_with(ProviderSettings::default),
+        "openai" | "openai-sdk" => config.openai.get_or_insert_with(ProviderSettings::default),
+        "gemini" | "google" => config.gemini.get_or_insert_with(ProviderSettings::default),
         "local" | "ollama" => config.local.get_or_insert_with(ProviderSettings::default),
+        "baml" => config.baml.get_or_insert_with(ProviderSettings::default),
         _ => config.openai.get_or_insert_with(ProviderSettings::default),
     }
 }
@@ -837,9 +865,11 @@ fn provider_settings_ref<'a>(
     provider: &str,
 ) -> Option<&'a ProviderSettings> {
     match provider {
-        "anthropic" => config.anthropic.as_ref(),
-        "openai" => config.openai.as_ref(),
+        "anthropic" | "anthropic-sdk" | "claude-sdk" => config.anthropic.as_ref(),
+        "openai" | "openai-sdk" => config.openai.as_ref(),
+        "gemini" | "google" => config.gemini.as_ref(),
         "local" | "ollama" => config.local.as_ref(),
+        "baml" => config.baml.as_ref(),
         _ => None,
     }
 }
@@ -854,6 +884,7 @@ fn build_runtime_settings(
         defaults: app_config.defaults.clone(),
         max_tokens_override,
         fs_mode: app_config.agents.fs_mode,
+        max_parallel: app_config.agents.max_parallel.max(1),
     }
 }
 
@@ -1445,11 +1476,37 @@ async fn execute_command(
 
 #[cfg(test)]
 mod provider_menu_tests {
+    use super::configure_provider;
     use super::parse_explicit_agent_tag;
     use super::parse_ollama_list_output;
+    use super::provider_menu_options;
+    use looprs::ProviderConfig;
 
     // Captured from a real `ollama list` invocation.
     const REAL_OLLAMA_LIST_OUTPUT: &str = "NAME                                             ID              SIZE      MODIFIED\nfunctiongemma:latest                             7c19b650567a    300 MB    2 months ago\ngemma-lg:latest                                  e6349aa91a78    24 GB     2 months ago\nhf.co/unsloth/gemma-4-26B-A4B-it-GGUF:UD-Q6_K    e6349aa91a78    24 GB     2 months ago\nnomic-embed-text:latest                          0a109f422b47    274 MB    2 months ago\nllama3.2:latest                                  a80c4f17acd5    2.0 GB    4 months ago\n";
+
+    #[test]
+    fn setup_offers_every_runtime_provider() {
+        assert_eq!(
+            provider_menu_options(),
+            looprs::model_catalog::MODEL_PROVIDERS
+        );
+    }
+
+    #[test]
+    fn setup_stores_model_for_every_runtime_provider() {
+        for provider in looprs::model_catalog::MODEL_PROVIDERS {
+            let mut config = ProviderConfig::default();
+            configure_provider(&mut config, provider, Some("test-model".to_string()));
+
+            assert_eq!(config.provider.as_deref(), Some(*provider));
+            assert_eq!(
+                config.merged_settings(provider).model.as_deref(),
+                Some("test-model"),
+                "model setting was not stored for {provider}"
+            );
+        }
+    }
 
     #[test]
     fn parses_model_names_from_real_output() {

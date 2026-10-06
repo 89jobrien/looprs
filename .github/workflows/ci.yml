@@ -93,6 +93,31 @@ jobs:
           fallback: none
       - run: cargo +stable check --locked --workspace --all-targets --all-features
 
+  shared-gates:
+    name: doctest-rustdoc-cli
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: shared-gates
+      - uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
+        with:
+          tool: protoc@3.35.1,cargo-nextest@0.9.137,cargo-llvm-cov@0.8.7
+          fallback: none
+      - uses: hustcer/setup-nu@9215c80adb545a85c419d5085b76eb6d082f49e7 # v3.27
+        with:
+          version: 0.108.0
+      - name: Install taskit
+        run: cargo +stable install --locked taskit --version 0.9.0
+      - name: Run shared pre-push gates
+        run: cargo +stable xtask check pre-push
+
   dependency-policy:
     name: dependency-policy
     runs-on: ubuntu-24.04
@@ -134,6 +159,31 @@ jobs:
           version: 0.108.0
       - name: Generate workspace coverage
         run: cargo +stable llvm-cov nextest --locked --workspace --all-features --lcov --output-path lcov.info
+      - name: Record comparable workspace coverage
+        run: |
+          lines_found=$(awk -F: '/^LF:/{sum += $2} END {print sum + 0}' lcov.info)
+          lines_hit=$(awk -F: '/^LH:/{sum += $2} END {print sum + 0}' lcov.info)
+          if [[ "$lines_found" -eq 0 ]]; then
+            echo "lcov.info contains no instrumented lines" >&2
+            exit 1
+          fi
+          percentage=$(awk -v hit="$lines_hit" -v found="$lines_found" 'BEGIN {printf "%.4f", hit * 100 / found}')
+          jq -n \
+            --arg commit "$GITHUB_SHA" \
+            --arg ref "$GITHUB_REF" \
+            --argjson lines_found "$lines_found" \
+            --argjson lines_hit "$lines_hit" \
+            --argjson percentage "$percentage" \
+            '{schema_version: 1, commit: $commit, ref: $ref, lines_found: $lines_found, lines_hit: $lines_hit, percentage: $percentage}' \
+            > workspace-coverage.json
+          jq -e '.schema_version == 1 and .lines_found > 0 and .lines_hit >= 0 and .lines_hit <= .lines_found and .percentage >= 0 and .percentage <= 100' workspace-coverage.json
+          echo "### Workspace coverage: ${percentage}% (${lines_hit}/${lines_found} lines)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: workspace-coverage-${{ github.sha }}
+          path: workspace-coverage.json
+          if-no-files-found: error
+          retention-days: 90
       - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: lcov.info
@@ -142,7 +192,7 @@ jobs:
   required:
     name: required
     if: always()
-    needs: [fmt, clippy, msrv, stable, dependency-policy, coverage]
+    needs: [fmt, clippy, msrv, stable, shared-gates, dependency-policy, coverage]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -152,10 +202,11 @@ jobs:
           CLIPPY_RESULT: ${{ needs.clippy.result }}
           MSRV_RESULT: ${{ needs.msrv.result }}
           STABLE_RESULT: ${{ needs.stable.result }}
+          SHARED_GATES_RESULT: ${{ needs.shared-gates.result }}
           DEPENDENCY_RESULT: ${{ needs.dependency-policy.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
         run: |
-          for result in "$FMT_RESULT" "$CLIPPY_RESULT" "$MSRV_RESULT" "$STABLE_RESULT" "$DEPENDENCY_RESULT" "$COVERAGE_RESULT"; do
+          for result in "$FMT_RESULT" "$CLIPPY_RESULT" "$MSRV_RESULT" "$STABLE_RESULT" "$SHARED_GATES_RESULT" "$DEPENDENCY_RESULT" "$COVERAGE_RESULT"; do
             if [[ "$result" != "success" ]]; then
               echo "A required CI job finished with status: $result" >&2
               exit 1
