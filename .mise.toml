@@ -93,5 +93,17 @@ run = "cargo run --bin looprs -- provider"
 description = "Launch the alternate chat TUI"
 run = "cargo run --bin looprs -- tui"
 
+[tasks.changelog]
+description = "Preview unreleased changelog (git-cliff)"
+run = "just changelog"
+
+[tasks."changelog:since-tag"]
+description = "Preview changelog since latest git tag"
+run = "just changelog-since-tag"
+
+[tasks."changelog:write"]
+description = "Regenerate CHANGELOG.md from git history"
+run = "just changelog-write"
+
 [env]
 RUST_BACKTRACE = "1"

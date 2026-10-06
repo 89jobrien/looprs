@@ -62,6 +62,7 @@
     "agents": ".looprs/agents",
     "commands": ".looprs/commands",
     "hooks": ".looprs/hooks",
+    "plugins": ".looprs/plugins",
     "rules": ".looprs/rules",
     "skills": ".looprs/skills"
   }

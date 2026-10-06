@@ -1,41 +1,9 @@
 use super::{NamedTool, Plugins};
 
-/// Thin adapters for named external binaries.
-///
-/// These are intentionally "dumb": they only provide tool identity + execution.
-/// Higher-level modules (doob/tools) own argument construction and parsing.
-macro_rules! define_tool {
-    ($name:ident, $bin:literal) => {
-        pub struct $name<'a> {
-            plugins: &'a Plugins,
-        }
-
-        impl<'a> $name<'a> {
-            pub fn new(plugins: &'a Plugins) -> Self {
-                Self { plugins }
-            }
-
-            pub fn system() -> $name<'static> {
-                $name {
-                    plugins: super::system(),
-                }
-            }
-        }
-
-        impl NamedTool for $name<'_> {
-            const NAME: &'static str = $bin;
-
-            fn plugins(&self) -> &Plugins {
-                self.plugins
-            }
-        }
-    };
-}
-
-define_tool!(Doob, "doob");
-define_tool!(Rg, "rg");
-define_tool!(Fd, "fd");
-define_tool!(Git, "git");
+looprs_macros::define_tool!(Doob, "doob");
+looprs_macros::define_tool!(Rg, "rg");
+looprs_macros::define_tool!(Fd, "fd");
+looprs_macros::define_tool!(Git, "git");
 
 #[cfg(all(test, unix))]
 mod tests {

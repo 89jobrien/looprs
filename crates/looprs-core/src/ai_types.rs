@@ -11,10 +11,15 @@ use serde::{Deserialize, Serialize};
 /// How urgent a detected [`DataAnomaly`] is, from `Critical` down to `Info`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AnomalySeverity {
+    /// Immediate attention required.
     Critical,
+    /// Serious issue that should be addressed soon.
     High,
+    /// Moderate impact issue.
     Medium,
+    /// Minor issue with limited impact.
     Low,
+    /// Informational signal only.
     Info,
 }
 
@@ -24,10 +29,15 @@ pub enum AnomalySeverity {
 /// see [`AnomalySeverity`] for urgency.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AnomalyType {
+    /// Outlier detected from numeric distribution behavior.
     Statistical,
+    /// Meaning/content inconsistency.
     Semantic,
+    /// Time-series pattern deviation.
     Temporal,
+    /// Unexpected shape or schema arrangement.
     Structural,
+    /// Context-dependent mismatch.
     Contextual,
 }
 
@@ -37,9 +47,13 @@ pub enum AnomalyType {
 /// `Degraded` (determined, and bad).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum HealthStatus {
+    /// Operating normally.
     Healthy,
+    /// Operating but below expected quality.
     Degraded,
+    /// Functionally impaired or near outage.
     Critical,
+    /// Insufficient data to classify health.
     Unknown,
 }
 
@@ -49,14 +63,23 @@ pub enum HealthStatus {
 /// [`UserIntent::sub_intent`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum IntentCategory {
+    /// User is asking for information.
     Query,
+    /// User is asking to execute an action.
     Command,
+    /// User wants interpretation or diagnosis.
     Analysis,
+    /// User is asking to create something new.
     Creation,
+    /// User is asking to change existing content.
     Modification,
+    /// User is asking to remove something.
     Deletion,
+    /// User is asking to move/search within a space.
     Navigation,
+    /// User is asking for guidance.
     Help,
+    /// Could not confidently classify intent.
     Unknown,
 }
 
@@ -66,19 +89,28 @@ pub enum IntentCategory {
 /// an absence of signal (which is `Neutral`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Mood {
+    /// Overall positive tone.
     Positive,
+    /// Overall negative tone.
     Negative,
+    /// Flat or emotionally neutral tone.
     Neutral,
+    /// Mixed positive and negative cues.
     Mixed,
 }
 
 /// Graded sentiment polarity on a five-point scale.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Sentiment {
+    /// Strongly positive polarity.
     VeryPositive,
+    /// Positive polarity.
     Positive,
+    /// Neutral polarity.
     Neutral,
+    /// Negative polarity.
     Negative,
+    /// Strongly negative polarity.
     VeryNegative,
 }
 
@@ -87,10 +119,15 @@ pub enum Sentiment {
 /// Mirrors [`AnomalySeverity`] but applies to generic diagnostics.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Severity {
+    /// Immediate attention required.
     Critical,
+    /// Serious issue that should be addressed soon.
     High,
+    /// Moderate impact issue.
     Medium,
+    /// Minor issue with limited impact.
     Low,
+    /// Informational finding only.
     Info,
 }
 
@@ -99,11 +136,17 @@ pub enum Severity {
 /// `Complete` and `Failed` are terminal; the rest are transitional.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum WorkflowStage {
+    /// No active workflow execution.
     Idle,
+    /// Determining next actions.
     Planning,
+    /// Carrying out planned work.
     Executing,
+    /// Evaluating output and quality.
     Reviewing,
+    /// Workflow finished successfully.
     Complete,
+    /// Workflow ended due to failure.
     Failed,
 }
 

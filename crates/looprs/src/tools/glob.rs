@@ -72,13 +72,11 @@ pub(super) fn tool_glob(args: &Value, ctx: &ToolContext) -> Result<String, ToolE
 
         if truncated_by_chars {
             output.push_str(&format!(
-                "[truncated glob results: {} entries omitted due to size cap]",
-                omitted_entries
+                "[truncated glob results: {omitted_entries} entries omitted due to size cap]"
             ));
         } else {
             output.push_str(&format!(
-                "[truncated glob results: {} entries omitted due to hit cap]",
-                omitted_entries
+                "[truncated glob results: {omitted_entries} entries omitted due to hit cap]"
             ));
         }
     }

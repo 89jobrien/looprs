@@ -1,0 +1,12 @@
+name: opencode-orchestration
+kind: orchestration
+description: Route direct implementation requests to opencode.
+enabled: true
+required: false
+mode: daemon
+triggers:
+  - "implement"
+  - "write code"
+  - "fix bug"
+  - "refactor"
+route_to_agent: opencode

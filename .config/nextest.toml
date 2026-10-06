@@ -1,11 +1,11 @@
 [profile.default]
-retries = 2
+retries = 0
 fail-fast = false
 test-threads = "num-cpus"
 
 [profile.ci]
-retries = 3
-fail-fast = true
+retries = 0
+fail-fast = false
 test-threads = 4
 
 [[profile.default.overrides]]

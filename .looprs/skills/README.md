@@ -47,5 +47,5 @@ triggers/content.
 
 ## Notes
 
-- Examples live under `examples/` only; there are no active repo-specific skills beyond these samples.
+- Examples live under `examples/`; this repo also includes active YAML skills such as `looprs-architecture.yaml` and `looprs-testing.yaml`.
 - Repo skills (if added later) take precedence over user skills with the same name.

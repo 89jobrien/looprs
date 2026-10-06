@@ -22,7 +22,7 @@ impl FsSessionStore {
     pub fn new(sessions_dir: PathBuf) -> Result<Self, anyhow::Error> {
         let session_id = format!("sess-{}", Uuid::new_v4());
         let date = Utc::now().format("%Y-%m-%d");
-        let filename = format!("{}-{}.jsonl", date, session_id);
+        let filename = format!("{date}-{session_id}.jsonl");
         fs::create_dir_all(&sessions_dir).with_context(|| {
             format!("failed to create sessions dir: {}", sessions_dir.display())
         })?;

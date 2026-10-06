@@ -8,6 +8,8 @@ use super::SkillRegistry;
 use super::discovery::find_skills_in_dir;
 
 impl SkillRegistry {
+    // TODO(feature-idea-1): Reconcile repo-root YAML skills with the canonical
+    // `name/SKILL.md` discovery format, then cover both sources end to end.
     /// Load skills from a directory (recursively finds SKILL.md files)
     // qual:allow(iosp) reason: "I/O boundary — loads skill files from directory"
     pub fn load_from_directory(&mut self, dir: &Path) -> Result<usize> {

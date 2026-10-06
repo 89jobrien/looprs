@@ -75,11 +75,12 @@ make setup       # Install dev dependencies
 - Performance optimization: auto-detects `rg`/`fd` for 10-100x speedup
 
 **Event System (`src/events.rs`)**
-- Event-driven architecture with 8 lifecycle events:
+- Event-driven architecture with 10 lifecycle events:
   - `SessionStart`, `SessionEnd`
   - `UserPromptSubmit`, `InferenceComplete`
   - `PreToolUse`, `PostToolUse`
   - `OnError`, `OnWarning`
+  - `DelegationStart`, `DelegationComplete`
 - Hooks can subscribe to events for context injection, approval gates, automation
 
 **Hooks (`src/hooks/`)**
@@ -89,13 +90,13 @@ make setup       # Install dev dependencies
 
 **Session Context (`src/context.rs`)**
 - Automatically collected on startup from:
-  - `jj` (Jujutsu) - repo status and recent commits
-  - `bd` (beads.db) - open issues
+  - `git` - branch and working tree status
+  - `doob` - pending todos scoped to this project
 - Injected into prompts for contextual awareness
 
 **Observations (`src/observation.rs`, `src/observation_manager.rs`)**
 - Incremental learning: captures tool executions across sessions
-- Stored in bd for continuity between sessions
+- Persisted via the configured session persistence backend
 
 ### Extensibility Framework
 
@@ -133,13 +134,13 @@ Design principle: **extend without modifying core** - all customization via `.lo
 
 ### Error Handling
 - Use `anyhow::Result` for functions that can fail
-- Graceful degradation for optional features (jj, bd, external tools)
+- Graceful degradation for optional features (doob, external tools)
 - Tool execution failures should not crash the session
 
 ### Tool Execution
 - Tools return `serde_json::Value` to LLM
 - Output captured for observation system
-- External tool detection via `which` command (`rg`, `fd`, `jj`, `bd`)
+- External tool detection via `which` command (`rg`, `fd`)
 
 ### Async Context
 - All LLM API calls are async (tokio runtime)
@@ -197,8 +198,8 @@ cargo install fd-find   # Fast glob
 ```
 
 Optional integrations:
-- `jj` (Jujutsu VCS) - repo status in SessionContext
-- `bd` (beads.db) - issue tracking in SessionContext
+- `git` - repo status in SessionContext
+- `doob` - todo tracking in SessionContext
 
 ## Pre-commit Hooks
 
