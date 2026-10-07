@@ -492,6 +492,41 @@ pub async fn mcp_tool_definitions(server_url: &str) -> anyhow::Result<Vec<ToolDe
     parse_mcp_tools_response(&resp)
 }
 
+/// Merge remote tool definitions into the local (built-in) set, origin-aware and
+/// collision-safe.
+///
+/// Built-in tools are trusted and take priority: if a remote definition's name
+/// collides with a local tool, the remote definition is rejected and logged rather
+/// than silently overwriting or duplicating the local entry in the list sent to the
+/// model. Remote definitions are deduplicated by name as well, keeping the first
+/// occurrence.
+///
+/// Unused until MCP tool discovery is wired into `Agent`'s request construction
+/// (tracked under feature-idea-10); exercised directly by unit tests until then.
+#[allow(dead_code)]
+pub fn merge_tool_definitions(
+    local: Vec<ToolDefinition>,
+    remote: Vec<ToolDefinition>,
+) -> Vec<ToolDefinition> {
+    let mut seen: std::collections::HashSet<String> =
+        local.iter().map(|t| t.name.clone()).collect();
+    let mut merged = local;
+
+    for tool in remote {
+        if seen.contains(&tool.name) {
+            log::warn!(
+                "rejecting remote tool definition '{}': collides with an existing tool",
+                tool.name
+            );
+            continue;
+        }
+        seen.insert(tool.name.clone());
+        merged.push(tool);
+    }
+
+    merged
+}
+
 /// Execute a named tool on an MCP server at `server_url` via HTTP transport.
 ///
 /// Sends a JSON-RPC `tools/call` request with `name` and `arguments`, and
@@ -914,5 +949,42 @@ mod tests {
         assert_eq!(out, "ok");
         let content = std::fs::read_to_string(dir.path().join("a.txt")).unwrap();
         assert_eq!(content, "hello there");
+    }
+
+    // ── merge_tool_definitions tests ────────────────────────────────────
+
+    fn def(name: &str) -> ToolDefinition {
+        ToolDefinition {
+            name: name.to_string(),
+            description: String::new(),
+            input_schema: serde_json::json!({}),
+        }
+    }
+
+    #[test]
+    fn merge_tool_definitions_appends_non_colliding_remote_tools() {
+        let local = vec![def("read")];
+        let remote = vec![def("weather")];
+        let merged = merge_tool_definitions(local, remote);
+        let names: Vec<_> = merged.iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(names, vec!["read", "weather"]);
+    }
+
+    #[test]
+    fn merge_tool_definitions_rejects_remote_collision_with_local() {
+        let local = vec![def("read")];
+        let remote = vec![def("read"), def("weather")];
+        let merged = merge_tool_definitions(local, remote);
+        let names: Vec<_> = merged.iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(names, vec!["read", "weather"]);
+    }
+
+    #[test]
+    fn merge_tool_definitions_dedupes_remote_collisions_with_each_other() {
+        let local = vec![];
+        let remote = vec![def("weather"), def("weather")];
+        let merged = merge_tool_definitions(local, remote);
+        let names: Vec<_> = merged.iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(names, vec!["weather"]);
     }
 }
