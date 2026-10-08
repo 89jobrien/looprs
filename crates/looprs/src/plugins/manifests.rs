@@ -8,6 +8,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Execution entry for a manifest. The single `command` field's meaning
+/// depends on the owning manifest's `kind`:
+///
+/// - `PluginKind::Tool`: a subprocess executable name (argv[0]), passed to
+///   `PluginExecutor::execute_tool` and launched per call
+///   (`ManifestToolExecutor`).
+/// - `PluginKind::Runtime`: the URL of an already-running MCP server,
+///   consistent with `PluginExecutionMode::Daemon` semantics — the process
+///   is expected to be externally supervised, not launched per call. Posted
+///   to directly via `McpToolExecutor`/`ManifestRuntimeBridge`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PluginEntry {
     pub command: String,
@@ -230,6 +240,17 @@ impl PluginRuntimeRegistry {
 
     pub fn list_orchestration_plugins(&self) -> Vec<&PluginManifest> {
         self.registry.list_by_kind(PluginKind::Orchestration)
+    }
+
+    pub fn list_tool_plugins(&self) -> Vec<&PluginManifest> {
+        self.registry.list_by_kind(PluginKind::Tool)
+    }
+
+    /// `runtime_plugins` is consumed by `ManifestRuntimeBridge::new`
+    /// (`crates/looprs/src/adapters/runtime_plugin_executor.rs`), mirroring
+    /// `list_tool_plugins()`'s relationship to `ManifestToolExecutor::new`.
+    pub fn list_runtime_plugins(&self) -> Vec<&PluginManifest> {
+        self.registry.list_by_kind(PluginKind::Runtime)
     }
 
     pub fn orchestration_plugin(&self, name: &str) -> Option<&PluginManifest> {
@@ -499,6 +520,51 @@ route_to_agent: planner"#,
 
         assert_eq!(status.state, PluginHealthState::Healthy);
         assert_eq!(status.restart_count, 0);
+    }
+
+    #[test]
+    fn tool_and_runtime_manifests_are_listable_by_kind() {
+        // Regression: PluginRuntimeRegistry only exposed list_orchestration_plugins(),
+        // so Tool/Runtime manifests were parsed and supervised but had no public
+        // accessor at all — "nothing to call" (issue #58 finding 2).
+        let repo_dir = TempDir::new().unwrap();
+        write_plugin(
+            repo_dir.path(),
+            "tool.yaml",
+            r#"name: formatter
+kind: tool
+entry:
+  command: echo"#,
+        );
+        write_plugin(
+            repo_dir.path(),
+            "runtime.yaml",
+            r#"name: sidecar
+kind: runtime
+entry:
+  command: true"#,
+        );
+
+        let runtime =
+            PluginRuntimeRegistry::load_dual_source(None, Some(repo_dir.path().to_path_buf()))
+                .unwrap();
+
+        let tool_names: Vec<&str> = runtime
+            .list_tool_plugins()
+            .into_iter()
+            .map(|m| m.name.as_str())
+            .collect();
+        assert_eq!(tool_names, vec!["formatter"]);
+
+        let runtime_names: Vec<&str> = runtime
+            .list_runtime_plugins()
+            .into_iter()
+            .map(|m| m.name.as_str())
+            .collect();
+        assert_eq!(runtime_names, vec!["sidecar"]);
+
+        // Orchestration-only listing must stay unaffected by the new accessors.
+        assert!(runtime.list_orchestration_plugins().is_empty());
     }
 
     #[test]

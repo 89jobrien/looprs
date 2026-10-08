@@ -1,5 +1,6 @@
 use crate::api::ContentBlock;
 use crate::api::Message;
+use crate::api::ToolDefinition;
 use crate::app_config::DefaultsConfig;
 use crate::errors::AgentError;
 use crate::events::{Event, EventContext, EventManager};
@@ -14,7 +15,9 @@ use crate::providers::{InferenceRequest, InferenceResponse};
 use crate::rules::RuleRegistry;
 use crate::session_log::SessionEvent;
 use crate::system_monitor::SystemMonitor;
-use crate::tools::{DefaultToolExecutor, ToolContext, ToolExecutor, get_tool_definitions};
+use crate::tools::{
+    DefaultToolExecutor, ToolContext, ToolExecutor, get_tool_definitions, merge_tool_definitions,
+};
 use std::collections::HashMap;
 use tokio::time::{Duration, timeout};
 
@@ -75,6 +78,7 @@ pub struct Agent {
     session_logger: Option<Box<dyn SessionStore>>,
     output: Box<dyn UserOutput>,
     tool_executor: Box<dyn ToolExecutor>,
+    extra_tool_definitions: Vec<ToolDefinition>,
     models_config: Option<ModelsConfig>,
     system_monitor: SystemMonitor,
     session_input_tokens: u32,
@@ -116,6 +120,7 @@ impl Agent {
             session_logger,
             output,
             tool_executor: Box::new(DefaultToolExecutor),
+            extra_tool_definitions: Vec::new(),
             models_config: ModelsConfig::load().ok(),
             system_monitor: SystemMonitor::new(),
             session_input_tokens: 0,
@@ -134,6 +139,15 @@ impl Agent {
     /// filesystem or subprocess side effects.
     pub fn with_tool_executor(mut self, executor: Box<dyn ToolExecutor>) -> Self {
         self.tool_executor = executor;
+        self
+    }
+
+    /// Advertise additional tools to the model alongside the built-in set
+    /// from [`get_tool_definitions`]. Collisions with a built-in tool name
+    /// are rejected (see [`merge_tool_definitions`]); route execution for
+    /// these names via [`Agent::with_tool_executor`].
+    pub fn with_extra_tool_definitions(mut self, defs: Vec<ToolDefinition>) -> Self {
+        self.extra_tool_definitions = defs;
         self
     }
 
@@ -430,7 +444,10 @@ impl Agent {
         let req = InferenceRequest {
             model: self.provider.model().clone(),
             messages,
-            tools: get_tool_definitions(),
+            tools: merge_tool_definitions(
+                get_tool_definitions(),
+                self.extra_tool_definitions.clone(),
+            ),
             max_tokens,
             temperature: self.runtime.defaults.temperature,
             system: system_prompt,
@@ -547,7 +564,10 @@ impl Agent {
             let req = InferenceRequest {
                 model: self.provider.model().clone(),
                 messages,
-                tools: get_tool_definitions(),
+                tools: merge_tool_definitions(
+                    get_tool_definitions(),
+                    self.extra_tool_definitions.clone(),
+                ),
                 max_tokens,
                 temperature: self.runtime.defaults.temperature,
                 system: system_prompt.clone(),

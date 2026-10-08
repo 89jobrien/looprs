@@ -16,9 +16,9 @@ use looprs::{
 };
 
 use crate::args::CliArgs;
-use crate::cli::{CliCommand, parse_input};
 use crate::commands::{SessionState, execute_command};
 use crate::delegation::prepare_user_prompt;
+use crate::input::{CliCommand, parse_input};
 use crate::repl::{MatchSets, ReplHelper, bind_repl_keys};
 use crate::settings::{handle_colon_command, setting_keys};
 

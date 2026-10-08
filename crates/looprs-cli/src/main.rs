@@ -4,18 +4,20 @@ use std::env;
 use looprs::ModelId;
 use looprs::ui;
 
-mod args;
 mod cli;
-mod commands;
-mod delegation;
-mod extensions;
-mod interactive;
-mod nu_env;
-mod provider_menu;
-mod repl;
 mod runtime;
-mod scriptable;
-mod settings;
+
+pub use cli::args;
+pub use cli::commands;
+pub use cli::delegation;
+pub use cli::extensions;
+pub use cli::input;
+pub use cli::interactive;
+pub use cli::nu_env;
+pub use cli::provider_menu;
+pub use cli::repl;
+pub use cli::scriptable;
+pub use cli::settings;
 
 use args::CliArgs;
 use extensions::load_extensions;
