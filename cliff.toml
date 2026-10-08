@@ -35,6 +35,8 @@ commit_preprocessors = [
 ]
 
 commit_parsers = [
+  { message = "^Merge pull request", skip = true },
+  { message = "^chore\\(release\\)", skip = true },
   { message = "^feat", group = "Features" },
   { message = "^fix", group = "Fixes" },
   { message = "^refactor", group = "Refactoring" },
@@ -43,6 +45,7 @@ commit_parsers = [
   { message = "^test", group = "Tests" },
   { message = "^build", group = "Build" },
   { message = "^ci", group = "CI" },
+  { message = "^flow", group = "CI" },
   { message = "^chore", group = "Chores" },
   { message = "^revert", group = "Reverts" },
   { message = ".*", group = "Other" },
