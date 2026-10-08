@@ -27,14 +27,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # nightly
         with:
+          toolchain: nightly
           components: rustfmt
-      - name: fmt (excludes generated baml_client)
+      - name: fmt (rustfmt.toml `ignore` excludes generated baml_client)
         run: |
+          # The file-list exclusion alone (`git ls-files ... ':!:baml_client/**'`)
+          # does not stop rustfmt from parsing into baml_client via lib.rs's
+          # `pub mod baml_client;` declaration and reformat-checking it anyway.
+          # `ignore` in rustfmt.toml is honored even when that module-tree
+          # traversal happens, but it's an unstable option — nightly rustfmt
+          # is required for it to take effect.
           git ls-files -- 'crates/**/*.rs' 'xtask/**/*.rs' \
               ':!:crates/looprs/src/baml_client/**' \
-            | xargs rustfmt +stable --check --edition 2024
+            | xargs rustfmt +nightly --check --edition 2024
 
   clippy:
     name: clippy
