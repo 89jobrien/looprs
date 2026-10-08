@@ -74,7 +74,9 @@ pub mod skills;
 pub mod state;
 /// System resource monitoring helpers.
 pub mod system_monitor;
-mod tools;
+/// Agent tool-call dispatch: built-in tools, `ToolExecutor` port, and
+/// manifest-backed tool definitions.
+pub mod tools;
 /// Trace data types for runtime telemetry.
 pub mod trace;
 /// Shared runtime identifiers and public types.

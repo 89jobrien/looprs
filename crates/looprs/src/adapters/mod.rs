@@ -16,7 +16,7 @@ pub use looprs_core::adapters::FsSessionStore;
 pub use looprs_core::adapters::NullOutput;
 pub use looprs_core::adapters::TerminalOutput;
 pub use mcp_executor::McpToolExecutor;
-pub use plugin_executor::PluginsAdapter;
+pub use plugin_executor::{ManifestToolExecutor, PluginsAdapter};
 pub use retry_provider::RetryProvider;
 pub use sqlite_session_store::SqliteSessionStore;
 pub use ui_output::UiOutput;

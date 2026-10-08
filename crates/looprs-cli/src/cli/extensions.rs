@@ -1,7 +1,9 @@
 use std::env;
 
+use looprs::adapters::{ManifestToolExecutor, PluginsAdapter};
 use looprs::app_config::AppConfig;
 use looprs::plugins::manifests::PluginRuntimeRegistry;
+use looprs::tools::DefaultToolExecutor;
 use looprs::{Agent, AgentRegistry, CommandRegistry, HookRegistry, SkillRegistry};
 
 use crate::args::CliArgs;
@@ -139,6 +141,26 @@ pub(crate) fn load_extensions(
     let repo_plugins = repo_plugins_dir.filter(|d| d.exists());
     let plugin_runtime = PluginRuntimeRegistry::load_dual_source(user_plugins, repo_plugins)
         .unwrap_or_else(|_| PluginRuntimeRegistry::default());
+
+    // Bridge PluginKind::Tool manifests into the agent's tool-call loop: each
+    // enabled Tool-kind manifest becomes a callable tool, executed via
+    // PluginExecutor (subprocess exec of `entry.command`) instead of being
+    // limited to orchestration-only discovery.
+    let tool_plugins: Vec<_> = plugin_runtime
+        .list_tool_plugins()
+        .into_iter()
+        .cloned()
+        .collect();
+    if !tool_plugins.is_empty() {
+        let manifest_executor = ManifestToolExecutor::new(
+            Box::new(DefaultToolExecutor),
+            Box::new(PluginsAdapter::system()),
+            tool_plugins,
+        );
+        agent = agent
+            .with_extra_tool_definitions(manifest_executor.tool_definitions())
+            .with_tool_executor(Box::new(manifest_executor));
+    }
 
     ExtensionBundle {
         agent,

@@ -501,9 +501,8 @@ pub async fn mcp_tool_definitions(server_url: &str) -> anyhow::Result<Vec<ToolDe
 /// model. Remote definitions are deduplicated by name as well, keeping the first
 /// occurrence.
 ///
-/// Unused until MCP tool discovery is wired into `Agent`'s request construction
-/// (tracked under feature-idea-10); exercised directly by unit tests until then.
-#[allow(dead_code)]
+/// Used by `Agent`'s request construction to merge `extra_tool_definitions`
+/// (e.g. manifest-declared Tool plugins) alongside the built-in set.
 pub fn merge_tool_definitions(
     local: Vec<ToolDefinition>,
     remote: Vec<ToolDefinition>,
