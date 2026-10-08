@@ -53,7 +53,7 @@ impl McpToolExecutor {
                 handle.block_on(crate::tools::mcp_tool_call(&url, &name, args))
             }),
             Err(_) => {
-                let rt = tokio::runtime::Runtime::new().unwrap();
+                let rt = tokio::runtime::Runtime::new()?;
                 rt.block_on(crate::tools::mcp_tool_call(&url, &name, args))
             }
         }
