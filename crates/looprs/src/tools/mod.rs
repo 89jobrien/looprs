@@ -469,7 +469,9 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
 /// `ToolDefinition`. The caller is responsible for merging the result into
 /// `get_tool_definitions()` so the LLM sees external tools alongside builtins.
 pub async fn mcp_tool_definitions(server_url: &str) -> anyhow::Result<Vec<ToolDefinition>> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
 
     let body = serde_json::json!({
         "jsonrpc": "2.0",
@@ -539,7 +541,9 @@ pub async fn mcp_tool_call(
     tool_name: &str,
     arguments: serde_json::Value,
 ) -> anyhow::Result<String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
 
     let body = serde_json::json!({
         "jsonrpc": "2.0",
