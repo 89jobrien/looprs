@@ -23,23 +23,32 @@ use crate::tools::{ToolContext, ToolError, ToolExecutor, merge_tool_definitions}
 
 use super::mcp_executor::McpToolExecutor;
 
-// Small helper to avoid requiring a full tokio runtime when we're already
-// inside one. Mirrors the identically-named helper in `mcp_executor.rs`;
-// kept private/local rather than shared since both are tiny and
-// implementation-detail only.
-enum Either {
-    Handle(tokio::runtime::Handle),
-    Runtime(tokio::runtime::Runtime),
-}
-
+// Discover an MCP server's tools, whether or not we're already inside a
+// tokio runtime.
+//
+// Bootstrap (`load_extensions`, called from `#[tokio::main] async fn
+// main()`) and `Agent::run_turn`'s synchronous `.execute()` dispatch both
+// run this on a thread that is *already* driving the tokio runtime. Calling
+// `Handle::block_on` directly from such a thread panics ("Cannot start a
+// runtime from within a runtime") — it's not safe to reuse the handle the
+// way a naive `Handle::try_current().unwrap_or_else(Runtime::new)` fallback
+// would. `tokio::task::block_in_place` moves the blocking work off the
+// async worker thread so blocking is actually safe; it requires a
+// multi-thread runtime, which this workspace always uses (`rt-multi-thread`
+// is enabled workspace-wide and `#[tokio::main]` defaults to that flavor).
+//
+// When there is no current runtime (e.g. a plain `#[test]`), spin up a
+// throwaway one and block on that instead — `block_in_place` would panic
+// outside of a runtime context.
 fn block_on_discovery(server_url: &str) -> anyhow::Result<Vec<ToolDefinition>> {
-    let rt = tokio::runtime::Handle::try_current()
-        .map(Either::Handle)
-        .unwrap_or_else(|_| Either::Runtime(tokio::runtime::Runtime::new().unwrap()));
-
-    match rt {
-        Either::Handle(h) => h.block_on(crate::tools::mcp_tool_definitions(server_url)),
-        Either::Runtime(rt) => rt.block_on(crate::tools::mcp_tool_definitions(server_url)),
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => tokio::task::block_in_place(|| {
+            handle.block_on(crate::tools::mcp_tool_definitions(server_url))
+        }),
+        Err(_) => {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(crate::tools::mcp_tool_definitions(server_url))
+        }
     }
 }
 
@@ -81,13 +90,13 @@ impl ManifestRuntimeBridge {
             .into_iter()
             .filter(|m| m.enabled && m.entry.is_some())
         {
-            // Invariant: filtered to `Some(entry)` above.
-            let server_url = manifest
-                .entry
-                .as_ref()
-                .expect("ManifestRuntimeBridge only processes manifests with Some(entry)")
-                .command
-                .clone();
+            // Filtered to `Some(entry)` above; skip defensively rather than
+            // `.expect()` on an invariant that lives one line away from
+            // where it's upheld.
+            let Some(entry) = manifest.entry.as_ref() else {
+                continue;
+            };
+            let server_url = entry.command.clone();
 
             match block_on_discovery(&server_url) {
                 Ok(remote_defs) => {
@@ -137,6 +146,14 @@ impl ToolExecutor for ManifestRuntimeBridge {
         let Some(server_url) = self.routes.get(name) else {
             return self.inner.execute(name, args, ctx);
         };
+
+        if ctx.fs_mode() != crate::fs_mode::FsMode::Write {
+            return Err(ToolError::ModeDenied {
+                tool: name.to_string(),
+                mode: ctx.fs_mode().as_str().to_string(),
+                reason: "Runtime-kind manifest tools may have write side effects".to_string(),
+            });
+        }
 
         McpToolExecutor::new(server_url.clone()).execute(name, args, ctx)
     }
@@ -315,5 +332,45 @@ mod tests {
         );
 
         assert!(bridge.tool_definitions().is_empty());
+    }
+
+    // Regression: issue #64 follow-up — `block_on_discovery` (and the
+    // identical pattern in `mcp_executor.rs::try_mcp`) used to call
+    // `Handle::try_current().unwrap_or_else(Runtime::new)` and then
+    // `.block_on(...)` directly on whichever handle it got, including a
+    // handle for the runtime *currently driving the calling thread*. That's
+    // exactly the real call path: `load_extensions()` runs inside
+    // `#[tokio::main] async fn main()`, and `Agent::run_turn`'s sync
+    // `.execute()` call fires on every tool dispatch, also from within the
+    // runtime. `Handle::block_on` called from a thread that thread is
+    // itself using to drive that same runtime panics ("Cannot start a
+    // runtime from within a runtime"). A plain `#[test]` can't exercise
+    // this: `Handle::try_current()` always fails outside a runtime, so
+    // every existing test above only ever hits the "spin up a throwaway
+    // Runtime" branch, not the handle-reuse branch where the bug lived.
+    // This test runs `ManifestRuntimeBridge::new` (discovery) and
+    // `execute` (dispatch) from inside an active multi-thread runtime,
+    // mirroring both real call sites, and would have panicked before the
+    // `block_in_place` fix.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn discovery_and_dispatch_do_not_panic_when_called_from_within_a_runtime() {
+        let url = spawn_stub_mcp_server("remote-search");
+
+        // Constructed synchronously on this runtime-driven thread, exactly
+        // like `load_extensions()` does inside `#[tokio::main]`.
+        let bridge = ManifestRuntimeBridge::new(
+            Box::new(StubToolExecutor {
+                response: "fallback should not run".to_string(),
+            }),
+            vec![runtime_manifest("sidecar", &url)],
+        );
+        assert_eq!(bridge.tool_definitions().len(), 1);
+
+        // Dispatched synchronously too, exactly like `Agent::run_turn`'s
+        // `.execute()` call on every tool invocation.
+        let output = bridge
+            .execute("remote-search", &serde_json::json!({}), &test_ctx())
+            .expect("mcp-backed tool should execute successfully from within a runtime");
+        assert_eq!(output, "dispatched");
     }
 }
