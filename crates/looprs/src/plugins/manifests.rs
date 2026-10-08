@@ -8,6 +8,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Execution entry for a manifest. The single `command` field's meaning
+/// depends on the owning manifest's `kind`:
+///
+/// - `PluginKind::Tool`: a subprocess executable name (argv[0]), passed to
+///   `PluginExecutor::execute_tool` and launched per call
+///   (`ManifestToolExecutor`).
+/// - `PluginKind::Runtime`: the URL of an already-running MCP server,
+///   consistent with `PluginExecutionMode::Daemon` semantics — the process
+///   is expected to be externally supervised, not launched per call. Posted
+///   to directly via `McpToolExecutor`/`ManifestRuntimeBridge`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PluginEntry {
     pub command: String,
@@ -236,6 +246,9 @@ impl PluginRuntimeRegistry {
         self.registry.list_by_kind(PluginKind::Tool)
     }
 
+    /// `runtime_plugins` is consumed by `ManifestRuntimeBridge::new`
+    /// (`crates/looprs/src/adapters/runtime_plugin_executor.rs`), mirroring
+    /// `list_tool_plugins()`'s relationship to `ManifestToolExecutor::new`.
     pub fn list_runtime_plugins(&self) -> Vec<&PluginManifest> {
         self.registry.list_by_kind(PluginKind::Runtime)
     }
