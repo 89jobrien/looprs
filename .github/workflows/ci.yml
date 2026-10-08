@@ -30,7 +30,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           components: rustfmt
-      - run: cargo +stable fmt --all --check
+      - name: fmt (excludes generated baml_client)
+        run: |
+          git ls-files -- 'crates/**/*.rs' 'xtask/**/*.rs' \
+              ':!:crates/looprs/src/baml_client/**' \
+            | xargs rustfmt +stable --check --edition 2024
 
   clippy:
     name: clippy

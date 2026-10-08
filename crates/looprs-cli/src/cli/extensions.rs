@@ -1,7 +1,9 @@
 use std::env;
 
+use looprs::adapters::{ManifestRuntimeBridge, ManifestToolExecutor, PluginsAdapter};
 use looprs::app_config::AppConfig;
 use looprs::plugins::manifests::PluginRuntimeRegistry;
+use looprs::tools::{DefaultToolExecutor, ToolExecutor};
 use looprs::{Agent, AgentRegistry, CommandRegistry, HookRegistry, SkillRegistry};
 
 use crate::args::CliArgs;
@@ -139,6 +141,52 @@ pub(crate) fn load_extensions(
     let repo_plugins = repo_plugins_dir.filter(|d| d.exists());
     let plugin_runtime = PluginRuntimeRegistry::load_dual_source(user_plugins, repo_plugins)
         .unwrap_or_else(|_| PluginRuntimeRegistry::default());
+
+    // Bridge PluginKind::Tool and PluginKind::Runtime manifests into the
+    // agent's tool-call loop. Both `with_extra_tool_definitions` and
+    // `with_tool_executor` *replace* the whole field rather than appending
+    // (see agent.rs), so if both kinds are enabled at once we must compose
+    // here instead of calling either setter twice — otherwise the second
+    // call would silently discard the first bridge. The Runtime bridge wraps
+    // the Tool bridge wraps `DefaultToolExecutor` as `inner`, mirroring how
+    // `ManifestToolExecutor` itself wraps an inner `ToolExecutor`; tool
+    // definitions from both kinds are merged into one vec before the single
+    // `with_extra_tool_definitions` call below.
+    let tool_plugins: Vec<_> = plugin_runtime
+        .list_tool_plugins()
+        .into_iter()
+        .cloned()
+        .collect();
+    let runtime_plugins: Vec<_> = plugin_runtime
+        .list_runtime_plugins()
+        .into_iter()
+        .cloned()
+        .collect();
+
+    let mut extra_tool_definitions = Vec::new();
+    let mut tool_executor: Box<dyn ToolExecutor> = Box::new(DefaultToolExecutor);
+
+    if !tool_plugins.is_empty() {
+        let manifest_executor = ManifestToolExecutor::new(
+            tool_executor,
+            Box::new(PluginsAdapter::system()),
+            tool_plugins,
+        );
+        extra_tool_definitions.extend(manifest_executor.tool_definitions());
+        tool_executor = Box::new(manifest_executor);
+    }
+
+    if !runtime_plugins.is_empty() {
+        let runtime_bridge = ManifestRuntimeBridge::new(tool_executor, runtime_plugins);
+        extra_tool_definitions.extend(runtime_bridge.tool_definitions());
+        tool_executor = Box::new(runtime_bridge);
+    }
+
+    if !extra_tool_definitions.is_empty() {
+        agent = agent
+            .with_extra_tool_definitions(extra_tool_definitions)
+            .with_tool_executor(tool_executor);
+    }
 
     ExtensionBundle {
         agent,
