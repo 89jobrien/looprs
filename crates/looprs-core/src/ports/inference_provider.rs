@@ -53,6 +53,9 @@ pub struct Usage {
 ///
 /// Implementations decide the backend (Anthropic, OpenAI, local Ollama, etc.).
 #[async_trait::async_trait]
+// clippy::double_must_use: async_trait's generated `Pin<Box<dyn Future>>` return
+// type is already #[must_use]; the macro stacks a redundant must_use on top.
+#[allow(clippy::double_must_use)]
 // TODO: add provider conformance test suite — a shared test matrix exercising
 // every InferenceProvider implementation: correct tool-use round-trip, retry on
 // 429, model name normalisation, timeout propagation. Wire via
