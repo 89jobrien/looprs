@@ -1,0 +1,8 @@
+edition = "2024"
+# baml_client is generated code (via `cargo xtask baml-generate` / the baml CLI).
+# `git ls-files ... ':!:crates/looprs/src/baml_client/**'` in ci.yml's fmt job only
+# excludes these files from the *explicit* argument list passed to rustfmt — it does
+# not stop rustfmt from parsing into this module tree via `lib.rs`'s `pub mod
+# baml_client;` declaration and reformat-checking it anyway. `ignore` is honored
+# even when that module-tree traversal happens, so it's the real exclusion.
+ignore = ["crates/looprs/src/baml_client"]

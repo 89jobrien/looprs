@@ -416,6 +416,50 @@ mod tests {
         assert!(bridge.tool_definitions().is_empty());
     }
 
+    // Regression: PR #65 review finding — an unresponsive remote MCP server
+    // must not hang CLI bootstrap (`block_on_discovery`) forever. Unlike
+    // `unreachable_mcp_server_is_skipped_without_panicking` above (which hits
+    // an immediate connection refusal), this spins up a listener that
+    // accepts the TCP connection and then never reads or writes anything —
+    // the "accepts the connection, never responds at the HTTP layer"
+    // scenario a bare socket-level timeout wouldn't necessarily catch.
+    // `mcp_tool_definitions`'s `reqwest::Client` (the exact function
+    // `block_on_discovery` calls) already carries a 10s
+    // `.timeout(Duration::from_secs(10))` builder setting, which reqwest
+    // documents as covering the entire request lifecycle — connect through
+    // full response body — not just idle-socket detection. This pins that
+    // the guarantee holds end-to-end through `ManifestRuntimeBridge::new`:
+    // discovery returns (skipped, with a warning) well within a generous
+    // bound rather than blocking the test (and, in production, CLI
+    // bootstrap) indefinitely.
+    #[test]
+    fn hanging_mcp_server_is_skipped_within_the_request_timeout_not_hung_forever() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        thread::spawn(move || {
+            // Accept the connection and then do nothing: no read, no write,
+            // no close. Simulates a server that completes the TCP handshake
+            // but never speaks HTTP.
+            for s in listener.incoming().flatten() {
+                std::mem::forget(s);
+            }
+        });
+
+        let start = std::time::Instant::now();
+        let bridge = ManifestRuntimeBridge::new(
+            Box::new(StubToolExecutor::default()),
+            vec![runtime_manifest("hanging", &format!("http://{addr}/mcp"))],
+            &std::collections::HashSet::new(),
+        );
+        let elapsed = start.elapsed();
+
+        assert!(bridge.tool_definitions().is_empty());
+        assert!(
+            elapsed < std::time::Duration::from_secs(20),
+            "discovery should return via the reqwest client's 10s request timeout, not hang; took {elapsed:?}"
+        );
+    }
+
     // Regression: PR #65 pass-4 review finding — a Tool-kind manifest and a
     // Runtime-kind manifest's discovered tool could share a name. Each
     // bridge only filtered against built-ins independently, so the
