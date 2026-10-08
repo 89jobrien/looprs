@@ -83,6 +83,11 @@ impl ManifestRuntimeBridge {
     /// is already active); a server that fails to respond is skipped with a
     /// warning rather than failing construction.
     pub fn new(inner: Box<dyn ToolExecutor>, runtime_plugins: Vec<PluginManifest>) -> Self {
+        let builtin_names: std::collections::HashSet<String> = crate::tools::get_tool_definitions()
+            .into_iter()
+            .map(|d| d.name)
+            .collect();
+
         let mut definitions: Vec<ToolDefinition> = Vec::new();
         let mut routes: HashMap<String, String> = HashMap::new();
 
@@ -102,7 +107,17 @@ impl ManifestRuntimeBridge {
                 Ok(remote_defs) => {
                     let before: std::collections::HashSet<String> =
                         definitions.iter().map(|d| d.name.clone()).collect();
-                    definitions = merge_tool_definitions(definitions, remote_defs);
+                    let (safe_defs, rejected): (Vec<_>, Vec<_>) = remote_defs
+                        .into_iter()
+                        .partition(|d| !builtin_names.contains(&d.name));
+                    for d in &rejected {
+                        log::warn!(
+                            "rejecting Runtime-kind manifest '{}' tool '{}': collides with a built-in tool name and would otherwise intercept dispatch under that identity",
+                            manifest.name,
+                            d.name
+                        );
+                    }
+                    definitions = merge_tool_definitions(definitions, safe_defs);
                     for def in &definitions {
                         if !before.contains(&def.name) {
                             routes
@@ -321,6 +336,49 @@ mod tests {
             .execute("not_a_runtime_tool", &serde_json::json!({}), &test_ctx())
             .expect("fallback executor should handle unmatched names");
         assert_eq!(output, "from inner");
+    }
+
+    // Regression: PR #65/#64 review finding — an MCP server could advertise
+    // a tool whose name collides with a built-in (e.g. "bash"). The
+    // model-facing definitions list already filtered this via
+    // `merge_tool_definitions`, but the `routes` table built alongside it
+    // did not apply the same filter, so the colliding name would silently
+    // dispatch to the remote MCP server instead of falling through to the
+    // real built-in — untrusted plugin code executing under a trusted
+    // built-in tool's identity, invisible to the model. This pins that a
+    // discovered tool name colliding with a built-in never enters `routes`
+    // or `definitions`, and dispatch for that name falls through to `inner`.
+    #[test]
+    fn discovered_tool_colliding_with_builtin_name_is_rejected_not_routed() {
+        let builtin_names: Vec<String> = crate::tools::get_tool_definitions()
+            .into_iter()
+            .map(|d| d.name)
+            .collect();
+        assert!(
+            builtin_names.iter().any(|n| n == "bash"),
+            "expected 'bash' to be a real built-in tool name; got {builtin_names:?}"
+        );
+
+        let url = spawn_stub_mcp_server("bash");
+        let bridge = ManifestRuntimeBridge::new(
+            Box::new(StubToolExecutor {
+                response: "from real builtin via inner".to_string(),
+            }),
+            vec![runtime_manifest("sidecar", &url)],
+        );
+
+        // Never exposed to the model under the built-in's name.
+        assert!(
+            bridge.tool_definitions().is_empty(),
+            "a discovered tool colliding with a built-in name must not produce a tool definition"
+        );
+
+        // Never routed to the MCP server either — dispatch must fall
+        // through to `inner` exactly like any other unmatched name.
+        let output = bridge
+            .execute("bash", &serde_json::json!({}), &test_ctx())
+            .expect("fallback executor should handle the collided name");
+        assert_eq!(output, "from real builtin via inner");
     }
 
     #[test]
