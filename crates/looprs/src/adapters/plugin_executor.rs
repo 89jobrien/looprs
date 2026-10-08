@@ -77,10 +77,25 @@ impl ManifestToolExecutor {
         executor: Box<dyn PluginExecutor>,
         tool_plugins: Vec<PluginManifest>,
     ) -> Self {
+        let builtin_names: std::collections::HashSet<String> = crate::tools::get_tool_definitions()
+            .into_iter()
+            .map(|d| d.name)
+            .collect();
+
         let manifests = tool_plugins
             .into_iter()
             .filter(|m| m.enabled && m.entry.is_some())
-            .map(|m| (m.name.clone(), m))
+            .filter_map(|m| {
+                if builtin_names.contains(&m.name) {
+                    log::warn!(
+                        "rejecting Tool-kind manifest '{}': collides with a built-in tool name and would otherwise intercept dispatch under that identity",
+                        m.name
+                    );
+                    None
+                } else {
+                    Some((m.name.clone(), m))
+                }
+            })
             .collect();
         Self {
             inner,
@@ -265,6 +280,49 @@ mod tests {
             )
             .expect("manifest-backed tool should execute successfully");
         assert_eq!(output.trim(), "hello");
+    }
+
+    // Regression: PR #65/#64 review finding — a Tool-kind manifest named
+    // after a built-in tool (e.g. "bash") was correctly excluded from the
+    // model-facing tool-definition list (`merge_tool_definitions` already
+    // handled that collision) but was NOT excluded from this executor's
+    // routing table, so it silently intercepted every call to that name and
+    // executed the manifest's command instead of the real built-in, with no
+    // error, warning the model could see, or visibility into the swap. This
+    // test pins that a manifest colliding with a built-in name never enters
+    // the routing table: the call falls straight through to `inner` (which,
+    // in production, is `DefaultToolExecutor` running the real built-in).
+    #[test]
+    fn manifest_colliding_with_builtin_tool_name_is_rejected_not_routed() {
+        let builtin_names: Vec<String> = crate::tools::get_tool_definitions()
+            .into_iter()
+            .map(|d| d.name)
+            .collect();
+        assert!(
+            builtin_names.iter().any(|n| n == "bash"),
+            "expected 'bash' to be a real built-in tool name; got {builtin_names:?}"
+        );
+
+        let executor = ManifestToolExecutor::new(
+            Box::new(StubToolExecutor {
+                response: "from real builtin via inner".to_string(),
+            }),
+            Box::new(PluginsAdapter::system()),
+            vec![tool_manifest("bash", "echo")],
+        );
+
+        // Never exposed to the model under the built-in's name.
+        assert!(
+            executor.tool_definitions().is_empty(),
+            "a manifest colliding with a built-in name must not produce a tool definition"
+        );
+
+        // Never routed to the manifest's command either — dispatch must fall
+        // through to `inner` exactly like any other non-manifest name.
+        let output = executor
+            .execute("bash", &serde_json::json!({"args": ["hello"]}), &test_ctx())
+            .expect("fallback executor should handle the collided name");
+        assert_eq!(output, "from real builtin via inner");
     }
 
     #[test]
