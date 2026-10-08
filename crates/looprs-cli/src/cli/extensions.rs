@@ -165,6 +165,7 @@ pub(crate) fn load_extensions(
 
     let mut extra_tool_definitions = Vec::new();
     let mut tool_executor: Box<dyn ToolExecutor> = Box::new(DefaultToolExecutor);
+    let mut reserved_names: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     if !tool_plugins.is_empty() {
         let manifest_executor = ManifestToolExecutor::new(
@@ -172,12 +173,18 @@ pub(crate) fn load_extensions(
             Box::new(PluginsAdapter::system()),
             tool_plugins,
         );
+        // Captured before boxing so `ManifestRuntimeBridge::new` below can
+        // reject a Runtime-kind discovery that collides with a name this
+        // Tool-kind bridge already claimed — closing the manifest-vs-
+        // manifest gap a built-ins-only filter on each side would miss.
+        reserved_names = manifest_executor.registered_names();
         extra_tool_definitions.extend(manifest_executor.tool_definitions());
         tool_executor = Box::new(manifest_executor);
     }
 
     if !runtime_plugins.is_empty() {
-        let runtime_bridge = ManifestRuntimeBridge::new(tool_executor, runtime_plugins);
+        let runtime_bridge =
+            ManifestRuntimeBridge::new(tool_executor, runtime_plugins, &reserved_names);
         extra_tool_definitions.extend(runtime_bridge.tool_definitions());
         tool_executor = Box::new(runtime_bridge);
     }

@@ -82,7 +82,19 @@ impl ManifestRuntimeBridge {
     /// and probed synchronously (blocking on a tokio runtime, reused if one
     /// is already active); a server that fails to respond is skipped with a
     /// warning rather than failing construction.
-    pub fn new(inner: Box<dyn ToolExecutor>, runtime_plugins: Vec<PluginManifest>) -> Self {
+    ///
+    /// `reserved_names` is the set of names already claimed by another
+    /// bridge in the same composed chain — in practice, the Tool-kind
+    /// `ManifestToolExecutor`'s [`ManifestToolExecutor::registered_names`]
+    /// when both kinds are enabled. A discovered MCP tool colliding with one
+    /// of these is rejected exactly like a built-in-name collision: it would
+    /// otherwise dispatch to the less-trusted remote server under an
+    /// identity a local manifest already owns.
+    pub fn new(
+        inner: Box<dyn ToolExecutor>,
+        runtime_plugins: Vec<PluginManifest>,
+        reserved_names: &std::collections::HashSet<String>,
+    ) -> Self {
         let builtin_names: std::collections::HashSet<String> = crate::tools::get_tool_definitions()
             .into_iter()
             .map(|d| d.name)
@@ -107,12 +119,18 @@ impl ManifestRuntimeBridge {
                 Ok(remote_defs) => {
                     let before: std::collections::HashSet<String> =
                         definitions.iter().map(|d| d.name.clone()).collect();
-                    let (safe_defs, rejected): (Vec<_>, Vec<_>) = remote_defs
-                        .into_iter()
-                        .partition(|d| !builtin_names.contains(&d.name));
+                    let (safe_defs, rejected): (Vec<_>, Vec<_>) =
+                        remote_defs.into_iter().partition(|d| {
+                            !builtin_names.contains(&d.name) && !reserved_names.contains(&d.name)
+                        });
                     for d in &rejected {
+                        let reason = if builtin_names.contains(&d.name) {
+                            "collides with a built-in tool name"
+                        } else {
+                            "collides with an already-registered Tool-kind manifest tool name"
+                        };
                         log::warn!(
-                            "rejecting Runtime-kind manifest '{}' tool '{}': collides with a built-in tool name and would otherwise intercept dispatch under that identity",
+                            "rejecting Runtime-kind manifest '{}' tool '{}': {reason} and would otherwise intercept dispatch under that identity",
                             manifest.name,
                             d.name
                         );
@@ -284,6 +302,7 @@ mod tests {
         let bridge = ManifestRuntimeBridge::new(
             Box::new(StubToolExecutor::default()),
             vec![runtime_manifest("sidecar", &url)],
+            &std::collections::HashSet::new(),
         );
 
         let definitions = bridge.tool_definitions();
@@ -301,6 +320,7 @@ mod tests {
         let bridge = ManifestRuntimeBridge::new(
             Box::new(StubToolExecutor::default()),
             vec![disabled, no_entry],
+            &std::collections::HashSet::new(),
         );
 
         assert!(bridge.tool_definitions().is_empty());
@@ -314,6 +334,7 @@ mod tests {
                 response: "fallback should not run".to_string(),
             }),
             vec![runtime_manifest("sidecar", &url)],
+            &std::collections::HashSet::new(),
         );
 
         let output = bridge
@@ -330,6 +351,7 @@ mod tests {
                 response: "from inner".to_string(),
             }),
             vec![runtime_manifest("sidecar", &url)],
+            &std::collections::HashSet::new(),
         );
 
         let output = bridge
@@ -365,6 +387,7 @@ mod tests {
                 response: "from real builtin via inner".to_string(),
             }),
             vec![runtime_manifest("sidecar", &url)],
+            &std::collections::HashSet::new(),
         );
 
         // Never exposed to the model under the built-in's name.
@@ -387,9 +410,82 @@ mod tests {
         let bridge = ManifestRuntimeBridge::new(
             Box::new(StubToolExecutor::default()),
             vec![runtime_manifest("unreachable", "http://127.0.0.1:0/mcp")],
+            &std::collections::HashSet::new(),
         );
 
         assert!(bridge.tool_definitions().is_empty());
+    }
+
+    // Regression: PR #65 pass-4 review finding — a Tool-kind manifest and a
+    // Runtime-kind manifest's discovered tool could share a name. Each
+    // bridge only filtered against built-ins independently, so the
+    // Runtime-kind (less-trusted remote MCP) tool silently won dispatch via
+    // `routes` while the model was handed two same-named `ToolDefinition`s.
+    // This pins that passing the Tool-kind bridge's registered names in as
+    // `reserved_names` rejects the colliding Runtime-kind discovery, and
+    // that dispatch for that name still falls through `inner` (where, in
+    // production, the Tool-kind `ManifestToolExecutor` — composed as
+    // `inner` exactly as `extensions.rs::load_extensions` does — handles
+    // it).
+    #[test]
+    fn discovered_tool_colliding_with_tool_manifest_name_is_rejected_not_routed() {
+        let url = spawn_stub_mcp_server("formatter");
+
+        let tool_manifest = PluginManifest {
+            name: "formatter".to_string(),
+            kind: PluginKind::Tool,
+            description: None,
+            enabled: true,
+            required: false,
+            mode: PluginExecutionMode::default(),
+            entry: Some(PluginEntry {
+                command: "echo".to_string(),
+            }),
+            triggers: Vec::new(),
+            route_to_agent: None,
+        };
+        let tool_executor = crate::adapters::plugin_executor::ManifestToolExecutor::new(
+            Box::new(StubToolExecutor {
+                response: "from tool-kind manifest via inner".to_string(),
+            }),
+            Box::new(crate::adapters::plugin_executor::PluginsAdapter::system()),
+            vec![tool_manifest],
+        );
+        let reserved_names = tool_executor.registered_names();
+        assert!(
+            reserved_names.contains("formatter"),
+            "expected the Tool-kind manifest's name to be registered; got {reserved_names:?}"
+        );
+
+        let bridge = ManifestRuntimeBridge::new(
+            Box::new(tool_executor),
+            vec![runtime_manifest("sidecar", &url)],
+            &reserved_names,
+        );
+
+        // Never exposed to the model under the colliding name — the
+        // Runtime-kind discovery loses to the already-registered manifest.
+        assert!(
+            bridge.tool_definitions().is_empty(),
+            "a discovered tool colliding with an already-registered manifest name must not produce a tool definition"
+        );
+
+        // Never routed to the MCP server either — dispatch falls through to
+        // `inner` (the Tool-kind `ManifestToolExecutor`), which owns
+        // "formatter" as its own manifest and runs its `echo` entry command
+        // directly, rather than falling through to *its* inner stub.
+        let output = bridge
+            .execute(
+                "formatter",
+                &serde_json::json!({"args": ["hi"]}),
+                &test_ctx(),
+            )
+            .expect("Tool-kind manifest via inner should handle the collided name");
+        assert_eq!(
+            output.trim(),
+            "hi",
+            "expected dispatch to reach the Tool-kind manifest's own 'echo' entry command, not the MCP server or either stub fallback"
+        );
     }
 
     // Regression: issue #64 follow-up — `block_on_discovery` (and the
@@ -421,6 +517,7 @@ mod tests {
                 response: "fallback should not run".to_string(),
             }),
             vec![runtime_manifest("sidecar", &url)],
+            &std::collections::HashSet::new(),
         );
         assert_eq!(bridge.tool_definitions().len(), 1);
 
