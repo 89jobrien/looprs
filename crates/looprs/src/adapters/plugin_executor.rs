@@ -104,6 +104,17 @@ impl ManifestToolExecutor {
         }
     }
 
+    /// Names of the manifests actually registered (i.e. surviving the
+    /// built-in-collision filter in [`Self::new`]). Exposed so a caller
+    /// composing this executor with another bridge (e.g.
+    /// [`crate::adapters::runtime_plugin_executor::ManifestRuntimeBridge`])
+    /// can reject *its* discoveries against these names too, closing the
+    /// manifest-vs-manifest collision gap that a built-ins-only filter on
+    /// each side independently would miss.
+    pub fn registered_names(&self) -> std::collections::HashSet<String> {
+        self.manifests.keys().cloned().collect()
+    }
+
     /// `ToolDefinition`s for the manifest-backed tools this executor can run.
     /// Merge these into the request's tool list alongside the built-in set.
     pub fn tool_definitions(&self) -> Vec<ToolDefinition> {
