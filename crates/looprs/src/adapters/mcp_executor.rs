@@ -37,25 +37,27 @@ impl McpToolExecutor {
     }
 
     fn try_mcp(&self, name: &str, args: &Value) -> Result<String, anyhow::Error> {
-        let rt = tokio::runtime::Handle::try_current()
-            .map(Either::Handle)
-            .unwrap_or_else(|_| Either::Runtime(tokio::runtime::Runtime::new().unwrap()));
-
         let url = self.server_url.clone();
         let name = name.to_string();
         let args = args.clone();
 
-        match rt {
-            Either::Handle(h) => h.block_on(crate::tools::mcp_tool_call(&url, &name, args)),
-            Either::Runtime(rt) => rt.block_on(crate::tools::mcp_tool_call(&url, &name, args)),
+        // See the identical pattern (and its rationale) in
+        // `runtime_plugin_executor.rs::block_on_discovery`: a thread already
+        // driving the tokio runtime (as both bootstrap and
+        // `Agent::run_turn`'s sync dispatch path are) cannot safely
+        // `Handle::block_on` directly — that panics. `block_in_place` is the
+        // safe way to block from inside a multi-thread runtime; outside a
+        // runtime, spin up a throwaway one instead.
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => tokio::task::block_in_place(|| {
+                handle.block_on(crate::tools::mcp_tool_call(&url, &name, args))
+            }),
+            Err(_) => {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(crate::tools::mcp_tool_call(&url, &name, args))
+            }
         }
     }
-}
-
-// Small helper to avoid requiring a full runtime when we're already inside one.
-enum Either {
-    Handle(tokio::runtime::Handle),
-    Runtime(tokio::runtime::Runtime),
 }
 
 impl ToolExecutor for McpToolExecutor {

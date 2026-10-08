@@ -125,11 +125,22 @@ impl ToolExecutor for ManifestToolExecutor {
         let Some(manifest) = self.manifests.get(name) else {
             return self.inner.execute(name, args, ctx);
         };
-        // Invariant: `manifests` only holds entries filtered to `Some(entry)` in `new`.
-        let entry = manifest
-            .entry
-            .as_ref()
-            .expect("ManifestToolExecutor only stores manifests with Some(entry)");
+
+        if ctx.fs_mode() != crate::fs_mode::FsMode::Write {
+            return Err(ToolError::ModeDenied {
+                tool: name.to_string(),
+                mode: ctx.fs_mode().as_str().to_string(),
+                reason: "Tool-kind manifest plugins may have write side effects".to_string(),
+            });
+        }
+
+        // `manifests` only holds entries filtered to `Some(entry)` in `new`;
+        // skip defensively rather than `.expect()` on that invariant.
+        let Some(entry) = manifest.entry.as_ref() else {
+            return Err(ToolError::CommandFailed(format!(
+                "plugin '{name}' has no entry command configured"
+            )));
+        };
 
         let extra_args: Vec<OsString> = args
             .get("args")
