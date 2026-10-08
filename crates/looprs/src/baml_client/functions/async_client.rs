@@ -122,7 +122,16 @@ macro_rules! baml_function_async {
 // Generate function structs
 // =============================================================================
 
-baml_function_async!(Chat(system: impl AsRef<str> + BamlEncode, messages: &[types::ChatMessage], tools: &[types::ToolDefinition], ) -> (stream_types::Union2ListToolCallOrString, types::Union2ListToolCallOrString));
+baml_function_async!(
+    Chat(
+        system: impl AsRef<str> + BamlEncode,
+        messages: &[types::ChatMessage],
+        tools: &[types::ToolDefinition],
+    ) -> (
+        stream_types::Union2ListToolCallOrString,
+        types::Union2ListToolCallOrString
+    )
+);
 
 // =============================================================================
 // Client Struct

@@ -4,11 +4,15 @@
 //! system (Runner + ToolRegistry). It provides a domain-facing interface
 //! without exposing low-level subprocess details.
 
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::process::Output;
 
+use crate::api::ToolDefinition;
 use crate::plugins::Plugins;
+use crate::plugins::manifests::PluginManifest;
 use crate::ports::PluginExecutor;
+use crate::tools::{ToolContext, ToolError, ToolExecutor};
 
 /// Adapter implementing the PluginExecutor port via the Plugins system.
 ///
@@ -49,9 +53,157 @@ impl<'a> PluginExecutor for PluginsAdapter<'a> {
     }
 }
 
+/// Bridges `PluginKind::Tool` manifests into the agent's tool-call loop.
+///
+/// Wraps a fallback [`ToolExecutor`] (normally [`crate::tools::DefaultToolExecutor`])
+/// and a [`PluginExecutor`] adapter. Calls whose name matches an enabled
+/// Tool-kind manifest run that manifest's `entry.command` as a subprocess via
+/// the `PluginExecutor` port; every other call name is delegated to `inner`
+/// unchanged. Pair with [`ManifestToolExecutor::tool_definitions`], merged
+/// into the request via `Agent::with_extra_tool_definitions`, so the model
+/// actually sees these tools as callable.
+pub struct ManifestToolExecutor {
+    inner: Box<dyn ToolExecutor>,
+    executor: Box<dyn PluginExecutor>,
+    manifests: HashMap<String, PluginManifest>,
+}
+
+impl ManifestToolExecutor {
+    /// `tool_plugins` should come from `PluginRuntimeRegistry::list_tool_plugins()`.
+    /// Manifests that are disabled or carry no `entry` are dropped — they have
+    /// nothing to execute.
+    pub fn new(
+        inner: Box<dyn ToolExecutor>,
+        executor: Box<dyn PluginExecutor>,
+        tool_plugins: Vec<PluginManifest>,
+    ) -> Self {
+        let builtin_names: std::collections::HashSet<String> = crate::tools::get_tool_definitions()
+            .into_iter()
+            .map(|d| d.name)
+            .collect();
+
+        let manifests = tool_plugins
+            .into_iter()
+            .filter(|m| m.enabled && m.entry.is_some())
+            .filter_map(|m| {
+                if builtin_names.contains(&m.name) {
+                    log::warn!(
+                        "rejecting Tool-kind manifest '{}': collides with a built-in tool name and would otherwise intercept dispatch under that identity",
+                        m.name
+                    );
+                    None
+                } else {
+                    Some((m.name.clone(), m))
+                }
+            })
+            .collect();
+        Self {
+            inner,
+            executor,
+            manifests,
+        }
+    }
+
+    /// Names of the manifests actually registered (i.e. surviving the
+    /// built-in-collision filter in [`Self::new`]). Exposed so a caller
+    /// composing this executor with another bridge (e.g.
+    /// [`crate::adapters::runtime_plugin_executor::ManifestRuntimeBridge`])
+    /// can reject *its* discoveries against these names too, closing the
+    /// manifest-vs-manifest collision gap that a built-ins-only filter on
+    /// each side independently would miss.
+    pub fn registered_names(&self) -> std::collections::HashSet<String> {
+        self.manifests.keys().cloned().collect()
+    }
+
+    /// `ToolDefinition`s for the manifest-backed tools this executor can run.
+    /// Merge these into the request's tool list alongside the built-in set.
+    pub fn tool_definitions(&self) -> Vec<ToolDefinition> {
+        self.manifests
+            .values()
+            .map(|manifest| ToolDefinition {
+                name: manifest.name.clone(),
+                description: manifest
+                    .description
+                    .clone()
+                    .unwrap_or_else(|| format!("Manifest-declared tool plugin: {}", manifest.name)),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "args": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Positional arguments passed to the plugin's command"
+                        }
+                    }
+                }),
+            })
+            .collect()
+    }
+}
+
+impl ToolExecutor for ManifestToolExecutor {
+    fn execute(
+        &self,
+        name: &str,
+        args: &serde_json::Value,
+        ctx: &ToolContext,
+    ) -> Result<String, ToolError> {
+        let Some(manifest) = self.manifests.get(name) else {
+            return self.inner.execute(name, args, ctx);
+        };
+
+        if ctx.fs_mode() != crate::fs_mode::FsMode::Write {
+            return Err(ToolError::ModeDenied {
+                tool: name.to_string(),
+                mode: ctx.fs_mode().as_str().to_string(),
+                reason: "Tool-kind manifest plugins may have write side effects".to_string(),
+            });
+        }
+
+        // `manifests` only holds entries filtered to `Some(entry)` in `new`;
+        // skip defensively rather than `.expect()` on that invariant.
+        let Some(entry) = manifest.entry.as_ref() else {
+            return Err(ToolError::CommandFailed(format!(
+                "plugin '{name}' has no entry command configured"
+            )));
+        };
+
+        let extra_args: Vec<OsString> = args
+            .get("args")
+            .and_then(serde_json::Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .map(OsString::from)
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let output = self
+            .executor
+            .execute_tool(&entry.command, extra_args)
+            .map_err(ToolError::Io)?;
+
+        if !output.status.success() {
+            return Err(ToolError::CommandFailed(format!(
+                "plugin '{name}' exited with status {:?}: {}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr)
+            )));
+        }
+
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fs_mode::FsMode;
+    use crate::plugins::manifests::PluginEntry;
+    use crate::tools::executor::StubToolExecutor;
+    use looprs_core::ports::{PluginExecutionMode, PluginKind};
 
     #[test]
     fn adapts_has_tool_to_has_in_path() {
@@ -66,5 +218,137 @@ mod tests {
         let adapter = PluginsAdapter::system();
         // true is a builtin in most shells, but we test with a standard tool
         assert!(adapter.probe_tool_success("echo", vec![]));
+    }
+
+    fn test_ctx() -> ToolContext {
+        ToolContext::from_working_dir(std::env::current_dir().unwrap(), FsMode::Write)
+    }
+
+    fn tool_manifest(name: &str, command: &str) -> PluginManifest {
+        PluginManifest {
+            name: name.to_string(),
+            kind: PluginKind::Tool,
+            description: None,
+            enabled: true,
+            required: false,
+            mode: PluginExecutionMode::default(),
+            entry: Some(PluginEntry {
+                command: command.to_string(),
+            }),
+            triggers: Vec::new(),
+            route_to_agent: None,
+        }
+    }
+
+    // Regression: issue #58 finding 3 — PluginKind::Tool manifests were parsed
+    // and supervised but had no bridge into the agent's tool-call loop at all;
+    // the executor existed in name only. These tests pin the actual dispatch.
+
+    #[test]
+    fn enabled_tool_manifest_is_exposed_as_a_tool_definition() {
+        let executor = ManifestToolExecutor::new(
+            Box::new(StubToolExecutor::default()),
+            Box::new(PluginsAdapter::system()),
+            vec![tool_manifest("formatter", "echo")],
+        );
+
+        let definitions = executor.tool_definitions();
+        let names: Vec<&str> = definitions.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(names, vec!["formatter"]);
+    }
+
+    #[test]
+    fn disabled_or_entry_less_manifests_produce_no_tool_definitions() {
+        let mut disabled = tool_manifest("disabled-tool", "echo");
+        disabled.enabled = false;
+        let mut no_entry = tool_manifest("no-entry-tool", "echo");
+        no_entry.entry = None;
+
+        let executor = ManifestToolExecutor::new(
+            Box::new(StubToolExecutor::default()),
+            Box::new(PluginsAdapter::system()),
+            vec![disabled, no_entry],
+        );
+
+        assert!(executor.tool_definitions().is_empty());
+    }
+
+    #[test]
+    fn matching_tool_call_runs_the_manifest_command_not_the_fallback() {
+        let executor = ManifestToolExecutor::new(
+            Box::new(StubToolExecutor {
+                response: "fallback should not run".to_string(),
+            }),
+            Box::new(PluginsAdapter::system()),
+            vec![tool_manifest("echoer", "echo")],
+        );
+
+        let output = executor
+            .execute(
+                "echoer",
+                &serde_json::json!({"args": ["hello"]}),
+                &test_ctx(),
+            )
+            .expect("manifest-backed tool should execute successfully");
+        assert_eq!(output.trim(), "hello");
+    }
+
+    // Regression: PR #65/#64 review finding — a Tool-kind manifest named
+    // after a built-in tool (e.g. "bash") was correctly excluded from the
+    // model-facing tool-definition list (`merge_tool_definitions` already
+    // handled that collision) but was NOT excluded from this executor's
+    // routing table, so it silently intercepted every call to that name and
+    // executed the manifest's command instead of the real built-in, with no
+    // error, warning the model could see, or visibility into the swap. This
+    // test pins that a manifest colliding with a built-in name never enters
+    // the routing table: the call falls straight through to `inner` (which,
+    // in production, is `DefaultToolExecutor` running the real built-in).
+    #[test]
+    fn manifest_colliding_with_builtin_tool_name_is_rejected_not_routed() {
+        let builtin_names: Vec<String> = crate::tools::get_tool_definitions()
+            .into_iter()
+            .map(|d| d.name)
+            .collect();
+        assert!(
+            builtin_names.iter().any(|n| n == "bash"),
+            "expected 'bash' to be a real built-in tool name; got {builtin_names:?}"
+        );
+
+        let executor = ManifestToolExecutor::new(
+            Box::new(StubToolExecutor {
+                response: "from real builtin via inner".to_string(),
+            }),
+            Box::new(PluginsAdapter::system()),
+            vec![tool_manifest("bash", "echo")],
+        );
+
+        // Never exposed to the model under the built-in's name.
+        assert!(
+            executor.tool_definitions().is_empty(),
+            "a manifest colliding with a built-in name must not produce a tool definition"
+        );
+
+        // Never routed to the manifest's command either — dispatch must fall
+        // through to `inner` exactly like any other non-manifest name.
+        let output = executor
+            .execute("bash", &serde_json::json!({"args": ["hello"]}), &test_ctx())
+            .expect("fallback executor should handle the collided name");
+        assert_eq!(output, "from real builtin via inner");
+    }
+
+    #[test]
+    fn unmatched_tool_call_falls_back_to_inner_executor() {
+        let executor = ManifestToolExecutor::new(
+            Box::new(StubToolExecutor {
+                response: "from inner".to_string(),
+            }),
+            Box::new(PluginsAdapter::system()),
+            vec![tool_manifest("echoer", "echo")],
+        );
+
+        let output = executor
+            .execute("not_a_manifest_tool", &serde_json::json!({}), &test_ctx())
+            .expect("fallback executor should handle unmatched names");
+        assert_eq!(output, "from inner");
     }
 }

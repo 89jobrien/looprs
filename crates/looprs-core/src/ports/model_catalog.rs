@@ -31,6 +31,9 @@ pub struct RemoteCatalogError {
 
 /// Port: list available models for a provider from a remote source.
 #[async_trait::async_trait]
+// clippy::double_must_use: async_trait's generated `Pin<Box<dyn Future>>` return
+// type is already #[must_use]; the macro stacks a redundant must_use on top.
+#[allow(clippy::double_must_use)]
 pub trait RemoteModelCatalogPort: Send + Sync {
     /// Return known models for a single provider.
     async fn list_models(&self, provider: &str) -> Result<Vec<RemoteModel>, RemoteCatalogError>;

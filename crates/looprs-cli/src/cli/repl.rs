@@ -33,6 +33,12 @@ pub struct ReplState {
     last_completed: Option<String>,
 }
 
+impl Default for ReplState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReplState {
     pub fn new() -> Self {
         Self {
