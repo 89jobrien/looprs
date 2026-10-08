@@ -46,7 +46,7 @@ fn block_on_discovery(server_url: &str) -> anyhow::Result<Vec<ToolDefinition>> {
             handle.block_on(crate::tools::mcp_tool_definitions(server_url))
         }),
         Err(_) => {
-            let rt = tokio::runtime::Runtime::new().unwrap();
+            let rt = tokio::runtime::Runtime::new()?;
             rt.block_on(crate::tools::mcp_tool_definitions(server_url))
         }
     }
